@@ -1,8 +1,8 @@
 name: Release
 
 # Fires when you publish a GitHub release (Releases → Draft → Publish).
-# The release tag (e.g. v0.1.0) becomes the R2 folder name verbatim, so
-# always tag releases as v<SemVer> for predictable URLs.
+# Tag releases as v<SemVer> (e.g. v0.1.0) — the tag drives the asset URL
+# pattern that the landing's manifest resolves to.
 #
 # Also exposes a manual trigger so you can test-fire the pipeline against
 # any branch from the Actions tab without cutting a real release.
@@ -12,11 +12,11 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "R2 folder name to use (e.g. v0.0.1-test). On `release` triggers this is derived from the release tag."
+        description: "Tag to label this dry-run with (e.g. v0.0.1-test). On `release` triggers this is derived from the release tag."
         required: true
         default: "v0.0.0-test"
 
-# Never cancel an in-flight release — a half-uploaded release is worse than
+# Never cancel an in-flight release — a half-published release is worse than
 # a queued one.
 concurrency:
   group: release-${{ github.event.release.tag_name || inputs.tag }}
@@ -40,17 +40,14 @@ jobs:
             os: macos-14
             args: --target universal-apple-darwin
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
-            bundle-dir: packages/desktop/src-tauri/target/universal-apple-darwin/release/bundle
           # - name: linux-x86_64
           #   os: ubuntu-22.04
           #   args: ""
           #   rust-targets: ""
-          #   bundle-dir: packages/desktop/src-tauri/target/release/bundle
           # - name: windows-x86_64
           #   os: windows-latest
           #   args: ""
           #   rust-targets: ""
-          #   bundle-dir: packages/desktop/src-tauri/target/release/bundle
     runs-on: ${{ matrix.platform.os }}
     steps:
       - uses: actions/checkout@v4
@@ -105,58 +102,53 @@ jobs:
           args: ${{ matrix.platform.args }}
           releaseId: ${{ github.event.release.id || '' }}
 
-      # Upload the same bundles to R2 under <tag>/<filename>. We mirror what
-      # tauri-action attached to the GH release so both surfaces stay in sync.
-      # Artifacts are immutable — cache forever at the edge.
-      - name: Upload bundles to R2
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          TAG: ${{ github.event.release.tag_name || inputs.tag }}
-          BUNDLE_DIR: ${{ matrix.platform.bundle-dir }}
-        shell: bash
+  # Generates a latest.json manifest describing the just-published release's
+  # per-platform download URLs and attaches it to the GH release. The landing
+  # fetches it at runtime — see packages/landing/src/lib/manifest.ts.
+  publish-manifest:
+    name: Publish latest.json
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build manifest from release assets
         run: |
           set -euo pipefail
-          if [[ ! -d "$BUNDLE_DIR" ]]; then
-            echo "::error::Bundle directory not found: $BUNDLE_DIR"
-            exit 1
-          fi
+          # Enumerate the asset filenames tauri-action attached to this release.
+          # Pick the first match per platform pattern; fields with no match
+          # serialize as JSON null (so the landing renders "Coming soon").
+          assets=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          pick() { echo "$assets" | grep -E "$1" | head -n1 || true; }
+          mac=$(pick '\.dmg$')
+          win=$(pick '\.msi$|-setup\.exe$')
+          lin=$(pick '\.AppImage$')
 
-          # Tauri's bundle output for our config:
-          #   macOS:   <name>.dmg, <name>.app.tar.gz (+ .sig once signing is on)
-          #   Linux:   <name>.AppImage, <name>.deb, <name>.rpm
-          #   Windows: <name>.msi, <name>-setup.exe (+ .sig)
-          #
-          # `find` (not bash globstar) because macOS runners are stuck on
-          # bash 3.2 — `shopt -s globstar` errors out there. Process
-          # substitution (not a pipe) so the counter stays in the parent
-          # shell.
-          uploaded=0
-          while IFS= read -r -d '' artifact; do
-            filename="$(basename "$artifact")"
-            key="${TAG}/${filename}"
-            echo "→ s3://${R2_BUCKET}/${key}"
-            aws s3 cp "$artifact" "s3://${R2_BUCKET}/${key}" \
-              --endpoint-url "$R2_ENDPOINT" \
-              --cache-control "public, max-age=31536000, immutable"
-            uploaded=$((uploaded + 1))
-          done < <(find "$BUNDLE_DIR" -type f \( \
-              -name "*.dmg" -o \
-              -name "*.AppImage" -o \
-              -name "*.deb" -o \
-              -name "*.rpm" -o \
-              -name "*.msi" -o \
-              -name "*.exe" -o \
-              -name "*.sig" -o \
-              -name "*.app.tar.gz" \
-            \) -print0)
+          # Emit a JSON value: either `null` or a JSON-quoted URL string.
+          # `jq -n` (no -r) writes valid JSON, which feeds straight into
+          # `--argjson` below.
+          url_for() {
+            if [[ -z "$1" ]]; then
+              echo null
+            else
+              jq -n --arg t "$TAG" --arg f "$1" --arg repo "$GITHUB_REPOSITORY" \
+                '"https://github.com/" + $repo + "/releases/download/" + $t + "/" + ($f | @uri)'
+            fi
+          }
 
-          if [[ "$uploaded" -eq 0 ]]; then
-            echo "::error::No artifacts found under $BUNDLE_DIR"
-            ls -laR "$BUNDLE_DIR" || true
-            exit 1
-          fi
-          echo "Uploaded $uploaded artifact(s) to s3://${R2_BUCKET}/${TAG}/"
+          jq -n \
+            --arg version "${TAG#v}" \
+            --argjson mac "$(url_for "$mac")" \
+            --argjson win "$(url_for "$win")" \
+            --argjson linux "$(url_for "$lin")" \
+            '{version: $version, mac: $mac, win: $win, linux: $linux}' > latest.json
+          cat latest.json
+
+      - name: Attach manifest to GitHub release
+        run: gh release upload "$TAG" latest.json --clobber --repo "$GITHUB_REPOSITORY"
