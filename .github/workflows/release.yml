@@ -125,11 +125,13 @@ jobs:
           #   macOS:   <name>.dmg, <name>.app.tar.gz (+ .sig once signing is on)
           #   Linux:   <name>.AppImage, <name>.deb, <name>.rpm
           #   Windows: <name>.msi, <name>-setup.exe (+ .sig)
-          shopt -s globstar nullglob
+          #
+          # `find` (not bash globstar) because macOS runners are stuck on
+          # bash 3.2 — `shopt -s globstar` errors out there. Process
+          # substitution (not a pipe) so the counter stays in the parent
+          # shell.
           uploaded=0
-          for artifact in "$BUNDLE_DIR"/**/*.{dmg,AppImage,deb,rpm,msi,exe,sig} \
-                          "$BUNDLE_DIR"/**/*.app.tar.gz; do
-            [[ -f "$artifact" ]] || continue
+          while IFS= read -r -d '' artifact; do
             filename="$(basename "$artifact")"
             key="${TAG}/${filename}"
             echo "→ s3://${R2_BUCKET}/${key}"
@@ -137,7 +139,16 @@ jobs:
               --endpoint-url "$R2_ENDPOINT" \
               --cache-control "public, max-age=31536000, immutable"
             uploaded=$((uploaded + 1))
-          done
+          done < <(find "$BUNDLE_DIR" -type f \( \
+              -name "*.dmg" -o \
+              -name "*.AppImage" -o \
+              -name "*.deb" -o \
+              -name "*.rpm" -o \
+              -name "*.msi" -o \
+              -name "*.exe" -o \
+              -name "*.sig" -o \
+              -name "*.app.tar.gz" \
+            \) -print0)
 
           if [[ "$uploaded" -eq 0 ]]; then
             echo "::error::No artifacts found under $BUNDLE_DIR"
