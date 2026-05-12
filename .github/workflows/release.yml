@@ -1,0 +1,147 @@
+name: Release
+
+# Fires when you publish a GitHub release (Releases → Draft → Publish).
+# The release tag (e.g. v0.1.0) becomes the R2 folder name verbatim, so
+# always tag releases as v<SemVer> for predictable URLs.
+#
+# Also exposes a manual trigger so you can test-fire the pipeline against
+# any branch from the Actions tab without cutting a real release.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "R2 folder name to use (e.g. v0.0.1-test). On `release` triggers this is derived from the release tag."
+        required: true
+        default: "v0.0.0-test"
+
+# Never cancel an in-flight release — a half-uploaded release is worse than
+# a queued one.
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # tauri-action needs this to attach bundles to the GH release
+
+jobs:
+  build:
+    name: Build & upload / ${{ matrix.platform.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: macos-universal
+            os: macos-14
+            args: --target universal-apple-darwin
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            bundle-dir: packages/desktop/src-tauri/target/universal-apple-darwin/release/bundle
+          - name: linux-x86_64
+            os: ubuntu-22.04
+            args: ""
+            rust-targets: ""
+            bundle-dir: packages/desktop/src-tauri/target/release/bundle
+          - name: windows-x86_64
+            os: windows-latest
+            args: ""
+            rust-targets: ""
+            bundle-dir: packages/desktop/src-tauri/target/release/bundle
+    runs-on: ${{ matrix.platform.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.rust-targets }}
+
+      - name: Cache cargo registry + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            packages/desktop/src-tauri/target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('packages/desktop/src-tauri/Cargo.lock', 'packages/desktop/src-tauri/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
+            ${{ runner.os }}-cargo-
+
+      - name: Install Linux build deps
+        if: matrix.platform.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            libssl-dev \
+            libasound2-dev \
+            pkg-config \
+            build-essential
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Builds the bundles for the current platform AND (on `release` triggers)
+      # attaches them to the GitHub release that fired the workflow. On
+      # `workflow_dispatch` triggers `releaseId` is empty so tauri-action just
+      # builds without attaching.
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: packages/desktop
+          args: ${{ matrix.platform.args }}
+          releaseId: ${{ github.event.release.id || '' }}
+
+      # Upload the same bundles to R2 under <tag>/<filename>. We mirror what
+      # tauri-action attached to the GH release so both surfaces stay in sync.
+      # Artifacts are immutable — cache forever at the edge.
+      - name: Upload bundles to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          BUNDLE_DIR: ${{ matrix.platform.bundle-dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -d "$BUNDLE_DIR" ]]; then
+            echo "::error::Bundle directory not found: $BUNDLE_DIR"
+            exit 1
+          fi
+
+          # Tauri's bundle output for our config:
+          #   macOS:   <name>.dmg, <name>.app.tar.gz (+ .sig once signing is on)
+          #   Linux:   <name>.AppImage, <name>.deb, <name>.rpm
+          #   Windows: <name>.msi, <name>-setup.exe (+ .sig)
+          shopt -s globstar nullglob
+          uploaded=0
+          for artifact in "$BUNDLE_DIR"/**/*.{dmg,AppImage,deb,rpm,msi,exe,sig} \
+                          "$BUNDLE_DIR"/**/*.app.tar.gz; do
+            [[ -f "$artifact" ]] || continue
+            filename="$(basename "$artifact")"
+            key="${TAG}/${filename}"
+            echo "→ s3://${R2_BUCKET}/${key}"
+            aws s3 cp "$artifact" "s3://${R2_BUCKET}/${key}" \
+              --endpoint-url "$R2_ENDPOINT" \
+              --cache-control "public, max-age=31536000, immutable"
+            uploaded=$((uploaded + 1))
+          done
+
+          if [[ "$uploaded" -eq 0 ]]; then
+            echo "::error::No artifacts found under $BUNDLE_DIR"
+            ls -laR "$BUNDLE_DIR" || true
+            exit 1
+          fi
+          echo "Uploaded $uploaded artifact(s) to s3://${R2_BUCKET}/${TAG}/"
