@@ -4,6 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vox Era</title>
+    <script>
+      // FOUC-prevention: apply the resolved theme to <html> before any
+      // stylesheet parses, so the first paint matches what the React
+      // useTheme hook will resolve once it mounts. Reads the resolved
+      // theme written by the previous session's hook (localStorage), and
+      // falls back to prefers-color-scheme on first launch.
+      (function () {
+        try {
+          var cached = localStorage.getItem('vox-era:resolved-theme');
+          var prefersDark =
+            window.matchMedia &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var dark = cached === 'dark' || (cached !== 'light' && prefersDark);
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (_) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

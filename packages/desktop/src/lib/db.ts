@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import Database from '@tauri-apps/plugin-sql';
 import { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_OTHER } from './defaults';
 import { getPlatform } from './use-platform';
+import type { Theme } from './use-theme';
 
 const DB_URL = 'sqlite:vox-era.db';
 const ACTIVE_MODEL_CONFIG_KEY = 'active_model_config_id';
@@ -19,6 +20,7 @@ const DEFAULT_CANCEL_HOTKEY = 'Cmd+Esc';
 const FN_USAGE_TYPE_ORIGINAL_KEY = 'fn_usage_type_original';
 const RETENTION_DAYS_KEY = 'history_retention_days';
 const HISTORY_LAST_SWEEP_KEY = 'history_last_sweep';
+const THEME_KEY = 'theme';
 const SOFT_DELETE_GRACE_DAYS = 30;
 
 export interface ApiKeyRow {
@@ -473,6 +475,24 @@ export async function setHistoryLastSweep(ms: number): Promise<void> {
     await conn.execute(
         'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
         [HISTORY_LAST_SWEEP_KEY, String(ms)],
+    );
+}
+
+export async function getTheme(): Promise<Theme> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [THEME_KEY])) as {
+        value: string;
+    }[];
+    const value = rows[0]?.value;
+    if (value === 'light' || value === 'dark' || value === 'system') return value;
+    return 'system';
+}
+
+export async function setTheme(value: Theme): Promise<void> {
+    const conn = await db();
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [THEME_KEY, value],
     );
 }
 

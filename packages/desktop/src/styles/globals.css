@@ -24,11 +24,17 @@
         --muted-foreground: 234 15% 70%;
         --main: 226 71% 60%;
         --main-foreground: 0 0% 100%;
-        --border: 234 30% 28%;
+        --border: 234 30% 26%;
     }
 }
 
 @layer base {
+    html {
+        color-scheme: light;
+    }
+    html.dark {
+        color-scheme: dark;
+    }
     * {
         border-color: hsl(var(--border));
     }
@@ -39,5 +45,11 @@
     body {
         background-color: hsl(var(--bg));
         color: hsl(var(--fg));
+    }
+    @media (prefers-reduced-motion: no-preference) {
+        html,
+        body {
+            transition: background-color 120ms ease-out, color 120ms ease-out;
+        }
     }
 }

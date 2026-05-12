@@ -97,6 +97,21 @@ pub fn make_overlay_nonactivating<R: Runtime>(
         //    an NSPanel-only property and only takes effect now that we've
         //    re-classed.
         let _: () = msg_send![any_obj, setBecomesKeyOnlyIfNeeded: true];
+
+        // 8. Force a transparent backing surface AFTER the class swap.
+        //    Tauri's `transparent: true` config wires this up for the
+        //    NSWindow Tauri creates, but NSPanel has different default
+        //    chrome and the appearance can re-emerge once the runtime
+        //    starts treating the object as a panel — surfacing as a
+        //    dark rounded band below the pill where the floating overlay
+        //    pill doesn't cover the window. Setting `isOpaque = NO` and
+        //    `backgroundColor = [NSColor clearColor]` explicitly here
+        //    pins the panel to clear-backing regardless of what defaults
+        //    AppKit would otherwise apply.
+        let _: () = msg_send![any_obj, setOpaque: false];
+        let color_class = objc2::class!(NSColor);
+        let clear_color: *mut AnyObject = msg_send![color_class, clearColor];
+        let _: () = msg_send![any_obj, setBackgroundColor: clear_color];
     }
 
     log::info!("overlay_panel: overlay converted to non-activating NSPanel");

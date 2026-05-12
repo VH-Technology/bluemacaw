@@ -30,6 +30,7 @@ import {
     getOverlayPosition,
     getRetentionDays,
     getSelectedMicDeviceId,
+    getTheme,
     hardDeleteTranscription,
     listApiKeys,
     listModelConfigDependencies,
@@ -46,6 +47,7 @@ import {
     setOverlayPosition,
     setRetentionDays,
     setSelectedMicDeviceId,
+    setTheme,
     softDeleteTranscription,
 } from './db';
 
@@ -658,6 +660,26 @@ describe('db.historyLastSweep', () => {
     it('returns persisted value', async () => {
         await setHistoryLastSweep(1700000000000);
         await expect(getHistoryLastSweep()).resolves.toBe(1700000000000);
+    });
+});
+
+describe('db.theme', () => {
+    it("returns 'system' default when not set", async () => {
+        await expect(getTheme()).resolves.toBe('system');
+    });
+    it('round-trips light / dark / system', async () => {
+        await setTheme('dark');
+        await expect(getTheme()).resolves.toBe('dark');
+        await setTheme('light');
+        await expect(getTheme()).resolves.toBe('light');
+        await setTheme('system');
+        await expect(getTheme()).resolves.toBe('system');
+    });
+    it("falls back to 'system' when the stored value is garbage", async () => {
+        await getSharedHarness().execute(
+            "INSERT INTO app_state (key, value) VALUES ('theme', 'pink')",
+        );
+        await expect(getTheme()).resolves.toBe('system');
     });
 });
 
