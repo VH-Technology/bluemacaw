@@ -1,21 +1,29 @@
+@import "@fontsource-variable/nunito/index.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
     :root {
-        --bg: 60 100% 95%;
-        --fg: 0 0% 0%;
-        --main: 50 100% 65%;
-        --main-foreground: 0 0% 0%;
-        --border: 0 0% 0%;
+        --bg: 0 0% 100%;
+        --fg: 234 51% 21%;
+        --surface: 0 0% 100%;
+        --muted: 41 40% 92%;
+        --muted-foreground: 234 20% 45%;
+        --main: 226 71% 50%;
+        --main-foreground: 0 0% 100%;
+        --border: 234 30% 88%;
     }
     .dark {
-        --bg: 240 6% 10%;
-        --fg: 0 0% 95%;
-        --main: 50 100% 55%;
-        --main-foreground: 0 0% 0%;
-        --border: 0 0% 0%;
+        --bg: 234 40% 12%;
+        --fg: 41 60% 96%;
+        --surface: 234 35% 18%;
+        --muted: 234 30% 22%;
+        --muted-foreground: 234 15% 70%;
+        --main: 226 71% 60%;
+        --main-foreground: 0 0% 100%;
+        --border: 234 30% 28%;
     }
 }
 
@@ -23,9 +31,12 @@
     * {
         border-color: hsl(var(--border));
     }
+    html,
+    body {
+        font-family: "Nunito Variable", Nunito, system-ui, sans-serif;
+    }
     body {
         background-color: hsl(var(--bg));
         color: hsl(var(--fg));
-        font-family: Inter, system-ui, sans-serif;
     }
 }

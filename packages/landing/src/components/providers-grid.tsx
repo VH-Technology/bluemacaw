@@ -14,21 +14,30 @@ const PROVIDERS = [
 
 export function ProvidersGrid() {
     return (
-        <section className="py-16 px-6 max-w-5xl mx-auto">
-            <h2 className="text-4xl font-black mb-8">Pick a provider. Bring your key.</h2>
-            <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
+        <section className="mx-auto max-w-6xl px-6 py-20">
+            <div className="mb-10 text-center">
+                <h2 className="text-3xl font-black tracking-tight sm:text-4xl">
+                    Pick a provider. Bring your key.
+                </h2>
+                <p className="mt-3 text-muted-foreground">
+                    Nine STT providers wired up out of the box. Swap any time — keys stay on your
+                    machine.
+                </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
                 {PROVIDERS.map((p) => (
                     <div
                         key={p.id}
-                        className="border-3 border-border shadow-neo p-4 flex flex-col items-center bg-bg"
+                        className="flex flex-col items-center gap-3 rounded-2xl bg-muted p-5 transition-shadow hover:shadow-card"
                     >
                         <Image
                             src={`/logos/${p.id}.svg`}
                             alt={`${p.name} logo`}
-                            width={60}
-                            height={60}
+                            width={48}
+                            height={48}
+                            className="opacity-90"
                         />
-                        <span className="mt-3 text-sm font-bold">{p.name}</span>
+                        <span className="text-sm font-semibold text-fg">{p.name}</span>
                     </div>
                 ))}
             </div>
