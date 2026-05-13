@@ -25,6 +25,7 @@ import {
     OVERLAY_POSITION_SETUP_ON_EVENT,
     OVERLAY_RESET_POSITION_EVENT,
     RECORDING_STATE_EVENT,
+    __resetPublishSeqForTests,
     enterOverlayPositionSetup,
     exitOverlayPositionSetup,
     hideOverlayWindow,
@@ -40,6 +41,7 @@ beforeEach(() => {
     fakeOverlay.show.mockClear();
     fakeOverlay.hide.mockClear();
     getOverlayEnabledMock.mockReset().mockResolvedValue(true);
+    __resetPublishSeqForTests();
 });
 
 describe('publishRecordingState (overlay enabled)', () => {
@@ -122,6 +124,56 @@ describe('publishRecordingState (getOverlayEnabled fails)', () => {
         getOverlayEnabledMock.mockRejectedValueOnce(new Error('db boom'));
         await publishRecordingState({ kind: 'recording', sessionId: 's', startedAt: 0 });
         expect(fakeOverlay.show).toHaveBeenCalled();
+    });
+});
+
+describe('publishRecordingState (concurrent transitions)', () => {
+    /**
+     * Regression: a fast transcription that runs `recording → transcribing
+     * → idle` in quick succession used to leave the overlay pill stuck in
+     * "Transcribing…". The `transcribing` publish awaits `getOverlayEnabled`
+     * before calling `overlay.show()`; the `idle` publish skips that await
+     * and calls `overlay.hide()` immediately. Without sequence guarding,
+     * the stale `show()` runs after the fresh `hide()` and re-shows the
+     * pill.
+     */
+    it('drops the stale transcribing show() when an idle hide() raced ahead', async () => {
+        // Make getOverlayEnabled park until we let it through. Only the
+        // 'transcribing' call hits it; 'idle' returns false synchronously
+        // from shouldShowOverlay.
+        let releaseSlowGet: (v: boolean) => void = () => {};
+        getOverlayEnabledMock.mockImplementationOnce(
+            () =>
+                new Promise<boolean>((resolve) => {
+                    releaseSlowGet = resolve;
+                }),
+        );
+
+        // Kick off the 'transcribing' publish; do not await yet.
+        const transcribingPromise = publishRecordingState({ kind: 'transcribing' });
+        // Yield enough microtasks for the emit + getByLabel awaits to clear
+        // and the call to land on `await shouldShowOverlay`.
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        // Now kick off (and await) the 'idle' publish. It does not await
+        // getOverlayEnabled, so it can complete hide() before the parked
+        // 'transcribing' call resumes.
+        await publishRecordingState({ kind: 'idle' });
+
+        expect(fakeOverlay.hide).toHaveBeenCalledTimes(1);
+        expect(fakeOverlay.show).not.toHaveBeenCalled();
+
+        // Release the parked getOverlayEnabled so the 'transcribing' call
+        // can finish. With the sequence guard in place, it should detect
+        // that a newer publish ran and skip its overlay.show() entirely.
+        releaseSlowGet(true);
+        await transcribingPromise;
+
+        expect(fakeOverlay.show).not.toHaveBeenCalled();
+        // The 'idle' hide is still the only OS-level call.
+        expect(fakeOverlay.hide).toHaveBeenCalledTimes(1);
     });
 });
 

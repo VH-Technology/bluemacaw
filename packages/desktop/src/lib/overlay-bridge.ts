@@ -25,18 +25,47 @@ async function shouldShowOverlay(state: RecordingState): Promise<boolean> {
 }
 
 /**
+ * Monotonic sequence id incremented on every `publishRecordingState` call.
+ * Each call captures the id at entry and re-checks after every await: if a
+ * later call has started, the in-flight call drops its OS-level show/hide
+ * because a more recent state transition is now authoritative.
+ *
+ * Without this, a fast transcription that goes `recording → transcribing
+ * → idle` in short succession can ship the publish calls concurrently.
+ * The `idle` publish reaches `overlay.hide()` first (it skips the slower
+ * `getOverlayEnabled` SQL read because `shouldShowOverlay` returns false
+ * synchronously for non-recording/transcribing states). The `transcribing`
+ * publish then completes `getOverlayEnabled` and calls `overlay.show()`
+ * — re-showing the pill *after* the state machine has already moved on.
+ * Net symptom: "Transcribing…" pill stays forever in the overlay even
+ * though the transcription saved successfully and the dashboard updated.
+ */
+let publishSeq = 0;
+
+/**
  * Broadcast a recording state transition to the overlay window: emits a
  * Tauri event the overlay listens for, then shows or hides the overlay's
  * OS window based on the state kind and the user's `overlay_enabled`
  * setting. Side-effect-only and never throws — an overlay quirk must not
  * break the recording flow.
+ *
+ * If a newer `publishRecordingState` call has started while this one was
+ * awaiting an async step, this call drops its remaining OS-level work
+ * (show/hide) so the latest call wins. The event emit itself still goes
+ * through so the overlay's in-window React listener observes every
+ * transition in order.
  */
 export async function publishRecordingState(state: RecordingState): Promise<void> {
+    const mySeq = ++publishSeq;
+    const isStale = () => mySeq !== publishSeq;
+
     try {
         await emit(RECORDING_STATE_EVENT, state);
     } catch (e) {
         console.warn('overlay-bridge: emit failed', e);
     }
+    if (isStale()) return;
+
     let overlay: Awaited<ReturnType<typeof WebviewWindow.getByLabel>> | null = null;
     try {
         overlay = await WebviewWindow.getByLabel(OVERLAY_LABEL);
@@ -45,8 +74,19 @@ export async function publishRecordingState(state: RecordingState): Promise<void
         return;
     }
     if (!overlay) return;
+    if (isStale()) return;
+
+    let show: boolean;
     try {
-        if (await shouldShowOverlay(state)) {
+        show = await shouldShowOverlay(state);
+    } catch (e) {
+        console.warn('overlay-bridge: shouldShowOverlay failed', e);
+        return;
+    }
+    if (isStale()) return;
+
+    try {
+        if (show) {
             await overlay.show();
         } else {
             await overlay.hide();
@@ -54,6 +94,15 @@ export async function publishRecordingState(state: RecordingState): Promise<void
     } catch (e) {
         console.warn('overlay-bridge: show/hide failed', e);
     }
+}
+
+/**
+ * Test-only helper: reset the publish-sequence counter between tests so
+ * each test starts from the same baseline. Production code never imports
+ * this.
+ */
+export function __resetPublishSeqForTests(): void {
+    publishSeq = 0;
 }
 
 /**
