@@ -14,8 +14,8 @@ export type ResolvedTheme = 'light' | 'dark';
  * - `RESOLVED_KEY` holds the actually-applied theme (`'light' | 'dark'`).
  *   The boot script reads this synchronously to avoid FOUC on cold start.
  */
-export const PREFERENCE_KEY = 'vox-era:theme-preference';
-export const RESOLVED_KEY = 'vox-era:resolved-theme';
+export const PREFERENCE_KEY = 'bluemacaw:theme-preference';
+export const RESOLVED_KEY = 'bluemacaw:resolved-theme';
 
 const CYCLE: Record<Theme, Theme> = {
     light: 'dark',

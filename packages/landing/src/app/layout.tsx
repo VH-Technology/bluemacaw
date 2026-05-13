@@ -22,21 +22,21 @@ export const metadata: Metadata = {
 // FOUC-prevention: applies `.dark` to <html> synchronously, before any
 // stylesheet parses, matching whatever the React ThemeToggle will resolve
 // once it mounts. Reads, in priority order:
-//   1. `vox-era:resolved-theme` — cached value written by the toggle on every
+//   1. `bluemacaw:resolved-theme` — cached value written by the toggle on every
 //      apply. Always trusted when present, so the next cold start lines up
 //      with the user's last actually-applied theme.
-//   2. `vox-era:theme-preference` — the user's explicit choice. If 'system'
+//   2. `bluemacaw:theme-preference` — the user's explicit choice. If 'system'
 //      (or unset), falls through to prefers-color-scheme.
 //   3. `prefers-color-scheme` — default for first launch.
 // Keys match the desktop's useTheme conventions so reasoning is uniform.
 const themeBootScript = `
 (function(){try{
-  var cached = localStorage.getItem('vox-era:resolved-theme');
+  var cached = localStorage.getItem('bluemacaw:resolved-theme');
   if (cached === 'dark' || cached === 'light') {
     if (cached === 'dark') document.documentElement.classList.add('dark');
     return;
   }
-  var pref = localStorage.getItem('vox-era:theme-preference');
+  var pref = localStorage.getItem('bluemacaw:theme-preference');
   if (pref === 'dark') { document.documentElement.classList.add('dark'); return; }
   if (pref === 'light') { return; }
   // pref is 'system' or unset — follow the OS.
