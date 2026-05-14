@@ -30,7 +30,7 @@ export function Footer({ version }: FooterProps) {
                         Changelog
                     </a>
                     <a
-                        href="https://github.com/programow/vox-era"
+                        href="https://github.com/programow/ada"
                         className="font-semibold text-muted-foreground transition-colors hover:text-fg"
                         rel="noopener noreferrer"
                     >

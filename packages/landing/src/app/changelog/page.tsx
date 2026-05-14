@@ -3,7 +3,7 @@ import { Header } from '@/components/header';
 import { fetchReleases } from '@/lib/github';
 
 export default async function ChangelogPage() {
-    const releases = await fetchReleases('programow/vox-era');
+    const releases = await fetchReleases('programow/ada');
     return (
         <>
             <Header />
@@ -42,7 +42,7 @@ export default async function ChangelogPage() {
                     </div>
                 )}
             </main>
-            <Footer version="0.0.0" />
+            <Footer version="0.1.0" />
         </>
     );
 }
