@@ -727,12 +727,17 @@ describe('db.purgeOlderThan', () => {
     it('a row created exactly at the retention cutoff is KEPT (uses strict < cutoff)', async () => {
         // Locks in the boundary behaviour: `created_at < cutoff` means the
         // exact cutoff value survives. If the comparison flips to `<=` this
-        // test will fail loudly.
+        // test will fail loudly. The pinned `now` is essential — without
+        // it, `purgeOlderThan` re-reads `Date.now()` internally, and any
+        // sub-ms gap between the two reads pushes the function's cutoff
+        // past the row's `created_at` and the boundary row gets deleted.
+        // Reproduced on Ubuntu CI runners; macOS happened to land in the
+        // same millisecond and the bug stayed hidden.
         const now = Date.now();
         const retentionDays = 30;
         const cutoff = now - retentionDays * DAY_MS;
         await insertTranscription({ text: 'boundary', createdAt: cutoff });
-        const result = await purgeOlderThan(retentionDays);
+        const result = await purgeOlderThan(retentionDays, now);
         expect(result.softDeleted).toBe(0);
         const visible = await listTranscriptions({ limit: 10 });
         expect(visible.map((r) => r.text)).toEqual(['boundary']);

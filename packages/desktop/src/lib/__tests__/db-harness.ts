@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import BetterSqlite3, { type Database as BetterSqlite3Database } from 'better-sqlite3';
 
 /**
@@ -91,7 +92,11 @@ let migrationCache: string[] | null = null;
 function loadMigrationSqlFiles(): string[] {
     if (migrationCache) return migrationCache;
     // src/lib/__tests__/db-harness.ts → ../../../src-tauri/migrations.
-    const here = path.dirname(new URL(import.meta.url).pathname);
+    // `fileURLToPath` is the cross-platform way to turn a file: URL into a
+    // filesystem path. On Windows, `new URL(import.meta.url).pathname`
+    // would return `/D:/...` and path.resolve preserves the leading slash,
+    // so fs.readFileSync ends up looking at `D:\D:\...` and ENOENTs.
+    const here = path.dirname(fileURLToPath(import.meta.url));
     const migrationsDir = path.resolve(here, '../../../src-tauri/migrations');
     // Keep this list in the SAME order Rust's `migrations()` declares them.
     // New migrations must be appended here AND in src-tauri/src/history/mod.rs.

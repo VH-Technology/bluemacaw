@@ -70,6 +70,7 @@ jobs:
             libayatana-appindicator3-dev \
             libssl-dev \
             libasound2-dev \
+            libxdo-dev \
             pkg-config \
             build-essential
 
@@ -159,6 +160,7 @@ jobs:
             libayatana-appindicator3-dev \
             libssl-dev \
             libasound2-dev \
+            libxdo-dev \
             pkg-config \
             build-essential
 

@@ -74,7 +74,14 @@ describe('SettingsRecording', () => {
 
     it('persists the selected mic on change', async () => {
         render(<SettingsRecording />);
-        await waitFor(() => screen.getByLabelText(/microphone/i));
+        // `vox.listAudioInputDevices()` resolves on a microtask after the
+        // initial render, so the <select> exists before its <option>s do.
+        // Waiting only for the label races on Ubuntu CI: fireEvent.change
+        // fires before the `usb` option is in the DOM, the browser rejects
+        // the value as "not a valid option", value stays as '', and React
+        // reports the change as '' — which the handler then maps to null.
+        // Wait for the device-list option itself instead.
+        await screen.findByRole('option', { name: 'USB Mic' });
         const select = screen.getByLabelText(/microphone/i) as HTMLSelectElement;
         fireEvent.change(select, { target: { value: 'usb' } });
         await waitFor(() => {
@@ -85,7 +92,10 @@ describe('SettingsRecording', () => {
     it('persists null when System default is chosen', async () => {
         getSelectedMicDeviceIdMock.mockResolvedValueOnce('usb');
         render(<SettingsRecording />);
-        await waitFor(() => screen.getByLabelText(/microphone/i));
+        // Same option-availability race as above. Even though '' is always
+        // a valid option, the controlled select's value can only flip away
+        // from 'usb' once the options have been hydrated.
+        await screen.findByRole('option', { name: 'USB Mic' });
         const select = screen.getByLabelText(/microphone/i) as HTMLSelectElement;
         fireEvent.change(select, { target: { value: '' } });
         await waitFor(() => {

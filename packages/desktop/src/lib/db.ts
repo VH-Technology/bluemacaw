@@ -498,9 +498,18 @@ export async function setTheme(value: Theme): Promise<void> {
 
 export async function purgeOlderThan(
     retentionDays: number,
+    /**
+     * Override the wall clock used to compute the soft-delete and
+     * hard-delete cutoffs. Production callers should leave this unset —
+     * `Date.now()` is the right value. Tests pass a fixed timestamp so
+     * that the boundary case (`created_at === cutoff`) is deterministic;
+     * otherwise even a one-ms gap between the test's `now` and the
+     * function's `now` flips the comparison and the test soft-deletes a
+     * row it expected to keep (observed under CI's slower scheduler).
+     */
+    now: number = Date.now(),
 ): Promise<{ softDeleted: number; hardDeleted: number }> {
     const conn = await db();
-    const now = Date.now();
     let softDeleted = 0;
     if (retentionDays > 0) {
         const cutoff = now - retentionDays * 24 * 60 * 60 * 1000;
