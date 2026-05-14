@@ -19,7 +19,7 @@ export default function HomePage() {
                 <PrivacyTeaser />
                 <Download />
             </main>
-            <Footer version="0.0.0" />
+            <Footer version="0.1.0" />
         </>
     );
 }

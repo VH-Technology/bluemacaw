@@ -32,7 +32,7 @@ export function Hero() {
                         </Button>
                         <Button asChild size="xl" variant="outline">
                             <a
-                                href="https://github.com/programow/vox-era"
+                                href="https://github.com/programow/ada"
                                 target="_blank"
                                 rel="noreferrer"
                             >

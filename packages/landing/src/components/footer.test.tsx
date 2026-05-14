@@ -6,7 +6,7 @@ describe('Footer', () => {
     it('shows the GitHub link', () => {
         render(<Footer version="0.1.0" />);
         const link = screen.getByRole('link', { name: /github/i });
-        expect(link).toHaveAttribute('href', expect.stringContaining('programow/vox-era'));
+        expect(link).toHaveAttribute('href', expect.stringContaining('programow/ada'));
     });
 
     it('shows the version', () => {

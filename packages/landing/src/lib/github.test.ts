@@ -24,7 +24,7 @@ vi.stubGlobal(
 
 describe('fetchReleases', () => {
     it('returns parsed releases', async () => {
-        const releases = await fetchReleases('programow/vox-era');
+        const releases = await fetchReleases('programow/ada');
         expect(releases).toHaveLength(1);
         expect(releases[0]?.tag).toBe('v1.0.0');
     });
@@ -34,7 +34,7 @@ describe('fetchReleases', () => {
             'fetch',
             vi.fn(async () => new Response('not found', { status: 404 })) as typeof fetch,
         );
-        const releases = await fetchReleases('programow/vox-era');
+        const releases = await fetchReleases('programow/ada');
         expect(releases).toEqual([]);
     });
 });
