@@ -191,6 +191,16 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
     const handleGrant = useCallback(
         async (key: PermissionKey) => {
+            // On macOS, TCC does not propagate Accessibility / Input Monitoring
+            // grants into a running process — `AXIsProcessTrustedWithOptions`
+            // and `CGPreflightListenEventAccess` keep returning Denied until
+            // the app is relaunched. Surface the restart CTA the moment the
+            // user clicks Grant for one of those, instead of waiting for a
+            // Denied → Granted transition that the running process can never
+            // observe.
+            if (platform?.os === 'macos' && RESTART_REQUIRED.has(key)) {
+                setNeedsRestart(true);
+            }
             try {
                 await runGrant(key, platform?.os === 'macos');
             } catch (e) {
@@ -358,8 +368,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                         className="flex flex-row items-center justify-between gap-3 bg-brand-yellow/20 p-4 dark:bg-brand-yellow/15"
                     >
                         <p className="text-xs leading-relaxed text-fg">
-                            You just granted a permission. Quit and reopen bluemacaw for it to take
-                            effect.
+                            Toggle the switch in System Settings, then click Restart. macOS won't
+                            tell bluemacaw about the grant until it relaunches — so the row above
+                            may still say “Not granted” until then.
                         </p>
                         <Button
                             size="sm"

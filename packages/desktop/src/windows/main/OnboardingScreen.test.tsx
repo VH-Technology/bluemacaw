@@ -147,6 +147,64 @@ describe('<OnboardingScreen />', () => {
         await waitFor(() => expect(vox.openSettingsPanel).toHaveBeenCalledWith('accessibility'));
     });
 
+    it('macOS: clicking Grant on Accessibility surfaces the restart banner immediately', async () => {
+        const user = userEvent.setup();
+        vi.mocked(vox.getPlatformInfo).mockResolvedValue({ os: 'macos', isWayland: false });
+        vi.mocked(vox.checkMicrophonePermission).mockResolvedValue('Granted');
+        // AX stays Denied throughout — the running process can't observe its
+        // own TCC grant on macOS, which is exactly what the immediate banner
+        // is for.
+        vi.mocked(vox.checkAccessibilityPermission).mockResolvedValue('Denied');
+        vi.mocked(vox.checkInputMonitoringPermission).mockResolvedValue('Granted');
+        vi.mocked(vox.checkAccessibilityPermissionPrompting).mockResolvedValue('Denied');
+        vi.mocked(vox.openSettingsPanel).mockResolvedValue(undefined);
+
+        render(<OnboardingScreen onComplete={vi.fn()} />);
+
+        await waitFor(() =>
+            expect(screen.getByTestId('perm-grant-accessibility')).toBeInTheDocument(),
+        );
+        expect(screen.queryByTestId('restart-banner')).toBeNull();
+        await user.click(screen.getByTestId('perm-grant-accessibility'));
+        await waitFor(() => expect(screen.getByTestId('restart-banner')).toBeInTheDocument());
+    });
+
+    it('macOS: clicking Grant on Input Monitoring surfaces the restart banner immediately', async () => {
+        const user = userEvent.setup();
+        vi.mocked(vox.getPlatformInfo).mockResolvedValue({ os: 'macos', isWayland: false });
+        vi.mocked(vox.checkMicrophonePermission).mockResolvedValue('Granted');
+        vi.mocked(vox.checkAccessibilityPermission).mockResolvedValue('Granted');
+        vi.mocked(vox.checkInputMonitoringPermission).mockResolvedValue('Denied');
+        vi.mocked(vox.requestInputMonitoringPermission).mockResolvedValue('Denied');
+        vi.mocked(vox.openSettingsPanel).mockResolvedValue(undefined);
+
+        render(<OnboardingScreen onComplete={vi.fn()} />);
+
+        await waitFor(() =>
+            expect(screen.getByTestId('perm-grant-input-monitoring')).toBeInTheDocument(),
+        );
+        expect(screen.queryByTestId('restart-banner')).toBeNull();
+        await user.click(screen.getByTestId('perm-grant-input-monitoring'));
+        await waitFor(() => expect(screen.getByTestId('restart-banner')).toBeInTheDocument());
+    });
+
+    it('Windows: clicking Grant on Microphone does NOT surface a restart banner', async () => {
+        const user = userEvent.setup();
+        vi.mocked(vox.getPlatformInfo).mockResolvedValue({ os: 'windows', isWayland: false });
+        vi.mocked(vox.checkMicrophonePermission).mockResolvedValue('Denied');
+        vi.mocked(vox.requestMicrophonePermission).mockResolvedValue('Denied');
+
+        render(<OnboardingScreen onComplete={vi.fn()} />);
+
+        await waitFor(() =>
+            expect(screen.getByTestId('perm-grant-microphone')).toBeInTheDocument(),
+        );
+        await user.click(screen.getByTestId('perm-grant-microphone'));
+        // Give the click handler time to settle; the banner should never appear.
+        await new Promise((r) => setTimeout(r, 50));
+        expect(screen.queryByTestId('restart-banner')).toBeNull();
+    });
+
     it('Restart banner only appears after Accessibility transitions Denied → Granted', async () => {
         vi.mocked(vox.getPlatformInfo).mockResolvedValue({ os: 'macos', isWayland: false });
         vi.mocked(vox.checkMicrophonePermission).mockResolvedValue('Granted');
