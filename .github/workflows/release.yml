@@ -31,23 +31,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Linux + Windows are temporarily disabled — both fail in
-        # `tauri-action`'s build step (separate root causes). Re-enable by
-        # uncommenting the matrix entries below once their build issues are
-        # fixed; the upload step is already cross-platform.
         platform:
           - name: macos-universal
             os: macos-14
             args: --target universal-apple-darwin
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
-          # - name: linux-x86_64
-          #   os: ubuntu-22.04
-          #   args: ""
-          #   rust-targets: ""
-          # - name: windows-x86_64
-          #   os: windows-latest
-          #   args: ""
-          #   rust-targets: ""
+          - name: linux-x86_64
+            os: ubuntu-22.04
+            args: ""
+            rust-targets: ""
+          - name: windows-x86_64
+            os: windows-latest
+            args: ""
+            rust-targets: ""
     runs-on: ${{ matrix.platform.os }}
     steps:
       - uses: actions/checkout@v4
@@ -83,6 +79,7 @@ jobs:
             libayatana-appindicator3-dev \
             libssl-dev \
             libasound2-dev \
+            libxdo-dev \
             pkg-config \
             build-essential
 
