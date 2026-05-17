@@ -35,7 +35,7 @@ export function ProvidersGrid() {
                             alt={`${p.name} logo`}
                             width={48}
                             height={48}
-                            className="opacity-90"
+                            className="opacity-90 dark:invert"
                         />
                         <span className="text-sm font-semibold text-fg">{p.name}</span>
                     </div>

@@ -1,8 +1,11 @@
 # Provider logos
 
-These are placeholder SVGs (stylized text initials) used during development. Each is 60x60 with a black border, white background, and the provider's short identifier in bold.
+Monochrome SVG glyphs (24x24 viewBox, default black fill). Rendered with `dark:invert` so they read on both light and dark themes.
 
-Replace each with the official logo from the provider before public launch. Note licensing/trademark requirements per provider when using their official marks.
+Sources:
+
+- `openai.svg`, `elevenlabs.svg`, `deepgram.svg`, `azure-openai.svg` — [simple-icons](https://simpleicons.org) (CC0). `azure-openai.svg` uses the Microsoft Azure mark.
+- `assemblyai.svg`, `fal.svg`, `gladia.svg`, `groq.svg`, `revai.svg` — text glyphs (not in simple-icons). Replace with official marks before public launch, mindful of trademark/licensing.
 
 Providers (alphabetical):
 
