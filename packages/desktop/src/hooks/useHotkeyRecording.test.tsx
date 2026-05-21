@@ -24,6 +24,19 @@ vi.mock('@tauri-apps/api/event', () => ({
     listen: listenMock,
 }));
 
+vi.mock('@/lib/db', () => ({
+    getCancelHotkeyCombo: vi.fn(async () => 'Escape'),
+}));
+
+vi.mock('@/lib/invoke', () => ({
+    vox: {
+        registerCancelHotkey: vi.fn(async () => 'Escape'),
+        unregisterCancelHotkey: vi.fn(async () => undefined),
+    },
+}));
+
+import { getCancelHotkeyCombo } from '@/lib/db';
+import { vox } from '@/lib/invoke';
 import { EVT_SHORTCUT_CANCEL } from '@/lib/markers';
 import type { RecordingDeps, RecordingState } from '@/lib/recording-controller';
 import { SHORTCUT_EVENT, useHotkeyRecording } from './useHotkeyRecording';
@@ -39,6 +52,12 @@ function makeDeps(): RecordingDeps {
             requestMicrophonePermission: vi.fn(async () => 'Granted' as const),
         },
         transcribe: vi.fn(async () => 'hi'),
+        // Provide DB-backed deps explicitly: mocking `@/lib/db` at the
+        // module level (needed for the cancel-hotkey lifecycle) wipes out
+        // the default fallbacks recording-controller would otherwise reach
+        // for. Passing stubs here keeps the controller path test-isolated.
+        saveTranscription: vi.fn(async () => undefined),
+        resolveActiveConfig: vi.fn(async () => null),
     };
 }
 
@@ -48,6 +67,12 @@ function makePublish() {
 
 beforeEach(() => {
     listenMock.mockClear();
+    vi.mocked(getCancelHotkeyCombo).mockClear();
+    vi.mocked(getCancelHotkeyCombo).mockResolvedValue('Escape');
+    vi.mocked(vox.registerCancelHotkey).mockClear();
+    vi.mocked(vox.registerCancelHotkey).mockResolvedValue('Escape');
+    vi.mocked(vox.unregisterCancelHotkey).mockClear();
+    vi.mocked(vox.unregisterCancelHotkey).mockResolvedValue(undefined);
 });
 
 describe('useHotkeyRecording', () => {
@@ -149,6 +174,50 @@ describe('useHotkeyRecording', () => {
         });
         expect(result.current.state.kind).toBe('idle');
         expect(deps.vox.cancelRecording).not.toHaveBeenCalled();
+    });
+
+    it('registers the cancel hotkey on recording start and unregisters when the recording ends', async () => {
+        const deps = makeDeps();
+        const { result } = renderHook(() => useHotkeyRecording({ deps, publish: makePublish() }));
+
+        // idle → recording fires registerCancelHotkey with the stored combo
+        await act(async () => {
+            fireEvent();
+        });
+        await waitFor(() => expect(result.current.state.kind).toBe('recording'));
+        await waitFor(() => expect(vox.registerCancelHotkey).toHaveBeenCalledWith('Escape'));
+        expect(vox.unregisterCancelHotkey).not.toHaveBeenCalled();
+
+        // recording → transcribing → idle unregisters the cancel hotkey
+        await act(async () => {
+            fireEvent();
+        });
+        await waitFor(() => expect(result.current.state.kind).toBe('idle'));
+        await waitFor(() => expect(vox.unregisterCancelHotkey).toHaveBeenCalled());
+    });
+
+    it('unregisters the cancel hotkey when the user cancels mid-recording', async () => {
+        const deps = makeDeps();
+        const { result } = renderHook(() => useHotkeyRecording({ deps, publish: makePublish() }));
+        await act(async () => {
+            fireEvent();
+        });
+        await waitFor(() => expect(result.current.state.kind).toBe('recording'));
+        await waitFor(() => expect(vox.registerCancelHotkey).toHaveBeenCalled());
+
+        await act(async () => {
+            fireEvent(EVT_SHORTCUT_CANCEL);
+        });
+        await waitFor(() => expect(result.current.state.kind).toBe('idle'));
+        await waitFor(() => expect(vox.unregisterCancelHotkey).toHaveBeenCalled());
+    });
+
+    it('does not register the cancel hotkey while idle', async () => {
+        renderHook(() => useHotkeyRecording({ deps: makeDeps(), publish: makePublish() }));
+        // Give any synchronous effects a chance to run.
+        await waitFor(() => {
+            expect(vox.registerCancelHotkey).not.toHaveBeenCalled();
+        });
     });
 
     it('ignores events fired during transcribing (no double-stop)', async () => {

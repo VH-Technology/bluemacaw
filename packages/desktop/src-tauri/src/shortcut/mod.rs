@@ -3,18 +3,31 @@ use serde::{Deserialize, Serialize};
 pub mod parse;
 
 #[cfg(target_os = "macos")]
+pub mod macos_chord;
+#[cfg(target_os = "macos")]
 pub mod macos_fn;
 
 /// Hotkey combination supported by the [`ShortcutManager`] surface.
 ///
-/// `Fn` is macOS-only and routed to a `CGEventTap`-based backend
-/// because `tauri-plugin-global-shortcut` cannot observe the
-/// secondary-fn modifier on its own. Everything else is a string
-/// like `"Ctrl+Shift+Space"` understood by the plugin.
+/// Variants beyond `Standard` are routed to a `CGEventTap`-based
+/// backend because `tauri-plugin-global-shortcut` cannot observe
+/// either the secondary-fn modifier or pure modifier transitions —
+/// the plugin's `RegisterHotKey`/`global-hotkey` foundation requires
+/// a non-modifier key on every binding. The chord/double-tap paths
+/// are macOS-only in v1; non-macOS platforms surface a clear error.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum HotkeyCombo {
     Fn,
+    /// Modifier-only chord such as Cmd+Opt — fires when the exact
+    /// modifier set becomes held and nothing else has been pressed.
+    /// The `mods` u8 follows the bit layout in
+    /// [`parse::ModifierSet`].
+    ModifiersOnly { mods: u8 },
+    /// Double-tap of a single modifier within a short window
+    /// (~350ms). Same bit layout as `mods` above, but exactly one
+    /// bit set.
+    DoubleTap { modifier: u8 },
     Standard { combo: String },
 }
 

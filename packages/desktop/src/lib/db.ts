@@ -20,11 +20,13 @@ const CANCEL_HOTKEY_COMBO_KEY = 'cancel_hotkey_combo';
  * onboarding wizard skip step 2 on a subsequent run.
  */
 const HOTKEYS_ONBOARDED_KEY = 'hotkeys_onboarded';
-/** Default cancel hotkey applied when the user has never set one. Cmd+Esc
- * is a sensible macOS default — discoverable, not bound to anything else,
- * and requires a modifier so the combo parser accepts it (bare Esc would
- * be rejected and would also be a hostile thing to register globally). */
-const DEFAULT_CANCEL_HOTKEY = 'Cmd+Esc';
+/** Default cancel hotkey applied when the user has never set one. The
+ * cancel hotkey is only registered globally while a recording is in
+ * flight, so a bare Esc is safe — it doesn't intercept other apps'
+ * Escape presses outside the recording window. Canonical spelling
+ * matches what `HotkeyInput`'s keydown formatter produces, so the value
+ * round-trips cleanly through capture → store → re-render. */
+const DEFAULT_CANCEL_HOTKEY = 'Escape';
 const FN_USAGE_TYPE_ORIGINAL_KEY = 'fn_usage_type_original';
 const RETENTION_DAYS_KEY = 'history_retention_days';
 const HISTORY_LAST_SWEEP_KEY = 'history_last_sweep';

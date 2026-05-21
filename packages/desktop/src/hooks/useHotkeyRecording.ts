@@ -1,3 +1,4 @@
+import { getCancelHotkeyCombo } from '@/lib/db';
 import { vox } from '@/lib/invoke';
 import { EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_TOGGLE } from '@/lib/markers';
 import { publishRecordingState } from '@/lib/overlay-bridge';
@@ -44,10 +45,44 @@ export function useHotkeyRecording(options: UseHotkeyRecordingOptions = {}): {
 
     useEffect(() => {
         let cancelled = false;
+        // Track whether the cancel hotkey is currently registered so the
+        // recording-start path can be idempotent and the recording-end
+        // path doesn't fire an unnecessary unregister IPC.
+        let cancelHotkeyActive = false;
+
+        async function registerCancelHotkey() {
+            if (cancelHotkeyActive) return;
+            try {
+                const combo = await getCancelHotkeyCombo();
+                await vox.registerCancelHotkey(combo);
+                cancelHotkeyActive = true;
+            } catch (e) {
+                // A failed cancel-hotkey registration must never block
+                // recording — the overlay's Cancel button still works.
+                console.error('registerCancelHotkey failed', e);
+            }
+        }
+
+        async function unregisterCancelHotkey() {
+            if (!cancelHotkeyActive) return;
+            try {
+                await vox.unregisterCancelHotkey();
+            } catch (e) {
+                console.error('unregisterCancelHotkey failed', e);
+            } finally {
+                cancelHotkeyActive = false;
+            }
+        }
+
         const applyNext = (next: RecordingState) => {
             if (cancelled) return;
             setState(next);
             void publishRef.current(next);
+            if (next.kind === 'recording') {
+                void registerCancelHotkey();
+            } else {
+                void unregisterCancelHotkey();
+            }
         };
         const togglePromise = listen(SHORTCUT_EVENT, () => {
             void toggle(stateRef.current, depsRef.current, applyNext);
@@ -59,6 +94,9 @@ export function useHotkeyRecording(options: UseHotkeyRecordingOptions = {}): {
             cancelled = true;
             void togglePromise.then((fn) => fn());
             void cancelPromise.then((fn) => fn());
+            // Best-effort: drop any cancel-hotkey registration we still
+            // own when the hook tears down (e.g. main window close).
+            void unregisterCancelHotkey();
         };
     }, []);
 

@@ -8,7 +8,9 @@ use crate::paste::Paster;
 use crate::platform::is_wayland_session;
 use crate::secrets::Vault;
 use crate::shortcut::HotkeyCombo;
-use crate::shortcut::parse::{format_combo, parse_combo};
+use crate::shortcut::parse::{
+    format_combo, parse_combo, parse_combo_permissive, parse_double_tap, parse_modifiers_only,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
@@ -16,7 +18,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use uuid::Uuid;
 
 #[cfg(target_os = "macos")]
-use crate::shortcut::{ShortcutManager, macos_fn::MacOsFnTap};
+use crate::shortcut::{ShortcutManager, macos_chord::MacOsChordTap, macos_fn::MacOsFnTap};
 
 /// Application state shared across Tauri commands.
 ///
@@ -48,6 +50,13 @@ pub struct AppState {
     /// combo just unregisters the global shortcut, the dormant tap stays.
     #[cfg(target_os = "macos")]
     pub fn_tap: Mutex<Option<Arc<MacOsFnTap>>>,
+    /// macOS chord tap — handles modifier-only chord shortcuts and
+    /// double-tap-modifier shortcuts. Lazily initialized the first time
+    /// the user picks such a combo. Same v1 lifecycle caveat as
+    /// `fn_tap`: tap thread survives the app lifetime, switching
+    /// shortcuts just drops the binding.
+    #[cfg(target_os = "macos")]
+    pub chord_tap: Mutex<Option<Arc<MacOsChordTap>>>,
 }
 
 /// Platform identifier emitted to the JS side. The webview keys per-OS
@@ -373,17 +382,29 @@ pub fn list_audio_input_devices() -> Vec<AudioDeviceInfo> {
 }
 
 /// Routes the raw `combo` string the JS side sends into the existing typed
-/// [`HotkeyCombo`] enum. The special case-insensitive marker `"Fn"` becomes
-/// [`HotkeyCombo::Fn`] (routed to the macOS `CGEventTap` backend);
-/// everything else is [`HotkeyCombo::Standard`] (routed to
-/// `tauri-plugin-global-shortcut`). The JS contract — a single `combo`
-/// string — is unchanged.
-fn parse_combo_input(input: &str) -> HotkeyCombo {
-    if input.trim().eq_ignore_ascii_case("fn") {
-        HotkeyCombo::Fn
-    } else {
-        HotkeyCombo::Standard { combo: input.to_string() }
+/// [`HotkeyCombo`] enum. Recognises three macOS-specific markers before
+/// falling back to the standard combo path:
+///
+/// * `"Fn"` (case-insensitive) → [`HotkeyCombo::Fn`]
+/// * `"DoubleTap+<Mod>"` → [`HotkeyCombo::DoubleTap`]
+/// * two-or-more bare modifier names like `"Cmd+Opt"` →
+///   [`HotkeyCombo::ModifiersOnly`]
+///
+/// Anything else falls through to [`HotkeyCombo::Standard`] and goes
+/// through `tauri-plugin-global-shortcut`. The JS contract — a single
+/// `combo` string — is unchanged.
+fn parse_combo_input(input: &str) -> Result<HotkeyCombo, String> {
+    let trimmed = input.trim();
+    if trimmed.eq_ignore_ascii_case("fn") {
+        return Ok(HotkeyCombo::Fn);
     }
+    if let Some(modifier) = parse_double_tap(trimmed).map_err(|e| e.to_string())? {
+        return Ok(HotkeyCombo::DoubleTap { modifier });
+    }
+    if let Some(mods) = parse_modifiers_only(trimmed).map_err(|e| e.to_string())? {
+        return Ok(HotkeyCombo::ModifiersOnly { mods: mods.0 });
+    }
+    Ok(HotkeyCombo::Standard { combo: input.to_string() })
 }
 
 #[tauri::command]
@@ -392,9 +413,25 @@ pub fn register_hotkey(
     state: State<'_, AppState>,
     combo: String,
 ) -> Result<String, String> {
-    let parsed = parse_combo_input(&combo);
+    let parsed = parse_combo_input(&combo)?;
     let combo_str = match parsed {
         HotkeyCombo::Fn => return register_fn_hotkey(&app, &state),
+        HotkeyCombo::ModifiersOnly { mods } => {
+            return register_chord_hotkey(
+                &app,
+                &state,
+                HotkeyCombo::ModifiersOnly { mods },
+                format!("modifiers-only(0x{mods:x})"),
+            );
+        }
+        HotkeyCombo::DoubleTap { modifier } => {
+            return register_chord_hotkey(
+                &app,
+                &state,
+                HotkeyCombo::DoubleTap { modifier },
+                format!("double-tap(0x{modifier:x})"),
+            );
+        }
         HotkeyCombo::Standard { combo } => combo,
     };
     let shortcut = parse_combo(&combo_str).map_err(|e| e.to_string())?;
@@ -463,6 +500,63 @@ fn register_fn_hotkey(
     Err("Fn key shortcut is only supported on macOS".to_string())
 }
 
+#[cfg(target_os = "macos")]
+fn register_chord_hotkey(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    combo: HotkeyCombo,
+    label: String,
+) -> Result<String, String> {
+    // Drop any plugin-managed standard shortcut so we don't double-fire
+    // from two backends, mirroring `register_fn_hotkey`.
+    {
+        let mut current = state.current_hotkey.lock().map_err(|e| e.to_string())?;
+        if let Some(prev) = current.take() {
+            let _ = app.global_shortcut().unregister(prev);
+        }
+    }
+    // Drop any prior chord tap (the tap's run loop survives, but the
+    // binding is replaced). Each new chord-mode picks gets a fresh
+    // `MacOsChordTap` because the mode is baked in at construction.
+    let mut tap_slot = state.chord_tap.lock().map_err(|e| e.to_string())?;
+    let app_clone = app.clone();
+    let tap = Arc::new(
+        MacOsChordTap::new(
+            move || {
+                let _ = app_clone.emit(EVT_SHORTCUT_TOGGLE, ());
+            },
+            &combo,
+        )
+        .map_err(|e| e.to_string())?,
+    );
+    tap.register(combo).map_err(|e| match e {
+        crate::shortcut::ShortcutError::InputMonitoringRequired => format!(
+            "{ERR_INPUT_MONITORING_REQUIRED} grant bluemacaw in System Settings → Privacy & \
+             Security → Input Monitoring, then quit and reopen the app"
+        ),
+        crate::shortcut::ShortcutError::AccessibilityRequired => format!(
+            "{ERR_ACCESSIBILITY_REQUIRED} grant bluemacaw in System Settings → Privacy & Security \
+             → Accessibility, then try again"
+        ),
+        other => other.to_string(),
+    })?;
+    *tap_slot = Some(tap);
+    Ok(label)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn register_chord_hotkey(
+    _app: &AppHandle,
+    _state: &State<'_, AppState>,
+    _combo: HotkeyCombo,
+    _label: String,
+) -> Result<String, String> {
+    Err(
+        "Modifier-only chord and double-tap shortcuts are only supported on macOS in this version"
+            .to_string(),
+    )
+}
+
 #[tauri::command]
 pub fn unregister_hotkey(
     app: AppHandle,
@@ -486,16 +580,20 @@ pub fn unregister_hotkey(
 /// Unlike `register_hotkey`, the Fn-key path is intentionally NOT supported
 /// here — the cancel hotkey is meant to be distinct from the toggle and
 /// only one Fn-tap can ever be installed, so allowing `"Fn"` would either
-/// collide with the toggle path or silently no-op. The combo parser
-/// (`parse_combo`) still requires at least one modifier, so we don't risk
-/// swallowing bare keys like Esc system-wide.
+/// collide with the toggle path or silently no-op.
+///
+/// The permissive combo parser is used so a bare key like `"Esc"` is
+/// accepted. That's only safe because the JS side registers the cancel
+/// hotkey *while a recording is in flight* and unregisters it again the
+/// moment the recording ends — Esc is not globally swallowed during
+/// idle / transcribing / error states.
 #[tauri::command]
 pub fn register_cancel_hotkey(
     app: AppHandle,
     state: State<'_, AppState>,
     combo: String,
 ) -> Result<String, String> {
-    let shortcut = parse_combo(&combo).map_err(|e| e.to_string())?;
+    let shortcut = parse_combo_permissive(&combo).map_err(|e| e.to_string())?;
     let mut current = state
         .current_cancel_hotkey
         .lock()
@@ -530,6 +628,16 @@ pub fn unregister_cancel_hotkey(
             .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// Parse-only validation of a cancel-hotkey combo. Used by Settings /
+/// onboarding to surface a parse error before the user commits, without
+/// actually registering the shortcut globally — registration is the
+/// recording loop's job.
+#[tauri::command]
+pub fn validate_cancel_hotkey(combo: String) -> Result<String, String> {
+    let shortcut = parse_combo_permissive(&combo).map_err(|e| e.to_string())?;
+    Ok(format_combo(&shortcut))
 }
 
 /// Read `defaults read com.apple.HIToolbox AppleFnUsageType`.
@@ -698,23 +806,23 @@ mod tests {
 
     #[test]
     fn parse_combo_input_recognises_fn_marker_exact() {
-        assert_eq!(parse_combo_input("Fn"), HotkeyCombo::Fn);
+        assert_eq!(parse_combo_input("Fn").unwrap(), HotkeyCombo::Fn);
     }
 
     #[test]
     fn parse_combo_input_recognises_fn_marker_lowercase() {
-        assert_eq!(parse_combo_input("fn"), HotkeyCombo::Fn);
+        assert_eq!(parse_combo_input("fn").unwrap(), HotkeyCombo::Fn);
     }
 
     #[test]
     fn parse_combo_input_recognises_fn_marker_with_whitespace_and_caps() {
-        assert_eq!(parse_combo_input(" FN "), HotkeyCombo::Fn);
+        assert_eq!(parse_combo_input(" FN ").unwrap(), HotkeyCombo::Fn);
     }
 
     #[test]
     fn parse_combo_input_treats_standard_combo_as_standard() {
         assert_eq!(
-            parse_combo_input("Cmd+Shift+Space"),
+            parse_combo_input("Cmd+Shift+Space").unwrap(),
             HotkeyCombo::Standard {
                 combo: "Cmd+Shift+Space".to_string(),
             },
@@ -727,9 +835,50 @@ mod tests {
         // downstream handles whitespace. This pins the verbatim-passthrough
         // contract so a future refactor doesn't silently start trimming.
         assert_eq!(
-            parse_combo_input(" Ctrl+Alt+A "),
+            parse_combo_input(" Ctrl+Alt+A ").unwrap(),
             HotkeyCombo::Standard {
                 combo: " Ctrl+Alt+A ".to_string(),
+            },
+        );
+    }
+
+    #[test]
+    fn parse_combo_input_recognises_modifier_only_chord() {
+        // Two-modifier chord like Cmd+Opt routes to the macOS chord
+        // tap rather than `tauri-plugin-global-shortcut`.
+        use crate::shortcut::parse::ModifierSet;
+        let parsed = parse_combo_input("Cmd+Opt").unwrap();
+        match parsed {
+            HotkeyCombo::ModifiersOnly { mods } => {
+                assert!(mods & ModifierSet::CMD != 0);
+                assert!(mods & ModifierSet::ALT != 0);
+                assert!(mods & ModifierSet::CTRL == 0);
+                assert!(mods & ModifierSet::SHIFT == 0);
+            }
+            other => panic!("expected ModifiersOnly, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_combo_input_recognises_double_tap() {
+        use crate::shortcut::parse::ModifierSet;
+        assert_eq!(
+            parse_combo_input("DoubleTap+Cmd").unwrap(),
+            HotkeyCombo::DoubleTap {
+                modifier: ModifierSet::CMD,
+            },
+        );
+    }
+
+    #[test]
+    fn parse_combo_input_single_modifier_falls_through_to_standard() {
+        // A single bare modifier like "Cmd" is not a chord and not a
+        // double-tap marker, so it should fall through to the standard
+        // path (where `parse_combo` will reject it as `NoKey`).
+        assert_eq!(
+            parse_combo_input("Cmd").unwrap(),
+            HotkeyCombo::Standard {
+                combo: "Cmd".to_string(),
             },
         );
     }

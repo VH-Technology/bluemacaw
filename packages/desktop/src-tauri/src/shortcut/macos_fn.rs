@@ -150,7 +150,9 @@ impl ShortcutManager for MacOsFnTap {
     fn register(&self, combo: HotkeyCombo) -> Result<(), ShortcutError> {
         match combo {
             HotkeyCombo::Fn => self.start(),
-            HotkeyCombo::Standard { .. } => Err(ShortcutError::Backend(
+            HotkeyCombo::Standard { .. }
+            | HotkeyCombo::ModifiersOnly { .. }
+            | HotkeyCombo::DoubleTap { .. } => Err(ShortcutError::Backend(
                 "MacOsFnTap only supports Fn combos".into(),
             )),
         }

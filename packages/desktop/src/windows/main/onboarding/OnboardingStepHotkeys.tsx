@@ -1,6 +1,8 @@
 import { HotkeyInput } from '@/components/HotkeyInput';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { autostart } from '@/lib/autostart';
 import {
     clearOriginalFnUsageType,
     getCancelHotkeyCombo,
@@ -41,12 +43,15 @@ function isFnCombo(combo: string): boolean {
 export function OnboardingStepHotkeys({ onBack, onNext }: OnboardingStepHotkeysProps) {
     const hotkeyId = useId();
     const cancelHotkeyId = useId();
+    const autostartId = useId();
     const [hotkey, setHotkey] = useState<string>('');
     const [cancelHotkey, setCancelHotkey] = useState<string>('');
+    const [autostartEnabled, setAutostartEnabled] = useState(false);
     const [ready, setReady] = useState(false);
     const [saving, setSaving] = useState(false);
     const [hotkeyError, setHotkeyError] = useState<string | null>(null);
     const [cancelHotkeyError, setCancelHotkeyError] = useState<string | null>(null);
+    const [autostartError, setAutostartError] = useState<string | null>(null);
     /**
      * When non-null, the user clicked "Use Fn" but the macOS
      * `AppleFnUsageType` setting is something other than 0 ("Do Nothing").
@@ -63,9 +68,33 @@ export function OnboardingStepHotkeys({ onBack, onNext }: OnboardingStepHotkeysP
             ]);
             setHotkey(persistedHotkey);
             setCancelHotkey(persistedCancelHotkey);
+            // Read current OS autostart state separately — its failure
+            // mode (e.g. unsupported platform) must not block the rest
+            // of the form from rendering.
+            try {
+                setAutostartEnabled(await autostart.isEnabled());
+            } catch (e) {
+                console.error('autostart.isEnabled failed', e);
+            }
             setReady(true);
         })();
     }, []);
+
+    async function handleAutostartToggle(next: boolean) {
+        // Optimistic flip so the switch feels immediate; revert + surface
+        // an inline error if the OS write fails (e.g. sandbox denies the
+        // Login Item write or osascript times out on macOS).
+        const previous = autostartEnabled;
+        setAutostartEnabled(next);
+        setAutostartError(null);
+        try {
+            await autostart.set(next);
+        } catch (e) {
+            console.error('autostart.set failed', e);
+            setAutostartEnabled(previous);
+            setAutostartError(e instanceof Error ? e.message : String(e));
+        }
+    }
 
     // Free the OS-level shortcut so the webview can see the keydown the
     // user is about to press during capture. We re-register the previous
@@ -84,19 +113,12 @@ export function OnboardingStepHotkeys({ onBack, onNext }: OnboardingStepHotkeysP
             console.error('restore registerHotkey failed', e);
         }
     }
-    async function handleCancelHotkeyCaptureStart() {
-        try {
-            await vox.unregisterCancelHotkey();
-        } catch (e) {
-            console.error('unregister_cancel_hotkey failed', e);
-        }
+    function handleCancelHotkeyCaptureStart() {
+        // The cancel hotkey is not persistently registered (its lifecycle
+        // is bound to the recording window), so nothing to release here.
     }
-    async function handleCancelHotkeyCaptureCancel() {
-        try {
-            await vox.registerCancelHotkey(cancelHotkey);
-        } catch (e) {
-            console.error('restore registerCancelHotkey failed', e);
-        }
+    function handleCancelHotkeyCaptureCancel() {
+        // No-op: nothing to restore.
     }
 
     /**
@@ -193,10 +215,12 @@ export function OnboardingStepHotkeys({ onBack, onNext }: OnboardingStepHotkeysP
             }
             await setCancelHotkeyCombo(cancelHotkey);
             try {
-                await vox.registerCancelHotkey(cancelHotkey);
+                // Validate parsing only — the recording loop owns the
+                // actual global registration when a recording starts.
+                await vox.validateCancelHotkey(cancelHotkey);
             } catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
-                console.error('register_cancel_hotkey failed', e);
+                console.error('validate_cancel_hotkey failed', e);
                 setCancelHotkeyError(msg);
                 return;
             }
@@ -274,9 +298,11 @@ export function OnboardingStepHotkeys({ onBack, onNext }: OnboardingStepHotkeysP
                             <HotkeyInput
                                 value={cancelHotkey}
                                 onChange={setCancelHotkey}
-                                onCaptureStart={() => void handleCancelHotkeyCaptureStart()}
-                                onCaptureCancel={() => void handleCancelHotkeyCaptureCancel()}
+                                onCaptureStart={handleCancelHotkeyCaptureStart}
+                                onCaptureCancel={handleCancelHotkeyCaptureCancel}
                                 allowFn={false}
+                                allowBareKey={true}
+                                allowChord={false}
                             />
                         )}
                     </div>
@@ -289,6 +315,31 @@ export function OnboardingStepHotkeys({ onBack, onNext }: OnboardingStepHotkeysP
                         </p>
                     )}
                 </div>
+                <div className="flex items-center justify-between rounded-2xl border border-border bg-muted/30 p-3">
+                    <div className="flex flex-col gap-0.5 pr-3">
+                        <Label htmlFor={autostartId} className="cursor-pointer">
+                            Start bluemacaw at login
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                            Launch automatically into the tray when you sign in. You can change this
+                            later in Settings → Recording.
+                        </p>
+                    </div>
+                    <Switch
+                        id={autostartId}
+                        data-testid="onboarding-autostart-toggle"
+                        checked={autostartEnabled}
+                        onCheckedChange={(v: boolean) => void handleAutostartToggle(v)}
+                    />
+                </div>
+                {autostartError && (
+                    <p
+                        data-testid="onboarding-autostart-error"
+                        className="text-xs font-bold uppercase tracking-widest text-red-700"
+                    >
+                        {autostartError}
+                    </p>
+                )}
                 <p className="text-xs text-muted-foreground">
                     Per-mic selection lives in Settings → Recording after onboarding.
                 </p>

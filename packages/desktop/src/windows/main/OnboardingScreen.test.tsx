@@ -18,6 +18,7 @@ vi.mock('@/lib/invoke', () => ({
         unregisterHotkey: vi.fn(),
         registerCancelHotkey: vi.fn(),
         unregisterCancelHotkey: vi.fn(),
+        validateCancelHotkey: vi.fn(),
         getFnUsageType: vi.fn(),
         setFnUsageType: vi.fn(),
     },
@@ -25,6 +26,15 @@ vi.mock('@/lib/invoke', () => ({
 
 vi.mock('@/lib/onboarding', () => ({
     markOnboardingCompleted: vi.fn(async () => undefined),
+}));
+
+vi.mock('@/lib/autostart', () => ({
+    autostart: {
+        isEnabled: vi.fn(async () => false),
+        enable: vi.fn(async () => undefined),
+        disable: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined),
+    },
 }));
 
 vi.mock('@/lib/db', () => ({
@@ -90,14 +100,16 @@ function resetAllMocks() {
     vi.mocked(vox.unregisterHotkey).mockReset();
     vi.mocked(vox.registerCancelHotkey).mockReset();
     vi.mocked(vox.unregisterCancelHotkey).mockReset();
+    vi.mocked(vox.validateCancelHotkey).mockReset();
     vi.mocked(vox.registerHotkey).mockResolvedValue('Cmd+Shift+Space');
-    vi.mocked(vox.registerCancelHotkey).mockResolvedValue('Cmd+Esc');
+    vi.mocked(vox.registerCancelHotkey).mockResolvedValue('Escape');
+    vi.mocked(vox.validateCancelHotkey).mockResolvedValue('Escape');
     vi.mocked(db.getHotkeyCombo).mockReset();
     vi.mocked(db.getHotkeyCombo).mockResolvedValue('Cmd+Shift+Space');
     vi.mocked(db.setHotkeyCombo).mockReset();
     vi.mocked(db.setHotkeyCombo).mockResolvedValue(undefined);
     vi.mocked(db.getCancelHotkeyCombo).mockReset();
-    vi.mocked(db.getCancelHotkeyCombo).mockResolvedValue('Cmd+Esc');
+    vi.mocked(db.getCancelHotkeyCombo).mockResolvedValue('Escape');
     vi.mocked(db.setCancelHotkeyCombo).mockReset();
     vi.mocked(db.setCancelHotkeyCombo).mockResolvedValue(undefined);
     vi.mocked(db.setHotkeysOnboarded).mockReset();
@@ -271,8 +283,11 @@ describe('<OnboardingScreen /> — wizard navigation (full flow)', () => {
 
         await waitFor(() => expect(db.setHotkeyCombo).toHaveBeenCalledWith('Cmd+Shift+Space'));
         expect(vox.registerHotkey).toHaveBeenCalledWith('Cmd+Shift+Space');
-        expect(db.setCancelHotkeyCombo).toHaveBeenCalledWith('Cmd+Esc');
-        expect(vox.registerCancelHotkey).toHaveBeenCalledWith('Cmd+Esc');
+        expect(db.setCancelHotkeyCombo).toHaveBeenCalledWith('Escape');
+        // Cancel hotkey is validated (parse-only) at onboarding time; its
+        // global registration happens later, when a recording starts.
+        expect(vox.validateCancelHotkey).toHaveBeenCalledWith('Escape');
+        expect(vox.registerCancelHotkey).not.toHaveBeenCalled();
         expect(db.setHotkeysOnboarded).toHaveBeenCalledWith(true);
 
         await waitFor(() =>

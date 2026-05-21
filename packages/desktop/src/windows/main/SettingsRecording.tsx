@@ -2,6 +2,8 @@ import { HotkeyInput } from '@/components/HotkeyInput';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { autostart } from '@/lib/autostart';
 import {
     clearOriginalFnUsageType,
     getCancelHotkeyCombo,
@@ -31,11 +33,14 @@ function fnUsageLabel(value: number): string {
 export function SettingsRecording() {
     const hotkeyId = useId();
     const cancelHotkeyId = useId();
+    const autostartId = useId();
     const deviceId = useId();
     const [devices, setDevices] = useState<AudioDeviceInfo[]>([]);
     const [selectedDevice, setSelectedDevice] = useState<string>('');
     const [hotkey, setHotkey] = useState<string>('');
     const [cancelHotkey, setCancelHotkey] = useState<string>('');
+    const [autostartEnabled, setAutostartEnabled] = useState(false);
+    const [autostartError, setAutostartError] = useState<string | null>(null);
     const [testStatus, setTestStatus] = useState<'idle' | 'recording' | 'playing' | 'error'>(
         'idle',
     );
@@ -71,9 +76,27 @@ export function SettingsRecording() {
             setSelectedDevice(persistedDevice ?? '');
             setHotkey(persistedHotkey);
             setCancelHotkey(persistedCancelHotkey);
+            try {
+                setAutostartEnabled(await autostart.isEnabled());
+            } catch (e) {
+                console.error('autostart.isEnabled failed', e);
+            }
             await refreshDevices();
         })();
     }, [refreshDevices]);
+
+    async function handleAutostartToggle(next: boolean) {
+        const previous = autostartEnabled;
+        setAutostartEnabled(next);
+        setAutostartError(null);
+        try {
+            await autostart.set(next);
+        } catch (e) {
+            console.error('autostart.set failed', e);
+            setAutostartEnabled(previous);
+            setAutostartError(e instanceof Error ? e.message : String(e));
+        }
+    }
 
     async function handleDeviceChange(next: string) {
         setSelectedDevice(next);
@@ -183,31 +206,26 @@ export function SettingsRecording() {
         setCancelHotkey(combo);
         await setCancelHotkeyCombo(combo);
         try {
-            await vox.registerCancelHotkey(combo);
+            // Validate without registering globally — the cancel hotkey
+            // only goes live while a recording is in flight, so we don't
+            // want to hold the binding here.
+            await vox.validateCancelHotkey(combo);
             setCancelHotkeyError(null);
         } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            console.error('register_cancel_hotkey failed', e);
+            console.error('validate_cancel_hotkey failed', e);
             setCancelHotkeyError(msg);
         }
     }
 
-    async function handleCancelHotkeyCaptureStart() {
-        // Free the OS shortcut so the webview can see the keydown the user
-        // is about to press. Symmetric with the toggle-hotkey path.
-        try {
-            await vox.unregisterCancelHotkey();
-        } catch (e) {
-            console.error('unregister_cancel_hotkey failed', e);
-        }
+    function handleCancelHotkeyCaptureStart() {
+        // No-op: the cancel hotkey is not persistently registered, so
+        // there is nothing to release before the webview captures the
+        // user's keydown. Kept as a stable prop hook for HotkeyInput.
     }
 
-    async function handleCancelHotkeyCaptureCancel() {
-        try {
-            await vox.registerCancelHotkey(cancelHotkey);
-        } catch (e) {
-            console.error('restore registerCancelHotkey failed', e);
-        }
+    function handleCancelHotkeyCaptureCancel() {
+        // No-op: nothing to restore.
     }
 
     async function handleTestRecording() {
@@ -280,13 +298,19 @@ export function SettingsRecording() {
                 </div>
                 <div className="flex flex-col gap-1">
                     <Label htmlFor={cancelHotkeyId}>Cancel hotkey</Label>
+                    <p className="text-xs text-muted-foreground">
+                        Only registered while a recording is in flight, so bare keys like Esc won't
+                        intercept other apps when you're not recording.
+                    </p>
                     <div id={cancelHotkeyId}>
                         <HotkeyInput
                             value={cancelHotkey}
                             onChange={(c) => void handleCancelHotkeyChange(c)}
-                            onCaptureStart={() => void handleCancelHotkeyCaptureStart()}
-                            onCaptureCancel={() => void handleCancelHotkeyCaptureCancel()}
+                            onCaptureStart={handleCancelHotkeyCaptureStart}
+                            onCaptureCancel={handleCancelHotkeyCaptureCancel}
                             allowFn={false}
+                            allowBareKey={true}
+                            allowChord={false}
                         />
                     </div>
                     {cancelHotkeyError && (
@@ -323,6 +347,30 @@ export function SettingsRecording() {
                         </Button>
                     </div>
                 </div>
+                <div className="flex items-center justify-between rounded-2xl border border-border bg-muted/30 p-3">
+                    <div className="flex flex-col gap-0.5 pr-3">
+                        <Label htmlFor={autostartId} className="cursor-pointer">
+                            Start at login
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                            Launch bluemacaw automatically into the tray when you sign in.
+                        </p>
+                    </div>
+                    <Switch
+                        id={autostartId}
+                        data-testid="settings-autostart-toggle"
+                        checked={autostartEnabled}
+                        onCheckedChange={(v: boolean) => void handleAutostartToggle(v)}
+                    />
+                </div>
+                {autostartError && (
+                    <p
+                        data-testid="settings-autostart-error"
+                        className="text-xs font-bold uppercase tracking-widest text-red-700"
+                    >
+                        {autostartError}
+                    </p>
+                )}
                 <div className="flex items-center justify-between">
                     <span data-testid="test-status" className="text-xs uppercase tracking-widest">
                         {testStatus === 'recording' && 'Recording 3s…'}

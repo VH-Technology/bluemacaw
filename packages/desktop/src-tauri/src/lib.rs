@@ -34,6 +34,18 @@ pub fn run() {
     env_logger::init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::init(
+            // `AppleScript` registers a Login Item via osascript on macOS.
+            // The alternative (`LaunchAgent`) writes a plist to
+            // ~/Library/LaunchAgents which survives app uninstall — the
+            // Login Item path is cleaner and matches what the user sees
+            // in System Settings → General → Login Items.
+            tauri_plugin_autostart::MacosLauncher::AppleScript,
+            // No CLI args needed on relaunch; bluemacaw boots the same
+            // tray-resident process whether the user clicked the dock
+            // icon or the OS auto-launched it.
+            None,
+        ))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(
@@ -66,6 +78,7 @@ pub fn run() {
             commands::unregister_hotkey,
             commands::register_cancel_hotkey,
             commands::unregister_cancel_hotkey,
+            commands::validate_cancel_hotkey,
             commands::get_fn_usage_type,
             commands::set_fn_usage_type,
             commands::get_platform_info,
@@ -84,6 +97,8 @@ pub fn run() {
                 current_cancel_hotkey: Mutex::new(None),
                 #[cfg(target_os = "macos")]
                 fn_tap: Mutex::new(None),
+                #[cfg(target_os = "macos")]
+                chord_tap: Mutex::new(None),
             };
             app.manage(app_state);
 

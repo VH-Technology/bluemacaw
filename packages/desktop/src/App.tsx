@@ -1,5 +1,4 @@
 import {
-    getCancelHotkeyCombo,
     getHistoryLastSweep,
     getHotkeyCombo,
     getRetentionDays,
@@ -26,16 +25,11 @@ export default function App() {
                 console.error('initial registerHotkey failed', e);
             }
         })();
-        void (async () => {
-            try {
-                const cancelCombo = await getCancelHotkeyCombo();
-                await vox.registerCancelHotkey(cancelCombo);
-            } catch (e) {
-                // Cancel-hotkey registration must never block recording. Log
-                // and continue — the overlay's Cancel button still works.
-                console.error('initial registerCancelHotkey failed', e);
-            }
-        })();
+        // The cancel hotkey is intentionally NOT registered here. Its
+        // lifecycle is bound to the recording state (`useHotkeyRecording`):
+        // registered on recording start, unregistered when recording ends.
+        // That keeps bare-key bindings like Esc from being globally
+        // swallowed outside the recording window.
     }, [isMain]);
 
     useEffect(() => {

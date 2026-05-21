@@ -11,7 +11,16 @@ vi.mock('@/lib/invoke', () => ({
         unregisterHotkey: vi.fn(),
         registerCancelHotkey: vi.fn(),
         unregisterCancelHotkey: vi.fn(),
+        validateCancelHotkey: vi.fn(),
         getPlatformInfo: vi.fn(async () => ({ os: 'macos', isWayland: false })),
+    },
+}));
+vi.mock('@/lib/autostart', () => ({
+    autostart: {
+        isEnabled: vi.fn(async () => false),
+        enable: vi.fn(async () => undefined),
+        disable: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined),
     },
 }));
 vi.mock('@/lib/db', () => ({
@@ -23,6 +32,7 @@ vi.mock('@/lib/db', () => ({
     setCancelHotkeyCombo: vi.fn(),
 }));
 
+import { autostart } from '@/lib/autostart';
 import {
     getCancelHotkeyCombo,
     getHotkeyCombo,
@@ -47,11 +57,12 @@ beforeEach(() => {
         { id: 'builtin', label: 'Built-in', isDefault: true },
     ]);
     voxMock.registerHotkey.mockResolvedValue('Cmd+Shift+Space');
-    voxMock.registerCancelHotkey.mockResolvedValue('Cmd+Esc');
+    voxMock.registerCancelHotkey.mockResolvedValue('Escape');
     voxMock.unregisterCancelHotkey.mockResolvedValue();
+    voxMock.validateCancelHotkey.mockResolvedValue('Escape');
     getSelectedMicDeviceIdMock.mockResolvedValue(null);
     getHotkeyComboMock.mockResolvedValue('Cmd+Shift+Space');
-    getCancelHotkeyComboMock.mockResolvedValue('Cmd+Esc');
+    getCancelHotkeyComboMock.mockResolvedValue('Escape');
     setSelectedMicDeviceIdMock.mockResolvedValue();
     setHotkeyComboMock.mockResolvedValue();
     setCancelHotkeyComboMock.mockResolvedValue();
@@ -121,7 +132,7 @@ describe('SettingsRecording', () => {
         });
     });
 
-    it('persists + registers a new cancel hotkey when the user captures one', async () => {
+    it('persists + validates a new cancel hotkey when the user captures one', async () => {
         render(<SettingsRecording />);
         await waitFor(() => screen.getByLabelText(/microphone/i));
         const captureButtons = screen.getAllByRole('button', { name: /capture/i });
@@ -136,7 +147,47 @@ describe('SettingsRecording', () => {
         );
         await waitFor(() => {
             expect(setCancelHotkeyComboMock).toHaveBeenCalledWith('Cmd+Backspace');
-            expect(voxMock.registerCancelHotkey).toHaveBeenCalledWith('Cmd+Backspace');
+            // The cancel hotkey is validated (parse-only) here; its actual
+            // global registration happens later, in `useHotkeyRecording`,
+            // when a recording starts.
+            expect(voxMock.validateCancelHotkey).toHaveBeenCalledWith('Cmd+Backspace');
+            expect(voxMock.registerCancelHotkey).not.toHaveBeenCalled();
+        });
+    });
+
+    it('captures a bare Esc as the cancel hotkey', async () => {
+        render(<SettingsRecording />);
+        await waitFor(() => screen.getByLabelText(/microphone/i));
+        const captureButtons = screen.getAllByRole('button', { name: /capture/i });
+        fireEvent.click(captureButtons[1] as HTMLElement);
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }));
+        await waitFor(() => {
+            expect(setCancelHotkeyComboMock).toHaveBeenCalledWith('Escape');
+            expect(voxMock.validateCancelHotkey).toHaveBeenCalledWith('Escape');
+        });
+    });
+
+    it('reflects the current autostart state on mount', async () => {
+        vi.mocked(autostart.isEnabled).mockResolvedValueOnce(true);
+        render(<SettingsRecording />);
+        await waitFor(() => {
+            const toggle = screen.getByTestId('settings-autostart-toggle');
+            expect(toggle).toHaveAttribute('data-state', 'checked');
+        });
+    });
+
+    it('flips autostart through the plugin when the user toggles the switch', async () => {
+        vi.mocked(autostart.isEnabled).mockResolvedValueOnce(false);
+        render(<SettingsRecording />);
+        await waitFor(() => {
+            const toggle = screen.getByTestId('settings-autostart-toggle');
+            expect(toggle).toHaveAttribute('data-state', 'unchecked');
+        });
+        const toggle = screen.getByTestId('settings-autostart-toggle');
+        fireEvent.click(toggle);
+        await waitFor(() => {
+            expect(autostart.set).toHaveBeenCalledWith(true);
+            expect(toggle).toHaveAttribute('data-state', 'checked');
         });
     });
 });

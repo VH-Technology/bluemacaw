@@ -104,6 +104,14 @@ export const vox = {
      */
     registerCancelHotkey: (combo: string) => invoke<string>('register_cancel_hotkey', { combo }),
     unregisterCancelHotkey: () => invoke<void>('unregister_cancel_hotkey'),
+    /**
+     * Parse-only validation of a cancel-hotkey combo. Used by Settings
+     * and onboarding to surface a parse error before commit, without
+     * actually holding the shortcut globally. Registration is the
+     * recording loop's job — bare keys like Esc shouldn't be swallowed
+     * outside the recording window.
+     */
+    validateCancelHotkey: (combo: string) => invoke<string>('validate_cancel_hotkey', { combo }),
 
     /** macOS only: read the AppleFnUsageType setting (0..3) or null if unset. */
     getFnUsageType: () => invoke<number | null>('get_fn_usage_type'),
