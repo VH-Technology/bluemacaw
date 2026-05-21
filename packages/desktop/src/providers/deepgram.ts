@@ -6,13 +6,15 @@ const DEFAULT_MODELS: Model[] = [
         id: 'nova-3',
         displayName: 'Nova 3',
         description: 'Latest general-purpose model',
+        mode: 'batch',
     },
     {
         id: 'nova-2',
         displayName: 'Nova 2',
         description: 'Previous-generation general-purpose model',
+        mode: 'batch',
     },
-    { id: 'enhanced', displayName: 'Enhanced' },
+    { id: 'enhanced', displayName: 'Enhanced', mode: 'batch' },
 ];
 
 export const deepgramConfig: ProviderConfig = {

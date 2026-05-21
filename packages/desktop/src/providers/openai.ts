@@ -8,9 +8,9 @@ const KNOWN_TRANSCRIPTION_IDS = new Set([
 ]);
 
 const DEFAULT_MODELS: Model[] = [
-    { id: 'whisper-1', displayName: 'Whisper 1' },
-    { id: 'gpt-4o-transcribe', displayName: 'GPT-4o Transcribe' },
-    { id: 'gpt-4o-mini-transcribe', displayName: 'GPT-4o Mini Transcribe' },
+    { id: 'whisper-1', displayName: 'Whisper 1', mode: 'batch' },
+    { id: 'gpt-4o-transcribe', displayName: 'GPT-4o Transcribe', mode: 'batch' },
+    { id: 'gpt-4o-mini-transcribe', displayName: 'GPT-4o Mini Transcribe', mode: 'batch' },
 ];
 
 export const openaiConfig: ProviderConfig = {
@@ -34,6 +34,7 @@ export const openaiConfig: ProviderConfig = {
             .map((m) => ({
                 id: m.id,
                 displayName: DEFAULT_MODELS.find((d) => d.id === m.id)?.displayName ?? m.id,
+                mode: 'batch' as const,
             }));
     },
     defaultModels: DEFAULT_MODELS,

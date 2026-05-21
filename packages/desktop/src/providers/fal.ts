@@ -6,11 +6,13 @@ const DEFAULT_MODELS: Model[] = [
         id: 'whisper',
         displayName: 'Whisper',
         description: 'OpenAI Whisper hosted by Fal',
+        mode: 'batch',
     },
     {
         id: 'wizper',
         displayName: 'Wizper',
         description: 'Fal-tuned Whisper variant',
+        mode: 'batch',
     },
 ];
 

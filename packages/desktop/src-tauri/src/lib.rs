@@ -53,6 +53,7 @@ pub fn run() {
             commands::request_input_monitoring_permission,
             commands::open_settings_panel,
             commands::start_recording,
+            commands::start_recording_realtime,
             commands::stop_recording,
             commands::cancel_recording,
             commands::get_recording_level,

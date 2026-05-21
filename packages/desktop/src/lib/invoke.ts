@@ -1,4 +1,20 @@
 import { invoke } from '@tauri-apps/api/core';
+import { type UnlistenFn, listen } from '@tauri-apps/api/event';
+import { EVT_AUDIO_CHUNK } from './markers';
+
+/**
+ * Payload emitted by the Rust `start_recording_realtime` pipeline for each
+ * resampled chunk of audio. `samples` arrives as a JSON array of i16 values
+ * over IPC — wrap with `new Int16Array(samples)` before pushing to a
+ * provider WebSocket. `sampleRate` is always 16 000 (see `Resampler` in
+ * `src-tauri/src/audio/resampler.rs`); included on every event so the JS
+ * side never has to assume.
+ */
+export interface AudioChunkEvent {
+    sessionId: string;
+    samples: number[];
+    sampleRate: number;
+}
 
 export type PermissionState = 'Granted' | 'Denied' | 'NotDetermined';
 
@@ -56,6 +72,14 @@ export const vox = {
 
     listAudioInputDevices: () => invoke<AudioDeviceInfo[]>('list_audio_input_devices'),
     startRecording: (deviceId?: string) => invoke<string>('start_recording', { deviceId }),
+    /**
+     * Realtime variant of `startRecording`. The audio source still buffers
+     * a full WAV (returned by `stopRecording`), AND emits `EVT_AUDIO_CHUNK`
+     * Tauri events with 16 kHz mono i16 PCM chunks as recording progresses.
+     * Subscribe with `listenAudioChunks` to feed a provider WebSocket.
+     */
+    startRecordingRealtime: (deviceId?: string) =>
+        invoke<string>('start_recording_realtime', { deviceId }),
     stopRecording: (sessionId: string) => invoke<number[]>('stop_recording', { sessionId }),
     /**
      * Abort an in-progress recording without producing audio. The Rust
@@ -106,3 +130,20 @@ export const vox = {
      */
     restartApp: () => invoke<void>('restart_app'),
 };
+
+/**
+ * Subscribe to audio chunks emitted during a realtime capture session.
+ * Filters by `sessionId` so multiple subscribers — or stale listeners from
+ * a previous session — never see each other's chunks. Returns an unlisten
+ * function; call it on session end to release the Tauri event listener.
+ */
+export async function listenAudioChunks(
+    sessionId: string,
+    handler: (chunk: AudioChunkEvent) => void,
+): Promise<UnlistenFn> {
+    return listen<AudioChunkEvent>(EVT_AUDIO_CHUNK, (event) => {
+        if (event.payload.sessionId === sessionId) {
+            handler(event.payload);
+        }
+    });
+}

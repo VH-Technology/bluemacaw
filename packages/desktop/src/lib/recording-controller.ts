@@ -6,10 +6,22 @@ import {
     ERR_WAYLAND_PASTE_UNSUPPORTED,
 } from './markers';
 import type { transcribe as transcribeFn } from './transcribe';
+import {
+    type RealtimeCapture,
+    resolveActiveMode as defaultResolveActiveMode,
+    startRealtimeCapture as defaultStartRealtimeCapture,
+} from './transcribe-realtime';
 
 export type RecordingState =
     | { kind: 'idle' }
-    | { kind: 'recording'; sessionId: string; startedAt: number }
+    | {
+          kind: 'recording';
+          sessionId: string;
+          startedAt: number;
+          /** Present when the active model is realtime — carries the WS
+           *  session + chunk-listener cleanup. Absent for batch sessions. */
+          realtime?: RealtimeCapture;
+      }
     | { kind: 'transcribing' }
     | { kind: 'error'; message: string };
 
@@ -28,6 +40,15 @@ export interface RecordingDeps {
     saveTranscription?: typeof saveTranscription;
     /** Resolve the active model config for the history record. Defaults to db lookup. */
     resolveActiveConfig?: () => Promise<{ providerId: string; modelId: string } | null>;
+    /**
+     * Decide whether this recording should run batch or realtime. Defaults
+     * to the live DB-driven resolver; tests can pin the mode without
+     * mocking the DB. Falls back to `'batch'` on any error so a missing
+     * config never silently engages the realtime pipeline.
+     */
+    resolveActiveMode?: () => Promise<'batch' | 'realtime'>;
+    /** Inject for tests — defaults to the production realtime orchestrator. */
+    startRealtimeCapture?: () => Promise<RealtimeCapture>;
 }
 
 export type SetState = (next: RecordingState) => void;
@@ -76,6 +97,19 @@ async function startFromIdle(deps: RecordingDeps, setState: SetState): Promise<v
             setState({ kind: 'error', message: gate.reason });
             return;
         }
+        const resolveMode = deps.resolveActiveMode ?? defaultResolveActiveMode;
+        const mode = await resolveMode();
+        if (mode === 'realtime') {
+            const startRt = deps.startRealtimeCapture ?? defaultStartRealtimeCapture;
+            const realtime = await startRt();
+            setState({
+                kind: 'recording',
+                sessionId: realtime.rustSessionId,
+                startedAt: Date.now(),
+                realtime,
+            });
+            return;
+        }
         const sessionId = await deps.vox.startRecording();
         setState({ kind: 'recording', sessionId, startedAt: Date.now() });
     } catch (e) {
@@ -100,11 +134,27 @@ async function stopAndTranscribe(
     setState: SetState,
 ): Promise<void> {
     try {
-        const bytes = await deps.vox.stopRecording(state.sessionId);
         const durationMs = Math.max(0, Date.now() - state.startedAt);
-        setState({ kind: 'transcribing' });
-        const blob = new Blob([new Uint8Array(bytes)], { type: 'audio/wav' });
-        const text = await deps.transcribe(blob);
+        let text: string;
+        if (state.realtime) {
+            // Realtime path: tell Rust to stop cpal (discard the buffered
+            // WAV — the WS session already received the streamed audio),
+            // unsubscribe from chunk events, and await the provider's
+            // final transcript.
+            await deps.vox.stopRecording(state.sessionId).catch((err) => {
+                // The cpal stream shutting down ahead of finish() shouldn't
+                // strand the WS session. Log and continue to finish().
+                console.warn('stopRecording (realtime) failed; finishing WS anyway', err);
+            });
+            state.realtime.unlisten();
+            setState({ kind: 'transcribing' });
+            text = await state.realtime.session.finish();
+        } else {
+            const bytes = await deps.vox.stopRecording(state.sessionId);
+            setState({ kind: 'transcribing' });
+            const blob = new Blob([new Uint8Array(bytes)], { type: 'audio/wav' });
+            text = await deps.transcribe(blob);
+        }
 
         let pasteFailed: string | null = null;
         try {
@@ -194,6 +244,21 @@ export async function cancel(
     setState: SetState,
 ): Promise<void> {
     if (state.kind !== 'recording') return;
+    if (state.realtime) {
+        // Realtime: drop the WS session and unsubscribe BEFORE we ask Rust
+        // to stop, so the few chunks still in flight don't trigger a
+        // post-abort send that would race with the close.
+        try {
+            state.realtime.unlisten();
+        } catch (e) {
+            console.warn('audio-chunk unlisten failed on cancel', e);
+        }
+        try {
+            state.realtime.session.abort();
+        } catch (e) {
+            console.warn('realtime session abort failed', e);
+        }
+    }
     try {
         await deps.vox.cancelRecording(state.sessionId);
     } catch (e) {

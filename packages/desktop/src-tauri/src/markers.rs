@@ -49,3 +49,10 @@ pub const EVT_SHORTCUT_TOGGLE: &str = "bluemacaw://shortcut-toggle";
 /// overlay's Cancel (X) button re-emits the same event so a click takes
 /// the same code path as the hotkey.
 pub const EVT_SHORTCUT_CANCEL: &str = "bluemacaw://shortcut-cancel";
+
+/// Event Rust emits during a realtime capture session with each chunk of
+/// 16 kHz mono i16 PCM produced. Payload shape is `{ sessionId, samples,
+/// sampleRate }` (see `commands::AudioChunkEvent`). The JS-side streaming
+/// transcription path subscribes and forwards each chunk to the provider's
+/// WebSocket. Batch sessions never emit this event.
+pub const EVT_AUDIO_CHUNK: &str = "bluemacaw://audio-chunk";

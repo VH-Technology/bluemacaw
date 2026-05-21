@@ -2,8 +2,8 @@ import { createGroq } from '@ai-sdk/groq';
 import type { Model, ProviderConfig } from './types';
 
 const DEFAULT_MODELS: Model[] = [
-    { id: 'whisper-large-v3', displayName: 'Whisper Large v3' },
-    { id: 'whisper-large-v3-turbo', displayName: 'Whisper Large v3 Turbo' },
+    { id: 'whisper-large-v3', displayName: 'Whisper Large v3', mode: 'batch' },
+    { id: 'whisper-large-v3-turbo', displayName: 'Whisper Large v3 Turbo', mode: 'batch' },
 ];
 
 /**
@@ -45,6 +45,7 @@ export const groqConfig: ProviderConfig = {
             .map((m) => ({
                 id: m.id,
                 displayName: DEFAULT_MODELS.find((d) => d.id === m.id)?.displayName ?? m.id,
+                mode: 'batch' as const,
             }));
     },
     defaultModels: DEFAULT_MODELS,

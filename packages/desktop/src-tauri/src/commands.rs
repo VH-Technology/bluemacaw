@@ -1,5 +1,5 @@
-use crate::audio::{AudioDeviceInfo, AudioSource, CaptureSession, PermissionState, microphone::MicrophoneSource};
-use crate::markers::{ERR_ACCESSIBILITY_REQUIRED, EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_TOGGLE};
+use crate::audio::{AudioDeviceInfo, AudioSource, CaptureSession, PermissionState, microphone::MicrophoneSource, resampler::Resampler};
+use crate::markers::{ERR_ACCESSIBILITY_REQUIRED, EVT_AUDIO_CHUNK, EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_TOGGLE};
 #[cfg(target_os = "macos")]
 use crate::markers::ERR_INPUT_MONITORING_REQUIRED;
 #[cfg(target_os = "linux")]
@@ -198,6 +198,52 @@ pub fn start_recording(
     let session = state
         .audio
         .start_capture_with_device(device_id.as_deref())
+        .map_err(|e| e.to_string())?;
+    Ok(session.id.to_string())
+}
+
+/// Tauri event payload emitted for each chunk of resampled audio during a
+/// realtime capture session. `samples` is mono 16-bit PCM at
+/// [`Resampler::target_rate()`] (16 kHz). Camel-cased to match the
+/// existing JS-side event payload conventions.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioChunkEvent {
+    pub session_id: String,
+    pub samples: Vec<i16>,
+    pub sample_rate: u32,
+}
+
+/// Realtime variant of [`start_recording`]. Same capture pipeline, but the
+/// audio source also emits `EVT_AUDIO_CHUNK` Tauri events with 16 kHz mono
+/// i16 PCM chunks as recording progresses. The buffered WAV is still
+/// available via `stop_recording` exactly as in batch mode, so the caller
+/// can fall back to a final-shot transcribe if the streaming session
+/// fails mid-utterance.
+#[tauri::command]
+pub fn start_recording_realtime(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    device_id: Option<String>,
+) -> Result<String, String> {
+    let app_for_callback = app.clone();
+    let on_chunk: crate::audio::RealtimeChunkCallback =
+        Box::new(move |session_id, samples| {
+            let payload = AudioChunkEvent {
+                session_id: session_id.to_string(),
+                samples: samples.to_vec(),
+                sample_rate: Resampler::target_rate(),
+            };
+            if let Err(e) = app_for_callback.emit(EVT_AUDIO_CHUNK, payload) {
+                // emit only fails if the AppHandle's runtime is gone, which
+                // means the app is shutting down — log and let the emitter
+                // thread exit naturally on the next channel close.
+                log::warn!("audio-chunk emit failed: {e}");
+            }
+        });
+    let session = state
+        .audio
+        .start_capture_realtime(device_id.as_deref(), on_chunk)
         .map_err(|e| e.to_string())?;
     Ok(session.id.to_string())
 }

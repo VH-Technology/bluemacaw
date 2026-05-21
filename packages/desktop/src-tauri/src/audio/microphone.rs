@@ -1,4 +1,5 @@
-use super::{AudioError, AudioSource, CaptureSession, PermissionState};
+use super::{AudioError, AudioSource, CaptureSession, PermissionState, RealtimeChunkCallback};
+use crate::audio::resampler::Resampler;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
 use std::io::{Cursor, Write};
@@ -39,6 +40,11 @@ struct ActiveSession {
     peak_level: Arc<Mutex<f32>>,
     stop_tx: mpsc::Sender<()>,
     worker: Option<JoinHandle<()>>,
+    /// Emitter thread spawned by realtime capture sessions. It consumes the
+    /// chunk channel set up alongside the cpal stream, resamples to 16 kHz,
+    /// and invokes the caller's `on_chunk` callback. `None` for batch-only
+    /// sessions. Joined alongside `worker` on shutdown.
+    rt_emitter: Option<JoinHandle<()>>,
 }
 
 impl MicrophoneSource {
@@ -104,6 +110,94 @@ impl AudioSource for MicrophoneSource {
         &self,
         device_id: Option<&str>,
     ) -> Result<CaptureSession, AudioError> {
+        self.start_capture_inner(device_id, None).map(|(s, _)| s)
+    }
+
+    fn start_capture_realtime(
+        &self,
+        device_id: Option<&str>,
+        on_chunk: RealtimeChunkCallback,
+    ) -> Result<CaptureSession, AudioError> {
+        // The cpal callback runs at real-time priority — anything that
+        // resamples or invokes user code must happen off-thread. Bridge
+        // them with an mpsc channel: callback enqueues raw mono i16 at the
+        // device's native rate; emitter thread resamples to 16 kHz and
+        // invokes the user callback.
+        let (chunk_tx, chunk_rx) = mpsc::channel::<Vec<i16>>();
+        let (session, sample_rate) = self.start_capture_inner(device_id, Some(chunk_tx))?;
+        let session_id = session.id;
+
+        let emitter = thread::Builder::new()
+            .name(format!("bluemacaw-rt-emit-{}", session.id))
+            .spawn(move || {
+                let mut resampler = Resampler::new(sample_rate);
+                while let Ok(chunk) = chunk_rx.recv() {
+                    let resampled = resampler.process(&chunk);
+                    if !resampled.is_empty() {
+                        on_chunk(session_id, &resampled);
+                    }
+                }
+            })
+            .map_err(|e| AudioError::CaptureFailed(format!("failed to spawn emitter: {e}")))?;
+
+        // Attach the emitter to the session so it gets joined on shutdown.
+        {
+            let mut sessions = self.sessions.lock().unwrap();
+            if let Some(s) = sessions.iter_mut().find(|s| s.id == session.id) {
+                s.rt_emitter = Some(emitter);
+            }
+        }
+        Ok(session)
+    }
+
+    fn peak_level(&self, session: &CaptureSession) -> Option<f32> {
+        self.peak_level_for(session.id)
+    }
+
+    fn stop_capture(&self, session: &CaptureSession) -> Result<Vec<u8>, AudioError> {
+        let mut active = self.take_session(session.id)?;
+        let _ = active.stop_tx.send(());
+        if let Some(handle) = active.worker.take() {
+            let _ = handle.join();
+        }
+        // Worker drop closes the chunk channel (it owned the only Sender
+        // clone via the cpal callback), so the emitter thread exits on its
+        // own next recv(). Join it for tidy shutdown.
+        if let Some(handle) = active.rt_emitter.take() {
+            let _ = handle.join();
+        }
+        let samples = active.samples.lock().unwrap().clone();
+        Ok(encode_wav_pcm16(&samples, active.sample_rate))
+    }
+
+    fn cancel_capture(&self, session: &CaptureSession) -> Result<(), AudioError> {
+        // Mirror `stop_capture` for the side-effect of shutting down the
+        // cpal worker — but never touch the samples buffer. The session is
+        // simply dropped, and so is the buffer along with it.
+        let mut active = self.take_session(session.id)?;
+        let _ = active.stop_tx.send(());
+        if let Some(handle) = active.worker.take() {
+            let _ = handle.join();
+        }
+        if let Some(handle) = active.rt_emitter.take() {
+            let _ = handle.join();
+        }
+        Ok(())
+    }
+}
+
+impl MicrophoneSource {
+    /// Shared body of [`AudioSource::start_capture_with_device`] and
+    /// [`AudioSource::start_capture_realtime`]. When `chunk_tx` is `Some`,
+    /// the cpal callback also forwards each mono i16 buffer to that channel
+    /// so a downstream thread can resample and stream it; when `None`, the
+    /// realtime branch is skipped entirely and behaviour is identical to
+    /// the original batch path.
+    fn start_capture_inner(
+        &self,
+        device_id: Option<&str>,
+        chunk_tx: Option<mpsc::Sender<Vec<i16>>>,
+    ) -> Result<(CaptureSession, u32), AudioError> {
         let id = Uuid::new_v4();
         let samples: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
         let samples_for_worker = samples.clone();
@@ -115,6 +209,7 @@ impl AudioSource for MicrophoneSource {
         let (ready_tx, ready_rx) = mpsc::channel::<Result<u32, AudioError>>();
 
         let device_id_owned: Option<String> = device_id.map(str::to_string);
+        let chunk_tx_for_worker = chunk_tx;
         let worker = thread::Builder::new()
             .name(format!("bluemacaw-mic-{id}"))
             .spawn(move || {
@@ -167,6 +262,12 @@ impl AudioSource for MicrophoneSource {
                 let samples_clone = samples_for_worker.clone();
                 let peak_clone_f32 = peak_for_worker.clone();
                 let peak_clone_i16 = peak_for_worker.clone();
+                // Separate Option<Sender> clones per branch — only one
+                // build_input_stream arm actually runs (sample_format
+                // decides), so duplicating the clone is harmless and keeps
+                // each closure self-contained.
+                let chunk_tx_f32 = chunk_tx_for_worker.clone();
+                let chunk_tx_i16 = chunk_tx_for_worker.clone();
                 // Downmix any multichannel input to mono. Built-in mics on
                 // macOS often default to stereo at 48 kHz; tagging the WAV as
                 // mono while the buffer holds interleaved stereo frames
@@ -225,6 +326,13 @@ impl AudioSource for MicrophoneSource {
                                     *peak = chunk_peak;
                                 }
                             }
+                            // Forward to the realtime emitter when this
+                            // session was started in realtime mode. The
+                            // emitter thread owns the resampler; we hand
+                            // off raw native-rate mono i16 here.
+                            if let Some(tx) = chunk_tx_f32.as_ref() {
+                                let _ = tx.send(local);
+                            }
                         },
                         err_fn,
                         None,
@@ -270,6 +378,9 @@ impl AudioSource for MicrophoneSource {
                                 if chunk_peak > *peak {
                                     *peak = chunk_peak;
                                 }
+                            }
+                            if let Some(tx) = chunk_tx_i16.as_ref() {
+                                let _ = tx.send(local);
                             }
                         },
                         err_fn,
@@ -324,38 +435,11 @@ impl AudioSource for MicrophoneSource {
             peak_level,
             stop_tx,
             worker: Some(worker),
+            rt_emitter: None,
         });
-        Ok(CaptureSession { id })
+        Ok((CaptureSession { id }, sample_rate))
     }
 
-    fn peak_level(&self, session: &CaptureSession) -> Option<f32> {
-        self.peak_level_for(session.id)
-    }
-
-    fn stop_capture(&self, session: &CaptureSession) -> Result<Vec<u8>, AudioError> {
-        let mut active = self.take_session(session.id)?;
-        let _ = active.stop_tx.send(());
-        if let Some(handle) = active.worker.take() {
-            let _ = handle.join();
-        }
-        let samples = active.samples.lock().unwrap().clone();
-        Ok(encode_wav_pcm16(&samples, active.sample_rate))
-    }
-
-    fn cancel_capture(&self, session: &CaptureSession) -> Result<(), AudioError> {
-        // Mirror `stop_capture` for the side-effect of shutting down the
-        // cpal worker — but never touch the samples buffer. The session is
-        // simply dropped, and so is the buffer along with it.
-        let mut active = self.take_session(session.id)?;
-        let _ = active.stop_tx.send(());
-        if let Some(handle) = active.worker.take() {
-            let _ = handle.join();
-        }
-        Ok(())
-    }
-}
-
-impl MicrophoneSource {
     /// Remove the session matching `id` from the active list and return it.
     /// Shared by `stop_capture` and `cancel_capture` so the lookup logic
     /// can't drift between the two paths.
@@ -408,6 +492,7 @@ impl MicrophoneSource {
             peak_level: Arc::new(Mutex::new(initial_peak)),
             stop_tx,
             worker: None,
+            rt_emitter: None,
         });
     }
 }

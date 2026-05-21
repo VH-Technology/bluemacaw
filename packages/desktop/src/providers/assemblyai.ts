@@ -6,11 +6,13 @@ const DEFAULT_MODELS: Model[] = [
         id: 'universal-3-pro',
         displayName: 'Universal 3 Pro',
         description: 'AssemblyAI flagship transcription model (highest accuracy)',
+        mode: 'batch',
     },
     {
         id: 'universal-2',
         displayName: 'Universal 2',
         description: 'AssemblyAI previous-generation transcription model',
+        mode: 'batch',
     },
 ];
 

@@ -22,3 +22,4 @@ export const ERR_WAYLAND_PASTE_UNSUPPORTED = 'wayland-paste-unsupported:';
 export const ERR_INPUT_MONITORING_REQUIRED = 'input-monitoring-required:';
 export const EVT_SHORTCUT_TOGGLE = 'bluemacaw://shortcut-toggle';
 export const EVT_SHORTCUT_CANCEL = 'bluemacaw://shortcut-cancel';
+export const EVT_AUDIO_CHUNK = 'bluemacaw://audio-chunk';

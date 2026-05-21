@@ -265,3 +265,119 @@ describe('recording-controller cancel', () => {
         expect(deps.vox.cancelRecording).not.toHaveBeenCalled();
     });
 });
+
+describe('recording-controller realtime path', () => {
+    // The realtime branch is opt-in via `resolveActiveMode`: when it
+    // returns 'realtime', startFromIdle calls `startRealtimeCapture`
+    // instead of `vox.startRecording`, and stopAndTranscribe drives the
+    // provider session's `finish()` instead of feeding a Blob through the
+    // batch transcribe path. These tests pin both shapes.
+
+    function makeSession() {
+        return {
+            sendAudio: vi.fn(),
+            finish: vi.fn(async () => 'hello realtime'),
+            abort: vi.fn(),
+        };
+    }
+
+    function makeRealtimeDeps(): RecordingDeps & {
+        session: ReturnType<typeof makeSession>;
+        unlisten: ReturnType<typeof vi.fn>;
+    } {
+        const session = makeSession();
+        const unlisten = vi.fn();
+        const base = makeDeps();
+        return {
+            ...base,
+            resolveActiveMode: vi.fn(async () => 'realtime' as const),
+            startRealtimeCapture: vi.fn(async () => ({
+                rustSessionId: 'rt-session-1',
+                session,
+                unlisten,
+            })),
+            session,
+            unlisten,
+        };
+    }
+
+    it('startFromIdle uses startRealtimeCapture and stores it on the state', async () => {
+        const deps = makeRealtimeDeps();
+        const { setState, states } = makeSetState();
+        await toggle({ kind: 'idle' }, deps, setState);
+        expect(deps.startRealtimeCapture).toHaveBeenCalled();
+        expect(deps.vox.startRecording).not.toHaveBeenCalled();
+        const last = states.at(-1);
+        if (last?.kind !== 'recording' || !last.realtime) {
+            throw new Error(`expected recording+realtime state, got ${last?.kind}`);
+        }
+        expect(last.sessionId).toBe('rt-session-1');
+        expect(last.realtime.session).toBe(deps.session);
+    });
+
+    it('stopAndTranscribe awaits session.finish() and pastes the result', async () => {
+        const deps = makeRealtimeDeps();
+        const { setState, states } = makeSetState();
+        const recState: RecordingState = {
+            kind: 'recording',
+            sessionId: 'rt-session-1',
+            startedAt: 0,
+            realtime: {
+                rustSessionId: 'rt-session-1',
+                session: deps.session,
+                unlisten: deps.unlisten,
+            },
+        };
+        await toggle(recState, deps, setState);
+        expect(deps.vox.stopRecording).toHaveBeenCalledWith('rt-session-1');
+        expect(deps.unlisten).toHaveBeenCalled();
+        expect(deps.session.finish).toHaveBeenCalled();
+        // Batch transcribe path must not be touched on realtime.
+        expect(deps.transcribe).not.toHaveBeenCalled();
+        expect(deps.vox.pasteText).toHaveBeenCalledWith('hello realtime');
+        expect(states.map((s) => s.kind)).toEqual(['transcribing', 'idle']);
+    });
+
+    it('cancel calls session.abort and unlisten before tearing down cpal', async () => {
+        const deps = makeRealtimeDeps();
+        const { setState, states } = makeSetState();
+        const recState: RecordingState = {
+            kind: 'recording',
+            sessionId: 'rt-session-1',
+            startedAt: 0,
+            realtime: {
+                rustSessionId: 'rt-session-1',
+                session: deps.session,
+                unlisten: deps.unlisten,
+            },
+        };
+        await cancel(recState, deps, setState);
+        expect(deps.unlisten).toHaveBeenCalled();
+        expect(deps.session.abort).toHaveBeenCalled();
+        expect(deps.vox.cancelRecording).toHaveBeenCalledWith('rt-session-1');
+        // session.finish() must NOT run on cancel — that would commit + pay
+        // for a transcript the user explicitly threw away.
+        expect(deps.session.finish).not.toHaveBeenCalled();
+        expect(states.map((s) => s.kind)).toEqual(['idle']);
+    });
+
+    it('falls back to batch when startRealtimeCapture rejects', async () => {
+        // Realistic failure: WS handshake error (auth, network). startFromIdle
+        // surfaces the error rather than silently downgrading — the user picked
+        // a realtime model and a quiet fallback would hide a real failure.
+        const deps = makeRealtimeDeps();
+        // `startRealtimeCapture` is always present in makeRealtimeDeps; the
+        // non-null narrowing keeps biome happy without a `!` assertion.
+        const startRt = deps.startRealtimeCapture;
+        if (!startRt) throw new Error('startRealtimeCapture missing from test deps');
+        vi.mocked(startRt).mockRejectedValueOnce(
+            new Error('elevenlabs scribe realtime: auth_error'),
+        );
+        const { setState, states } = makeSetState();
+        await toggle({ kind: 'idle' }, deps, setState);
+        const last = states.at(-1);
+        expect(last?.kind).toBe('error');
+        if (last?.kind === 'error') expect(last.message).toMatch(/auth_error/);
+        expect(deps.vox.startRecording).not.toHaveBeenCalled();
+    });
+});

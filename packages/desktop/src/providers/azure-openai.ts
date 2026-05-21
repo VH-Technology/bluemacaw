@@ -12,7 +12,7 @@ export const azureOpenaiConfig: ProviderConfig = {
         'https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/',
     makeModel: (deploymentId, apiKey) => createAzure({ apiKey }).transcription(deploymentId),
     listModels: null,
-    defaultModels: [{ id: 'whisper', displayName: 'Whisper (deployment)' }],
+    defaultModels: [{ id: 'whisper', displayName: 'Whisper (deployment)', mode: 'batch' }],
     pricing: {
         whisper: { perMinuteUSD: 0.006, lastUpdated: '2026-05-03' },
     },

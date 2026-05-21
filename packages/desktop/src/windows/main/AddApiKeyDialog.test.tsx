@@ -19,7 +19,7 @@ vi.mock('@/providers', () => ({
             pricingDocsUrl: '',
             makeModel: () => ({}),
             listModels: listModelsSpy,
-            defaultModels: [{ id: 'whisper-1', displayName: 'Whisper 1' }],
+            defaultModels: [{ id: 'whisper-1', displayName: 'Whisper 1', mode: 'batch' }],
             pricing: {},
         },
         {
@@ -31,7 +31,7 @@ vi.mock('@/providers', () => ({
             pricingDocsUrl: '',
             makeModel: () => ({}),
             listModels: null,
-            defaultModels: [{ id: 'm', displayName: 'M' }],
+            defaultModels: [{ id: 'm', displayName: 'M', mode: 'batch' }],
             pricing: {},
         },
     ],
@@ -69,7 +69,9 @@ describe('<AddApiKeyDialog />', () => {
     });
 
     it('calls listModels for validation when present and proceeds when it succeeds', async () => {
-        listModelsSpy.mockResolvedValueOnce([{ id: 'whisper-1', displayName: 'Whisper 1' }]);
+        listModelsSpy.mockResolvedValueOnce([
+            { id: 'whisper-1', displayName: 'Whisper 1', mode: 'batch' },
+        ]);
         const user = userEvent.setup();
         const { onAdded } = renderOpen();
         await user.type(screen.getByTestId('nickname-input'), 'Personal');

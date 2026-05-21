@@ -6,16 +6,19 @@ const DEFAULT_MODELS: Model[] = [
         id: 'machine',
         displayName: 'Machine',
         description: 'Asynchronous machine transcription tier',
+        mode: 'batch',
     },
     {
         id: 'low_cost',
         displayName: 'Low Cost',
         description: 'Discounted asynchronous transcription tier',
+        mode: 'batch',
     },
     {
         id: 'fusion',
         displayName: 'Fusion',
         description: 'Higher-accuracy fusion transcription tier',
+        mode: 'batch',
     },
 ];
 

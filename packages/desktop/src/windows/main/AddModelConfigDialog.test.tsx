@@ -28,8 +28,8 @@ vi.mock('@/providers', () => ({
             makeModel: () => ({}),
             listModels: listModelsSpy,
             defaultModels: [
-                { id: 'whisper-1', displayName: 'Whisper 1' },
-                { id: 'gpt-4o-transcribe', displayName: 'GPT-4o Transcribe' },
+                { id: 'whisper-1', displayName: 'Whisper 1', mode: 'batch' },
+                { id: 'gpt-4o-transcribe', displayName: 'GPT-4o Transcribe', mode: 'batch' },
             ],
             pricing: {},
         },
@@ -42,7 +42,7 @@ vi.mock('@/providers', () => ({
             pricingDocsUrl: '',
             makeModel: () => ({}),
             listModels: listModelsNoneSpy,
-            defaultModels: [{ id: 'fal-fast', displayName: 'Fal Fast' }],
+            defaultModels: [{ id: 'fal-fast', displayName: 'Fal Fast', mode: 'batch' }],
             pricing: {},
         },
     ],
@@ -91,7 +91,7 @@ describe('<AddModelConfigDialog />', () => {
             },
         ]);
         listModelsSpy.mockResolvedValueOnce([
-            { id: 'gpt-4o-mini-transcribe', displayName: 'GPT-4o Mini' },
+            { id: 'gpt-4o-mini-transcribe', displayName: 'GPT-4o Mini', mode: 'batch' },
         ]);
         render(<AddModelConfigDialog open onClose={vi.fn()} onAdded={vi.fn()} />);
         await waitFor(() => {
