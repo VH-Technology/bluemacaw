@@ -56,7 +56,10 @@ export function Download() {
                     Download for your platform
                 </h2>
                 <p className="mt-3 text-muted-foreground">
-                    Free, open source, no account required.
+                    Free, open source, no account required.{' '}
+                    <a href="/docs/" className="font-semibold text-main hover:underline">
+                        Full setup guide →
+                    </a>
                 </p>
             </div>
             <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -64,6 +67,7 @@ export function Download() {
                     name="macOS"
                     detail="Signed + notarized DMG"
                     href={macHref}
+                    docsHref="/docs/#install-macos"
                     icon={<MacIcon />}
                     version={manifest?.version}
                 />
@@ -71,12 +75,14 @@ export function Download() {
                     name="Windows"
                     detail="Unsigned NSIS installer"
                     href={winHref}
+                    docsHref="/docs/#install-windows"
                     icon={<WindowsIcon />}
                 />
                 <PlatformCard
                     name="Linux"
-                    detail="AppImage, deb, rpm — see /install-linux"
+                    detail="AppImage, .deb, .rpm"
                     href={linuxHref}
+                    docsHref="/docs/#install-linux"
                     icon={<LinuxIcon />}
                 />
             </div>
@@ -88,47 +94,51 @@ interface PlatformCardProps {
     name: string;
     detail: string;
     href: string | null;
+    docsHref: string;
     icon: React.ReactNode;
     version?: string;
 }
 
-function PlatformCard({ name, detail, href, icon, version }: PlatformCardProps) {
-    if (href === null) {
-        return (
-            <div
-                aria-disabled
-                className="flex flex-col gap-3 rounded-2xl bg-surface p-7 shadow-card-lg opacity-60"
-            >
-                <span className="inline-flex h-12 w-12 items-center justify-center rounded-pill bg-main/10 text-main">
-                    {icon}
-                </span>
-                <div className="text-xl font-bold tracking-tight">{name}</div>
-                <div className="text-sm text-muted-foreground">Coming soon</div>
-            </div>
-        );
-    }
+// Card itself is no longer a single big <a>. The Download button is the
+// only download link — a separate “Setup guide” link points at the OS’s
+// section in /docs. This way a user can read the install notes before
+// committing to a download, and screen readers see two distinct actions.
+function PlatformCard({ name, detail, href, docsHref, icon, version }: PlatformCardProps) {
+    const comingSoon = href === null;
     return (
-        <a
-            href={href}
-            className="group flex flex-col gap-3 rounded-2xl bg-surface p-7 shadow-card-lg transition-all hover:-translate-y-1 hover:shadow-pop"
+        <div
+            aria-disabled={comingSoon || undefined}
+            className={`flex flex-col gap-3 rounded-2xl bg-surface p-7 shadow-card-lg ${comingSoon ? 'opacity-60' : ''}`}
         >
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-pill bg-main/10 text-main">
                 {icon}
             </span>
             <div className="text-xl font-bold tracking-tight">{name}</div>
-            <div className="text-sm text-muted-foreground">{detail}</div>
-            {version ? (
+            <div className="text-sm text-muted-foreground">
+                {comingSoon ? 'Coming soon' : detail}
+            </div>
+            {version && !comingSoon ? (
                 <div className="text-xs text-muted-foreground opacity-70">v{version}</div>
             ) : null}
-            <span className="mt-1 inline-flex items-center gap-1 text-sm font-bold text-main">
-                Download{' '}
-                <span
-                    aria-hidden="true"
-                    className="transition-transform group-hover:translate-x-0.5"
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+                {comingSoon ? null : (
+                    <a
+                        href={href}
+                        aria-label={`Download bluemacaw for ${name}`}
+                        className="inline-flex items-center gap-1.5 rounded-pill bg-main px-4 py-2 text-sm font-bold text-main-foreground shadow-card transition-transform hover:-translate-y-0.5"
+                    >
+                        Download
+                        <span aria-hidden="true">↓</span>
+                    </a>
+                )}
+                <a
+                    href={docsHref}
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-main hover:underline"
                 >
-                    →
-                </span>
-            </span>
-        </a>
+                    {comingSoon ? 'Read setup guide' : 'Setup guide'}
+                    <span aria-hidden="true">→</span>
+                </a>
+            </div>
+        </div>
     );
 }

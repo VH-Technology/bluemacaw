@@ -7,9 +7,9 @@ import { PrivacyTeaser } from './privacy-teaser';
 import { ProvidersGrid } from './providers-grid';
 
 describe('home sections', () => {
-    it('Demo renders the demo image', () => {
+    it('Demo renders an accessible recording-demo region', () => {
         render(<Demo />);
-        expect(screen.getByAltText(/recording demo/i)).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: /recording demo/i })).toBeInTheDocument();
     });
 
     it('Features renders all 6 cards', () => {
@@ -42,7 +42,7 @@ describe('home sections', () => {
         );
     });
 
-    it('Download resolves manifest and renders a mac link with coming-soon for null platforms', async () => {
+    it('Download resolves manifest and renders a mac download with coming-soon for null platforms', async () => {
         vi.stubGlobal(
             'fetch',
             vi.fn(
@@ -63,13 +63,14 @@ describe('home sections', () => {
         );
         render(<Download />);
         await waitFor(() => {
-            expect(screen.getByRole('link', { name: /macOS/i })).toHaveAttribute(
-                'href',
-                'https://example.test/Vox-Era.dmg',
-            );
+            expect(
+                screen.getByRole('link', { name: /download bluemacaw for macos/i }),
+            ).toHaveAttribute('href', 'https://example.test/Vox-Era.dmg');
         });
-        expect(screen.queryByRole('link', { name: /Windows/i })).toBeNull();
-        expect(screen.queryByRole('link', { name: /Linux/i })).toBeNull();
+        expect(screen.queryByRole('link', { name: /download bluemacaw for windows/i })).toBeNull();
+        expect(screen.queryByRole('link', { name: /download bluemacaw for linux/i })).toBeNull();
         expect(screen.getAllByText(/coming soon/i)).toHaveLength(2);
+        // 4 setup-guide links total: the section-header "Full setup guide" + one per card.
+        expect(screen.getAllByRole('link', { name: /setup guide/i })).toHaveLength(4);
     });
 });

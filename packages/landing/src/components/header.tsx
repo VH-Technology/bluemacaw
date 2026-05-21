@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 
 const NAV_LINKS = [
     { href: '#features', label: 'Features' },
+    { href: '/docs/', label: 'Docs' },
     { href: '/privacy/', label: 'Privacy' },
     { href: '/changelog/', label: 'Changelog' },
 ] as const;

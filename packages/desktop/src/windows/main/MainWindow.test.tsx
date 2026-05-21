@@ -115,12 +115,16 @@ describe('<MainWindow />', () => {
         expect(screen.getByRole('heading', { name: /recent transcriptions/i })).toBeInTheDocument();
     });
 
+    // Windows CI runners are 2-3x slower than macOS/Linux at userEvent.click +
+    // Radix Tabs unmount/mount cascade for a panel as heavy as Settings (7
+    // setting sub-components, all firing effects on mount). Locally this test
+    // settles in ~600ms; on windows-latest it crosses the 5s default.
     it('switches to the Settings panel when its tab is clicked', async () => {
         const user = userEvent.setup();
         render(<MainWindow />);
         await user.click(screen.getByRole('tab', { name: /settings/i }));
-        expect(screen.getByTestId('panel-settings')).toBeInTheDocument();
-    });
+        expect(await screen.findByTestId('panel-settings')).toBeInTheDocument();
+    }, 15_000);
 
     it('renders a loading state while the onboarding gate is undecided', () => {
         vi.mocked(useOnboardingGate).mockReturnValueOnce({

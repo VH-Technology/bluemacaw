@@ -18,6 +18,12 @@ export function Footer({ version }: FooterProps) {
                 </div>
                 <nav className="flex flex-wrap items-center gap-5 text-sm">
                     <a
+                        href="/docs/"
+                        className="font-semibold text-muted-foreground transition-colors hover:text-fg"
+                    >
+                        Docs
+                    </a>
+                    <a
                         href="/privacy/"
                         className="font-semibold text-muted-foreground transition-colors hover:text-fg"
                     >
