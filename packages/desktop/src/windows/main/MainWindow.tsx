@@ -134,6 +134,14 @@ export function MainWindowInner() {
         await loadHistory();
     }
 
+    // Fired by SettingsHistory after Clear all / retention purge so the
+    // dashboard stats and history list refresh in-place instead of
+    // requiring an app relaunch.
+    const handleHistoryChanged = useCallback(() => {
+        void loadHistory();
+        setRefreshKey((k) => k + 1);
+    }, [loadHistory]);
+
     return (
         <main className="min-h-screen bg-bg p-6 text-fg">
             <UpdateBanner status={updaterStatus} onInstall={() => void installAndRestart()} />
@@ -185,7 +193,7 @@ export function MainWindowInner() {
                     <SettingsModelConfigs />
                     <SettingsRecording />
                     <SettingsOverlay />
-                    <SettingsHistory />
+                    <SettingsHistory onHistoryChanged={handleHistoryChanged} />
                     <SettingsTheme />
                     <SettingsUpdates
                         status={updaterStatus}

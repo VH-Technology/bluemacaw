@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { WarningBanner } from '@/components/ui/warning-banner';
 import { autostart } from '@/lib/autostart';
 import {
     clearOriginalFnUsageType,
@@ -274,10 +275,7 @@ export function SettingsRecording() {
                         </p>
                     )}
                     {pendingFnSetup && (
-                        <div
-                            data-testid="fn-setup-confirm"
-                            className="flex flex-col gap-2 border-3 border-border bg-yellow-100 p-3"
-                        >
+                        <WarningBanner data-testid="fn-setup-confirm">
                             <p>
                                 To use Fn, macOS needs <strong>Press 🌐 key to</strong> set to{' '}
                                 <strong>Do Nothing</strong> (currently:{' '}
@@ -293,7 +291,7 @@ export function SettingsRecording() {
                                     Set automatically
                                 </Button>
                             </div>
-                        </div>
+                        </WarningBanner>
                     )}
                 </div>
                 <div className="flex flex-col gap-1">

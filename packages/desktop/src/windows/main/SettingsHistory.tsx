@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { WarningBanner } from '@/components/ui/warning-banner';
 import {
     clearAllTranscriptions,
     getRetentionDays,
@@ -16,7 +17,14 @@ const OPTIONS = [
     { value: -1, label: 'Forever' },
 ];
 
-export function SettingsHistory() {
+export interface SettingsHistoryProps {
+    /** Fired after a destructive action (Clear all, retention purge) so the
+     * parent can refetch the History list + Dashboard stats. Without this
+     * the user has to relaunch the app to see the now-empty list. */
+    onHistoryChanged?: () => void;
+}
+
+export function SettingsHistory({ onHistoryChanged }: SettingsHistoryProps = {}) {
     const retainId = useId();
     const [retainDays, setRetainDays] = useState<number>(365);
     const [confirming, setConfirming] = useState(false);
@@ -28,12 +36,16 @@ export function SettingsHistory() {
     async function handleChange(next: number) {
         setRetainDays(next);
         await setRetentionDays(next);
-        await purgeOlderThan(next);
+        const result = await purgeOlderThan(next);
+        if (result.softDeleted > 0 || result.hardDeleted > 0) {
+            onHistoryChanged?.();
+        }
     }
 
     async function handleConfirmClear() {
         await clearAllTranscriptions();
         setConfirming(false);
+        onHistoryChanged?.();
     }
 
     return (
@@ -63,7 +75,7 @@ export function SettingsHistory() {
                     </Button>
                 </div>
                 {confirming && (
-                    <div className="flex flex-col gap-2 border-3 border-border bg-yellow-100 p-3">
+                    <WarningBanner data-testid="clear-all-confirm">
                         <p>This deletes all transcriptions and cannot be undone.</p>
                         <div className="flex justify-end gap-2">
                             <Button variant="outline" onClick={() => setConfirming(false)}>
@@ -73,7 +85,7 @@ export function SettingsHistory() {
                                 Confirm
                             </Button>
                         </div>
-                    </div>
+                    </WarningBanner>
                 )}
             </CardContent>
         </Card>

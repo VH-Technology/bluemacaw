@@ -7,6 +7,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { WarningBanner } from '@/components/ui/warning-banner';
 import {
     type ApiKeyRow,
     type ModelConfigWithApiKey,
@@ -83,13 +84,10 @@ export function DeleteApiKeyDialog({ apiKey, onClose, onDeleted }: DeleteApiKeyD
                         </div>
                     )}
                     {activeWillBeDeleted && (
-                        <p
-                            className="border-3 border-border bg-yellow-300 px-2 py-1 text-xs font-bold"
-                            data-testid="active-warning"
-                        >
+                        <WarningBanner data-testid="active-warning" className="text-xs font-bold">
                             One of these is your active selection. After deletion no model will be
                             selected for transcription.
-                        </p>
+                        </WarningBanner>
                     )}
                     {error && (
                         <p className="text-xs font-bold text-red-700" role="alert">

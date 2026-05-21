@@ -55,4 +55,30 @@ describe('SettingsHistory', () => {
         fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
         await waitFor(() => expect(clearAllTranscriptions).toHaveBeenCalled());
     });
+
+    it('fires onHistoryChanged after Clear all so the parent can refresh', async () => {
+        const onHistoryChanged = vi.fn();
+        render(<SettingsHistory onHistoryChanged={onHistoryChanged} />);
+        fireEvent.click(screen.getByRole('button', { name: /clear all/i }));
+        fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+        await waitFor(() => expect(onHistoryChanged).toHaveBeenCalledTimes(1));
+    });
+
+    it('fires onHistoryChanged after a retention purge that deleted rows', async () => {
+        vi.mocked(purgeOlderThan).mockResolvedValueOnce({ softDeleted: 2, hardDeleted: 0 });
+        const onHistoryChanged = vi.fn();
+        render(<SettingsHistory onHistoryChanged={onHistoryChanged} />);
+        await waitFor(() => screen.getByLabelText(/retain/i));
+        fireEvent.change(screen.getByLabelText(/retain/i), { target: { value: '30' } });
+        await waitFor(() => expect(onHistoryChanged).toHaveBeenCalledTimes(1));
+    });
+
+    it('does NOT fire onHistoryChanged when a retention purge deleted nothing', async () => {
+        const onHistoryChanged = vi.fn();
+        render(<SettingsHistory onHistoryChanged={onHistoryChanged} />);
+        await waitFor(() => screen.getByLabelText(/retain/i));
+        fireEvent.change(screen.getByLabelText(/retain/i), { target: { value: '30' } });
+        await waitFor(() => expect(purgeOlderThan).toHaveBeenCalled());
+        expect(onHistoryChanged).not.toHaveBeenCalled();
+    });
 });
