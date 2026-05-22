@@ -1,5 +1,6 @@
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
+import { APP_VERSION } from '@/lib/version';
 
 export default function PrivacyPage() {
     return (
@@ -70,7 +71,7 @@ export default function PrivacyPage() {
                     </p>
                 </article>
             </main>
-            <Footer version="0.1.0" />
+            <Footer version={APP_VERSION} />
         </>
     );
 }

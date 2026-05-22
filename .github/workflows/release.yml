@@ -26,8 +26,40 @@ permissions:
   contents: write # tauri-action needs this to attach bundles to the GH release
 
 jobs:
+  # Sanity-gate that every version source (npm manifests, tauri.conf.json,
+  # Cargo.toml, Cargo.lock) actually matches the release tag *before* we
+  # burn 15+ runner-minutes on a 3-platform Tauri build that would publish
+  # mismatched artifacts. Fails loudly if the user forgot to run
+  # `bun run version:bump` before tagging.
+  verify-versions:
+    name: Verify version consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Resolve expected version
+        id: ver
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          # Strip the leading `v` from the tag. workflow_dispatch dry-runs
+          # pass a placeholder like v0.0.0-test; that's still a valid semver
+          # so the same check applies.
+          expected="${TAG#v}"
+          echo "expected=$expected" >> "$GITHUB_OUTPUT"
+          echo "Tag $TAG → expected version $expected"
+
+      - name: Check every manifest equals $expected
+        run: bun scripts/bump-version.ts --check "${{ steps.ver.outputs.expected }}"
+
   build:
     name: Build & upload / ${{ matrix.platform.name }}
+    needs: [verify-versions]
     strategy:
       fail-fast: false
       matrix:

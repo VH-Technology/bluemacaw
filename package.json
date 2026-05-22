@@ -13,6 +13,8 @@
     "test": "bun run --filter '*' test",
     "test:unit": "bun run --filter '*' test:unit",
     "test:integration": "bun run --filter '*' test:integration",
+    "version:bump": "bun scripts/bump-version.ts",
+    "version:check": "bun scripts/bump-version.ts --check",
     "prepare": "lefthook install"
   },
   "devDependencies": {

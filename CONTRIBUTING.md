@@ -60,6 +60,30 @@ If your PR triggers any of the rows below, the same PR must update the affected 
 
 Use `/sync-docs` before opening a PR — it audits your changes against this table and proposes patches.
 
+## Cutting a release
+
+Version strings live in **five** places that all have to agree (npm desktop, npm landing, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`). The landing page Footer reads its version from `packages/landing/package.json` via `src/lib/version.ts`, so the only edits needed are the five manifests.
+
+Use the bump script — it touches all five atomically:
+
+```sh
+# Verify everything currently agrees (run anytime):
+bun run version:check
+
+# Bump everything to a new version:
+bun run version:bump 0.2.0
+
+# Commit, tag, push:
+git commit -am "chore: bump version to 0.2.0"
+git tag v0.2.0
+git push origin main v0.2.0
+
+# Publish the GH release (this triggers .github/workflows/release.yml):
+gh release create v0.2.0 --target main --generate-notes
+```
+
+The release workflow runs a `verify-versions` gate first that re-checks every manifest against the tag and fails fast if anything is out of sync — so a forgotten bump won't waste 15 runner-minutes producing mismatched artifacts.
+
 ## License
 
 By contributing you agree your contributions are licensed under Apache 2.0.

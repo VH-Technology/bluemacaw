@@ -1,6 +1,7 @@
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
 import { fetchReleases } from '@/lib/github';
+import { APP_VERSION } from '@/lib/version';
 
 export default async function ChangelogPage() {
     const releases = await fetchReleases('programow/ada');
@@ -42,7 +43,7 @@ export default async function ChangelogPage() {
                     </div>
                 )}
             </main>
-            <Footer version="0.1.0" />
+            <Footer version={APP_VERSION} />
         </>
     );
 }

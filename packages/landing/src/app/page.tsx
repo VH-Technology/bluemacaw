@@ -6,6 +6,7 @@ import { Header } from '@/components/header';
 import { Hero } from '@/components/hero';
 import { PrivacyTeaser } from '@/components/privacy-teaser';
 import { ProvidersGrid } from '@/components/providers-grid';
+import { APP_VERSION } from '@/lib/version';
 
 export default function HomePage() {
     return (
@@ -19,7 +20,7 @@ export default function HomePage() {
                 <PrivacyTeaser />
                 <Download />
             </main>
-            <Footer version="0.1.0" />
+            <Footer version={APP_VERSION} />
         </>
     );
 }

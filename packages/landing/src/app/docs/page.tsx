@@ -1,5 +1,6 @@
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
+import { APP_VERSION } from '@/lib/version';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -44,7 +45,7 @@ export default function DocsPage() {
                     </article>
                 </div>
             </main>
-            <Footer version="0.1.0" />
+            <Footer version={APP_VERSION} />
         </>
     );
 }
