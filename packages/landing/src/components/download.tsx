@@ -69,7 +69,6 @@ export function Download() {
                     href={macHref}
                     docsHref="/docs/#install-macos"
                     icon={<MacIcon />}
-                    version={manifest?.version}
                 />
                 <PlatformCard
                     name="Windows"
@@ -96,14 +95,13 @@ interface PlatformCardProps {
     href: string | null;
     docsHref: string;
     icon: React.ReactNode;
-    version?: string;
 }
 
 // Card itself is no longer a single big <a>. The Download button is the
 // only download link — a separate “Setup guide” link points at the OS’s
 // section in /docs. This way a user can read the install notes before
 // committing to a download, and screen readers see two distinct actions.
-function PlatformCard({ name, detail, href, docsHref, icon, version }: PlatformCardProps) {
+function PlatformCard({ name, detail, href, docsHref, icon }: PlatformCardProps) {
     const comingSoon = href === null;
     return (
         <div
@@ -117,9 +115,6 @@ function PlatformCard({ name, detail, href, docsHref, icon, version }: PlatformC
             <div className="text-sm text-muted-foreground">
                 {comingSoon ? 'Coming soon' : detail}
             </div>
-            {version && !comingSoon ? (
-                <div className="text-xs text-muted-foreground opacity-70">v{version}</div>
-            ) : null}
             <div className="mt-2 flex flex-wrap items-center gap-3">
                 {comingSoon ? null : (
                     <a

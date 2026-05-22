@@ -59,7 +59,8 @@ describe('Download', () => {
         expect(screen.queryByRole('link', { name: /download bluemacaw for windows/i })).toBeNull();
         expect(screen.queryByRole('link', { name: /download bluemacaw for linux/i })).toBeNull();
         expect(screen.getAllByText(/coming soon/i)).toHaveLength(2);
-        expect(screen.getByText(/v0\.1\.0/)).toBeInTheDocument();
+        // Version is intentionally not shown on the download cards.
+        expect(screen.queryByText(/v0\.1\.0/)).toBeNull();
     });
 
     it('keeps the coming-soon Setup guide link visible even when the download is unavailable', async () => {

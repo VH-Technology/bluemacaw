@@ -90,74 +90,96 @@ export function Demo({ initialPhase }: DemoProps = {}) {
 
     return (
         <section aria-label="Recording demo" className="mx-auto max-w-5xl px-6 py-12">
-            <div className="overflow-hidden rounded-3xl bg-brand-cream/40 p-4 shadow-pop sm:p-8 dark:bg-brand-navy/30">
-                {/* Faux app window */}
+            {/* A simulated monitor — just the screen on a stand — so the
+                preview reads as "watching the app run on a display" rather
+                than a flat UI card sitting on the page. */}
+            <div className="relative mx-auto flex max-w-xl flex-col items-center">
+                {/* Soft glow behind the screen for depth. */}
                 <div
-                    className="mx-auto max-w-2xl overflow-hidden rounded-2xl border border-border bg-surface shadow-card-lg"
-                    data-testid="demo-window"
-                    data-phase={displayPhase}
-                >
-                    {/* Title bar with traffic-light dots */}
-                    <div className="flex items-center gap-2 border-b border-border bg-muted/60 px-4 py-2.5">
-                        <span className="flex gap-1.5" aria-hidden="true">
-                            <span className="h-3 w-3 rounded-full bg-brand-coral/80" />
-                            <span className="h-3 w-3 rounded-full bg-brand-yellow/80" />
-                            <span className="h-3 w-3 rounded-full bg-brand-mint/80" />
-                        </span>
-                        <span className="ml-2 text-xs font-semibold text-muted-foreground">
-                            Notes — bluemacaw
-                        </span>
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-x-0 -top-6 -z-10 h-3/4 bg-[radial-gradient(ellipse_at_center,hsl(var(--main)/0.18),transparent_70%)] blur-2xl"
+                />
+
+                {/* Monitor bezel */}
+                <div className="w-full rounded-[22px] bg-brand-navy p-3 shadow-pop sm:p-4">
+                    {/* Webcam dot on the top bezel. */}
+                    <div className="mb-2.5 flex justify-center">
+                        <span
+                            aria-hidden="true"
+                            className="h-1.5 w-1.5 rounded-full bg-white/25 ring-1 ring-white/10"
+                        />
                     </div>
 
-                    {/* Document body */}
-                    <div className="relative min-h-[180px] px-6 py-6 sm:min-h-[200px]">
-                        {shownText ? (
-                            <p className="text-left text-lg leading-relaxed text-fg sm:text-xl">
-                                {shownText}
-                                {displayPhase === 'typing' && (
-                                    <span
-                                        aria-hidden="true"
-                                        className="ml-0.5 inline-block h-5 w-0.5 translate-y-0.5 animate-pulse bg-main"
-                                    />
-                                )}
-                            </p>
-                        ) : (
-                            <div className="flex h-full min-h-[148px] flex-col items-center justify-center gap-3 text-center">
-                                <p className="text-sm text-muted-foreground">
-                                    {displayPhase === 'recording'
-                                        ? 'Listening… speak naturally.'
-                                        : displayPhase === 'transcribing'
-                                          ? 'Turning speech into text…'
-                                          : 'Press to dictate into any app.'}
+                    {/* The screen content: the faux app window. */}
+                    <div
+                        className="overflow-hidden rounded-xl border border-white/10 bg-surface"
+                        data-testid="demo-window"
+                        data-phase={displayPhase}
+                    >
+                        {/* Title bar with traffic-light dots */}
+                        <div className="flex items-center gap-2 border-b border-border bg-muted/60 px-4 py-2.5">
+                            <span className="flex gap-1.5" aria-hidden="true">
+                                <span className="h-3 w-3 rounded-full bg-brand-coral/80" />
+                                <span className="h-3 w-3 rounded-full bg-brand-yellow/80" />
+                                <span className="h-3 w-3 rounded-full bg-brand-mint/80" />
+                            </span>
+                            <span className="ml-2 text-xs font-semibold text-muted-foreground">
+                                Notes — bluemacaw
+                            </span>
+                        </div>
+
+                        {/* Document body */}
+                        <div className="relative min-h-[180px] px-6 py-6 sm:min-h-[200px]">
+                            {shownText ? (
+                                <p className="text-left text-lg leading-relaxed text-fg sm:text-xl">
+                                    {shownText}
+                                    {displayPhase === 'typing' && (
+                                        <span
+                                            aria-hidden="true"
+                                            className="ml-0.5 inline-block h-5 w-0.5 translate-y-0.5 animate-pulse bg-main"
+                                        />
+                                    )}
                                 </p>
-                                <span className="flex flex-wrap items-center justify-center gap-1.5">
-                                    {shortcut.map((key, i) => (
-                                        <span key={key} className="flex items-center gap-1.5">
-                                            {i > 0 && (
-                                                <span className="text-xs text-muted-foreground">
-                                                    +
-                                                </span>
-                                            )}
-                                            <kbd className="rounded-md border border-border bg-bg px-2 py-1 font-mono text-xs font-semibold text-fg shadow-sm">
-                                                {key}
-                                            </kbd>
-                                        </span>
-                                    ))}
-                                </span>
-                            </div>
-                        )}
-                    </div>
+                            ) : (
+                                <div className="flex h-full min-h-[148px] flex-col items-center justify-center gap-3 text-center">
+                                    <p className="text-sm text-muted-foreground">
+                                        {displayPhase === 'recording'
+                                            ? 'Listening… speak naturally.'
+                                            : displayPhase === 'transcribing'
+                                              ? 'Turning speech into text…'
+                                              : 'Press to dictate into any app.'}
+                                    </p>
+                                    <span className="flex flex-wrap items-center justify-center gap-1.5">
+                                        {shortcut.map((key, i) => (
+                                            <span key={key} className="flex items-center gap-1.5">
+                                                {i > 0 && (
+                                                    <span className="text-xs text-muted-foreground">
+                                                        +
+                                                    </span>
+                                                )}
+                                                <kbd className="rounded-md border border-border bg-bg px-2 py-1 font-mono text-xs font-semibold text-fg shadow-sm">
+                                                    {key}
+                                                </kbd>
+                                            </span>
+                                        ))}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
 
-                    {/* Floating status pill — mirrors the real desktop overlay */}
-                    <div className="flex justify-center pb-6">
-                        <StatusPill phase={displayPhase} />
+                        {/* Floating status pill — mirrors the real desktop overlay */}
+                        <div className="flex justify-center pb-6">
+                            <StatusPill phase={displayPhase} />
+                        </div>
                     </div>
                 </div>
 
-                <p className="mt-6 text-center text-sm text-muted-foreground">
-                    A live preview — no video, just the real UI. Hold{' '}
-                    {osMeta(os).label === 'macOS' ? '⌘⇧Space' : 'Ctrl+⇧Space'}, talk, release.
-                </p>
+                {/* Monitor stand: neck + base. */}
+                <div aria-hidden="true" className="h-5 w-16 bg-brand-navy/90" />
+                <div
+                    aria-hidden="true"
+                    className="h-2 w-40 rounded-full bg-brand-navy/80 shadow-card"
+                />
             </div>
         </section>
     );
