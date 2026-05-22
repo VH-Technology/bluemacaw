@@ -47,15 +47,27 @@ jobs:
         env:
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
-          # Strip the leading `v` from the tag. workflow_dispatch dry-runs
-          # pass a placeholder like v0.0.0-test; that's still a valid semver
-          # so the same check applies.
+          # Strip the leading `v` from the tag.
           expected="${TAG#v}"
           echo "expected=$expected" >> "$GITHUB_OUTPUT"
           echo "Tag $TAG → expected version $expected"
 
-      - name: Check every manifest equals $expected
-        run: bun scripts/bump-version.ts --check "${{ steps.ver.outputs.expected }}"
+      - name: Check version consistency
+        env:
+          EXPECTED: ${{ steps.ver.outputs.expected }}
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            # Real release: every manifest MUST equal the tag, or we fail
+            # before building mismatched artifacts.
+            bun scripts/bump-version.ts --check "$EXPECTED"
+          else
+            # workflow_dispatch dry-run: the placeholder tag (e.g.
+            # v0.0.0-test) intentionally won't match the manifests, so we
+            # only verify the manifests agree with each other and never
+            # block the build on a tag mismatch.
+            echo "Dry-run ($EXPECTED): checking internal consistency only, not enforcing tag match."
+            bun scripts/bump-version.ts --check
+          fi
 
   build:
     name: Build & upload / ${{ matrix.platform.name }}
