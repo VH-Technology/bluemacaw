@@ -30,8 +30,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # GITHUB_TOKEN lifts the changelog's build-time GitHub API call out of
+      # the 60 req/hr unauthenticated ceiling (shared-runner-IP 403s were
+      # shipping an empty "No releases yet" changelog). `contents: read`
+      # above is sufficient to read releases.
       - name: Build landing (next export)
         working-directory: packages/landing
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bun run build
 
       - uses: actions/configure-pages@v5
