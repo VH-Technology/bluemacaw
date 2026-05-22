@@ -1,7 +1,16 @@
+'use client';
+
+import { osMeta, useClientOS } from '@/lib/use-client-os';
 import { RecordingPillDemo } from './recording-pill-demo';
 import { Button } from './ui/button';
 
 export function Hero() {
+    const os = useClientOS();
+    // OS-neutral until detection resolves (and for unrecognized platforms),
+    // then names the visitor's platform. We never gate the link on OS — the
+    // #download section still lists every platform.
+    const downloadLabel =
+        os === 'unknown' ? 'Download for your OS' : `Download for ${osMeta(os).label}`;
     return (
         <section className="relative overflow-hidden">
             {/* Soft brand gradient backdrop — anchored to the hero, fades into
@@ -28,7 +37,7 @@ export function Hero() {
                     </p>
                     <div className="mt-10 flex flex-wrap justify-center gap-3">
                         <Button asChild size="xl">
-                            <a href="#download">Download for your OS</a>
+                            <a href="#download">{downloadLabel}</a>
                         </Button>
                         <Button asChild size="xl" variant="outline">
                             <a

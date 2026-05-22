@@ -8,7 +8,8 @@ import { ProvidersGrid } from './providers-grid';
 
 describe('home sections', () => {
     it('Demo renders an accessible recording-demo region', () => {
-        render(<Demo />);
+        // initialPhase disables the auto-cycle so no timers run during the test.
+        render(<Demo initialPhase="idle" />);
         expect(screen.getByRole('region', { name: /recording demo/i })).toBeInTheDocument();
     });
 
