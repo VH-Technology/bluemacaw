@@ -1,11 +1,12 @@
 'use client';
 
+import { MaskIcon } from '@/components/ui/mask-icon';
 import { osMeta, useClientOS } from '@/lib/use-client-os';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 
-// An interactive, looping mock of a real bluemacaw session — replaces the
-// old broken demo.gif. Instead of a video we drive a tiny state machine
+// An interactive, looping mock of a real bluemacaw session
+// Instead of a video we drive a tiny state machine
 // through the actual UX beats (press shortcut → record → transcribe → paste)
 // so the "demo" is a live component that adapts to the visitor's OS and
 // theme, and never ships a heavy asset. Honors prefers-reduced-motion by
@@ -220,18 +221,7 @@ function StatusPill({ phase }: { phase: Phase }) {
     if (phase === 'typing' || phase === 'done') {
         return (
             <div className={PILL} data-testid="demo-pill" data-state="pasted">
-                <svg
-                    aria-hidden="true"
-                    viewBox="0 0 12 12"
-                    className="h-3 w-3 text-brand-mint"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                >
-                    <path d="M2 6.5 L5 9.5 L10 3" />
-                </svg>
+                <MaskIcon src="/icons/check.svg" className="h-3 w-3 text-brand-mint" />
                 <span className="text-[12px] font-semibold tracking-wide">Pasted</span>
             </div>
         );

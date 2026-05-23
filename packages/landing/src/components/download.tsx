@@ -1,33 +1,10 @@
 'use client';
 
+import { MaskIcon } from '@/components/ui/mask-icon';
 import { type DownloadManifest, fetchManifest } from '@/lib/manifest';
 import { useEffect, useState } from 'react';
 
 const RELEASES_FALLBACK = 'https://github.com/programow/ada/releases/latest';
-
-function MacIcon() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" className="h-7 w-7" fill="currentColor">
-            <path d="M16.6 13.4c0-2.7 2.2-4 2.3-4-1.3-1.9-3.2-2.1-3.9-2.2-1.7-.2-3.2 1-4 1-.8 0-2.1-1-3.5-1-1.8 0-3.5 1-4.4 2.7-1.9 3.3-.5 8.1 1.3 10.7.9 1.3 2 2.7 3.4 2.6 1.4-.1 1.9-.9 3.6-.9 1.6 0 2.1.9 3.5.9 1.4 0 2.4-1.3 3.3-2.6.7-1 1.2-2 1.5-3.1-2.3-.9-3.1-3.4-3.1-4.1zM13.7 5.5c.7-.9 1.2-2.1 1.1-3.3-1 0-2.3.7-3 1.5-.7.8-1.3 2-1.1 3.2 1.2.1 2.3-.6 3-1.4z" />
-        </svg>
-    );
-}
-
-function WindowsIcon() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" className="h-7 w-7" fill="currentColor">
-            <path d="M3 5.6 10.4 4.6V11.4H3V5.6zm0 12.8V12.6h7.4v6.4L3 18.4zM11.6 11.4V4.4L21 3v8.4h-9.4zm0 8L21 21V12.6h-9.4v6.8z" />
-        </svg>
-    );
-}
-
-function LinuxIcon() {
-    return (
-        <svg viewBox="0 0 24 24" aria-hidden="true" className="h-7 w-7" fill="currentColor">
-            <path d="M12 2c-2.6 0-4.5 2.2-4.5 5 0 1.7.6 3 1.3 4-.5.6-1.3 1.8-1.9 3.2-.7 1.6-1.4 3.7-1.4 5.1 0 .9.4 1.6 1 2 .6.4 1.4.5 2.1.5h.1c.4.4.9.7 1.5.8.6.1 1.2.1 1.8 0 .6-.1 1.1-.4 1.5-.8h.1c.7 0 1.5-.1 2.1-.5.6-.4 1-1.1 1-2 0-1.4-.7-3.5-1.4-5.1-.6-1.4-1.4-2.6-1.9-3.2.7-1 1.3-2.3 1.3-4 0-2.8-1.9-5-4.5-5zm-1.3 4c.4 0 .7.5.7 1s-.3 1-.7 1c-.4 0-.7-.5-.7-1s.3-1 .7-1zm2.6 0c.4 0 .7.5.7 1s-.3 1-.7 1c-.4 0-.7-.5-.7-1s.3-1 .7-1z" />
-        </svg>
-    );
-}
 
 export function Download() {
     const [manifest, setManifest] = useState<DownloadManifest | null>(null);
@@ -68,21 +45,21 @@ export function Download() {
                     detail="Signed + notarized DMG"
                     href={macHref}
                     docsHref="/docs/#install-macos"
-                    icon={<MacIcon />}
+                    icon={<MaskIcon src="/icons/macos.svg" className="h-7 w-7" />}
                 />
                 <PlatformCard
                     name="Windows"
                     detail="Unsigned NSIS installer"
                     href={winHref}
                     docsHref="/docs/#install-windows"
-                    icon={<WindowsIcon />}
+                    icon={<MaskIcon src="/icons/windows.svg" className="h-7 w-7" />}
                 />
                 <PlatformCard
                     name="Linux"
                     detail="AppImage, .deb, .rpm"
                     href={linuxHref}
                     docsHref="/docs/#install-linux"
-                    icon={<LinuxIcon />}
+                    icon={<MaskIcon src="/icons/linux.svg" className="h-7 w-7" />}
                 />
             </div>
         </section>
@@ -97,10 +74,6 @@ interface PlatformCardProps {
     icon: React.ReactNode;
 }
 
-// Card itself is no longer a single big <a>. The Download button is the
-// only download link — a separate “Setup guide” link points at the OS’s
-// section in /docs. This way a user can read the install notes before
-// committing to a download, and screen readers see two distinct actions.
 function PlatformCard({ name, detail, href, docsHref, icon }: PlatformCardProps) {
     const comingSoon = href === null;
     return (

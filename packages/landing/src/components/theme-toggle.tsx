@@ -1,5 +1,6 @@
 'use client';
 
+import { MaskIcon } from '@/components/ui/mask-icon';
 import { cn } from '@/lib/utils';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -125,36 +126,19 @@ export function ThemeToggle({ className }: { className?: string }) {
             )}
         >
             {/* Sun — visible when the resolved theme is dark (one click → system). */}
-            <svg
-                aria-hidden="true"
+            <MaskIcon
+                src="/icons/sun.svg"
                 className="hidden h-4 w-4 dark:block"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
                 data-testid="theme-toggle-icon-sun"
-            >
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-            </svg>
+            />
             {/* Moon — visible when resolved is light. Preference may still be 'system'
                 (which currently resolves to light); the icon reflects what you SEE, the
                 aria-label tells you what's next. */}
-            <svg
-                aria-hidden="true"
+            <MaskIcon
+                src="/icons/moon.svg"
                 className="block h-4 w-4 dark:hidden"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
                 data-testid="theme-toggle-icon-moon"
-            >
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
+            />
         </button>
     );
 }

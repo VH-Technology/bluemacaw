@@ -1,5 +1,6 @@
 'use client';
 
+import { MaskIcon } from '@/components/ui/mask-icon';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 
@@ -70,20 +71,7 @@ function TranscribingDots() {
 }
 
 function CheckIcon() {
-    return (
-        <svg
-            aria-hidden="true"
-            viewBox="0 0 12 12"
-            className="h-3 w-3 text-brand-mint"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <path d="M2 6.5 L5 9.5 L10 3" />
-        </svg>
-    );
+    return <MaskIcon src="/icons/check.svg" className="h-3 w-3 text-brand-mint" />;
 }
 
 export interface RecordingPillDemoProps {
