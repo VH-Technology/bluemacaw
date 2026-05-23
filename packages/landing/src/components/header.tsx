@@ -2,8 +2,12 @@ import Link from 'next/link';
 import { ThemeToggle } from './theme-toggle';
 import { Button } from './ui/button';
 
+// `/#features` is absolute on purpose: the header renders on every route, so
+// a bare `#features` would resolve against the current path (e.g.
+// `/docs/#features`) and go nowhere. The leading slash always targets the
+// Features section on the home page.
 const NAV_LINKS = [
-    { href: '#features', label: 'Features' },
+    { href: '/#features', label: 'Features' },
     { href: '/docs/', label: 'Docs' },
     { href: '/privacy/', label: 'Privacy' },
     { href: '/changelog/', label: 'Changelog' },
