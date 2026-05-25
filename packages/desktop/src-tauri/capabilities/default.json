@@ -45,6 +45,7 @@
     "updater:default",
     "updater:allow-check",
     "updater:allow-download-and-install",
+    "websocket:default",
     "autostart:default",
     "autostart:allow-enable",
     "autostart:allow-disable",

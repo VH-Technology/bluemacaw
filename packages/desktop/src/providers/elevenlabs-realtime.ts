@@ -25,6 +25,7 @@
  * than network machinery.
  */
 
+import TauriWebSocket, { type Message as TauriWsMessage } from '@tauri-apps/plugin-websocket';
 import type { RealtimeModel, RealtimeSession } from './types';
 
 const BASE_URL = 'wss://api.elevenlabs.io/v1/speech-to-text/realtime';
@@ -125,8 +126,7 @@ export async function connectScribeRealtime(
     url.searchParams.set('audio_format', 'pcm_16000');
     url.searchParams.set('token', singleUseToken);
 
-    const factory: WebSocketFactory =
-        webSocketFactory ?? ((u) => new WebSocket(u) as unknown as WebSocketLike);
+    const factory: WebSocketFactory = webSocketFactory ?? defaultWebSocketFactory;
     const ws = factory(url.toString());
     ws.binaryType = 'arraybuffer';
 
@@ -277,6 +277,88 @@ export async function connectScribeRealtime(
             if (closed) return;
             closed = true;
             ws.close(1000, 'abort');
+        },
+    };
+}
+
+/**
+ * Default WebSocket factory. Inside a Tauri runtime the socket is opened
+ * from the Rust side via the websocket plugin: WKWebView refuses a native
+ * `new WebSocket()` under the packaged app's custom `tauri://` document
+ * origin with `SecurityError: The operation is insecure.` (works in dev,
+ * where the origin is `http://localhost`). Outside Tauri — a context we
+ * don't actually ship, kept only as a safe fallback — it uses the native
+ * WebSocket. Tests bypass this entirely via the `webSocketFactory` seam.
+ */
+const defaultWebSocketFactory: WebSocketFactory = (url) => {
+    const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    return inTauri ? tauriWebSocket(url) : (new WebSocket(url) as unknown as WebSocketLike);
+};
+
+/**
+ * Adapt the Tauri websocket plugin (async `connect`, single `addListener`
+ * delivering typed frames) to the synchronous, native-`WebSocket`-shaped
+ * [`WebSocketLike`] the session code expects. Listeners registered before
+ * the async connect resolves are buffered and replayed; sends issued before
+ * connect are queued.
+ */
+function tauriWebSocket(url: string): WebSocketLike {
+    // biome-ignore lint/suspicious/noExplicitAny: event shapes mirror the native WS events the caller consumes
+    type Listener = (ev: any) => void;
+    const listeners: Record<'open' | 'message' | 'close' | 'error', Listener[]> = {
+        open: [],
+        message: [],
+        close: [],
+        error: [],
+    };
+    const emit = (type: keyof typeof listeners, ev: unknown) => {
+        for (const l of listeners[type]) l(ev);
+    };
+
+    let conn: Awaited<ReturnType<typeof TauriWebSocket.connect>> | null = null;
+    let state = 0; // CONNECTING
+    const pending: string[] = [];
+
+    TauriWebSocket.connect(url)
+        .then((c) => {
+            conn = c;
+            state = 1; // OPEN
+            c.addListener((msg: TauriWsMessage) => {
+                if (msg.type === 'Text') {
+                    emit('message', { data: msg.data });
+                } else if (msg.type === 'Binary') {
+                    emit('message', { data: new Uint8Array(msg.data).buffer });
+                } else if (msg.type === 'Close') {
+                    state = 3; // CLOSED
+                    emit('close', { code: msg.data?.code, reason: msg.data?.reason });
+                }
+            });
+            for (const p of pending) void conn.send(p);
+            pending.length = 0;
+            emit('open', {});
+        })
+        .catch((e: unknown) => {
+            state = 3;
+            emit('error', { message: e instanceof Error ? e.message : String(e) });
+        });
+
+    return {
+        get readyState() {
+            return state;
+        },
+        binaryType: 'arraybuffer',
+        addEventListener: (type, listener) => {
+            listeners[type].push(listener);
+        },
+        send: (data) => {
+            // The Scribe protocol only ever sends JSON text frames.
+            const payload = typeof data === 'string' ? data : '';
+            if (conn) void conn.send(payload);
+            else pending.push(payload);
+        },
+        close: () => {
+            state = 3;
+            if (conn) void conn.disconnect();
         },
     };
 }
