@@ -21,7 +21,7 @@
     "clipboard-manager:allow-read-text",
     {
       "identifier": "http:default",
-      "allow": [{ "url": "https://api.deepgram.com/*" }]
+      "allow": [{ "url": "https://api.deepgram.com/*" }, { "url": "https://api.rev.ai/*" }]
     },
     "sql:default",
     "sql:allow-execute",

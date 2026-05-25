@@ -1,4 +1,5 @@
 import { createRevai } from '@ai-sdk/revai';
+import { httpFetch } from '../lib/http';
 import type { Model, ProviderConfig } from './types';
 
 const DEFAULT_MODELS: Model[] = [
@@ -29,8 +30,14 @@ export const revaiConfig: ProviderConfig = {
     docsUrl: 'https://docs.rev.ai/api/asynchronous/',
     apiKeyHelpUrl: 'https://www.rev.ai/access-token',
     pricingDocsUrl: 'https://www.rev.ai/pricing',
+    // Routed through Tauri's HTTP plugin (httpFetch): Rev.ai's API returns a
+    // 204 preflight without Access-Control-Allow-Origin for the webview
+    // origin, so a browser fetch is blocked by CORS. The Rust-side request
+    // isn't.
     makeModel: (modelId, apiKey) =>
-        createRevai({ apiKey }).transcription(modelId as 'machine' | 'low_cost' | 'fusion'),
+        createRevai({ apiKey, fetch: httpFetch }).transcription(
+            modelId as 'machine' | 'low_cost' | 'fusion',
+        ),
     listModels: null,
     defaultModels: DEFAULT_MODELS,
     pricing: {
