@@ -35,6 +35,19 @@ function toTranscriptionRow(e: HistoryEntry): TranscriptionRow {
     };
 }
 
+/**
+ * Render a stored timestamp as `YYYY-MM-DD HH:MM:SS` in local time for the
+ * history list. The stored value stays a full ISO-8601 string (it's also
+ * re-parsed via Date.parse for export/sort) — we only trim the millisecond
+ * + timezone noise for display. Falls back to the raw string if unparseable.
+ */
+function formatTimestamp(iso: string): string {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 function exportRow(e: HistoryEntry, format: 'txt' | 'md') {
     const row = toTranscriptionRow(e);
     if (format === 'txt') {
@@ -133,7 +146,8 @@ export function History({ entries, pageSize = 25, onDelete, onExportFiltered }: 
                                 <CardContent className="flex flex-col gap-2 text-sm font-medium normal-case">
                                     <p className="text-base">{entry.text}</p>
                                     <p className="text-xs uppercase tracking-wider opacity-70">
-                                        {entry.provider} · {entry.model} · {entry.createdAt}
+                                        {entry.provider} · {entry.model} ·{' '}
+                                        {formatTimestamp(entry.createdAt)}
                                     </p>
                                     <div className="flex flex-wrap gap-2">
                                         <Button
