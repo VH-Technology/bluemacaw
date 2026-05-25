@@ -33,7 +33,7 @@ export function Hero() {
                     </h1>
                     <p className="mt-6 max-w-2xl text-lg text-muted-foreground sm:text-xl">
                         bluemacaw is a cross-platform dictation app you actually own. Bring your own
-                        API key for any of 9 STT providers. Open source. No backend.
+                        API key for any of 10 STT providers. Open source. No backend.
                     </p>
                     <div className="mt-10 flex flex-wrap justify-center gap-3">
                         <Button asChild size="xl">

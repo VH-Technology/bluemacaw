@@ -12,7 +12,7 @@ packages/desktop/
     main.tsx          Mount point
     App.tsx           Window dispatcher (main vs overlay)
     lib/              invoke wrapper, transcribe orchestration
-    providers/        9 STT provider adapters + types + registry
+    providers/        10 STT provider adapters + types + registry
     components/ui/    shadcn-neobrutalism primitives
     windows/
       main/           Dashboard, History, Settings tabs, Onboarding screen, API key / model config dialogs

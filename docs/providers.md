@@ -1,6 +1,6 @@
 # Providers
 
-bluemacaw ships nine STT (speech-to-text) providers. The registry is data-driven — every provider is a `ProviderConfig` value, registered exactly once in `packages/desktop/src/providers/index.ts`. There is no provider class, no provider factory, no provider DI container. The whole UI (model picker, pricing display, etc.) reads from the same array.
+bluemacaw ships ten STT (speech-to-text) providers. The registry is data-driven — every provider is a `ProviderConfig` value, registered exactly once in `packages/desktop/src/providers/index.ts`. There is no provider class, no provider factory, no provider DI container. The whole UI (model picker, pricing display, etc.) reads from the same array.
 
 ## Bundled providers
 
@@ -15,8 +15,17 @@ bluemacaw ships nine STT (speech-to-text) providers. The registry is data-driven
 | `groq` | Groq | `whisper-large-v3`, `whisper-large-v3-turbo` | live (`/openai/v1/models`, filtered by `whisper` in id) |
 | `openai` | OpenAI | `whisper-1`, `gpt-4o-transcribe`, `gpt-4o-mini-transcribe` | live (`/v1/models`, filtered to known transcription ids) |
 | `revai` | Rev.ai | `machine`, `low_cost`, `fusion` | static |
+| `xai` | Grok (xAI) | `grok-stt` | static |
 
 (Authoritative source: `packages/desktop/src/providers/*.ts`.)
+
+> **xAI is the one exception to the `makeModel` rule.** The Vercel AI SDK has
+> no xAI transcription adapter, so `xai.ts` implements the optional
+> `transcribeBatch(audio, modelId, apiKey)` hook instead — a direct
+> `multipart/form-data` POST to `https://api.x.ai/v1/stt` (routed through the
+> Tauri HTTP plugin to dodge webview CORS). `lib/transcribe.ts` prefers
+> `transcribeBatch` when present and skips `experimental_transcribe`. Its
+> `makeModel` throws and is never called.
 
 ### Legacy model aliases
 

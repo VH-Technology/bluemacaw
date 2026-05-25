@@ -25,6 +25,15 @@ export async function transcribe(audio: Blob): Promise<string> {
     }
     const apiKey = await vox.getSecret(cfg.apiKeyId);
     if (!apiKey) throw new Error(`No API key found in keychain for ${cfg.apiKeyNickname}`);
+    // Providers the AI SDK can't model (e.g. xAI Grok STT) implement a direct
+    // REST call via transcribeBatch instead of an experimental_transcribe model.
+    if (provider.transcribeBatch) {
+        return provider.transcribeBatch(
+            new Uint8Array(await audio.arrayBuffer()),
+            cfg.modelId,
+            apiKey,
+        );
+    }
     const model = provider.makeModel(cfg.modelId, apiKey);
     const { text } = await transcribeAi({
         model: model as TranscriptionModel,

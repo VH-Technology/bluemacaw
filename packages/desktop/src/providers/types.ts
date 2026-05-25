@@ -42,6 +42,14 @@ export interface ProviderConfig {
     pricingDocsUrl: string;
     makeModel: (modelId: string, apiKey: string) => TranscriptionModel;
     /**
+     * Escape hatch for providers the Vercel AI SDK has no transcription
+     * adapter for (e.g. xAI Grok's `/v1/stt` endpoint). When set, the batch
+     * `transcribe()` path calls this directly instead of
+     * `experimental_transcribe`, and `makeModel` is never invoked. Returns
+     * the final transcript text.
+     */
+    transcribeBatch?: (audio: Uint8Array, modelId: string, apiKey: string) => Promise<string>;
+    /**
      * Optional factory for realtime/streaming models. Providers that
      * expose at least one model with `mode: 'realtime'` must implement
      * this; batch-only providers leave it undefined.

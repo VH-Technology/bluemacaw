@@ -8,6 +8,7 @@ import { groqConfig } from './groq';
 import { openaiConfig } from './openai';
 import { revaiConfig } from './revai';
 import type { ProviderConfig } from './types';
+import { xaiConfig } from './xai';
 
 export const PROVIDERS: readonly ProviderConfig[] = [
     assemblyaiConfig,
@@ -19,6 +20,7 @@ export const PROVIDERS: readonly ProviderConfig[] = [
     groqConfig,
     openaiConfig,
     revaiConfig,
+    xaiConfig,
 ] as const;
 
 export type { Model, PricingEntry, ProviderConfig } from './types';

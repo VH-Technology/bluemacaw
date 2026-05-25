@@ -4,8 +4,8 @@ const FEATURES = [
         body: 'Your API keys live in your OS keychain. There is no bluemacaw backend.',
     },
     {
-        title: '9 providers',
-        body: 'OpenAI, Groq, Deepgram, AssemblyAI, ElevenLabs, Fal, Gladia, Azure OpenAI, Rev.ai.',
+        title: '10 providers',
+        body: 'OpenAI, Groq, Grok (xAI), Deepgram, AssemblyAI, ElevenLabs, Fal, Gladia, Azure OpenAI, Rev.ai.',
     },
     {
         title: 'Cross-platform',

@@ -30,7 +30,8 @@
         { "url": "https://*.openai.azure.com/*" },
         { "url": "https://fal.run/*" },
         { "url": "https://*.fal.run/*" },
-        { "url": "https://rest.alpha.fal.ai/*" }
+        { "url": "https://rest.alpha.fal.ai/*" },
+        { "url": "https://api.x.ai/*" }
       ]
     },
     "sql:default",

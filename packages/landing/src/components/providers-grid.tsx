@@ -10,6 +10,7 @@ const PROVIDERS = [
     { id: 'groq', name: 'Groq' },
     { id: 'openai', name: 'OpenAI' },
     { id: 'revai', name: 'Rev.ai' },
+    { id: 'xai', name: 'Grok (xAI)' },
 ];
 
 export function ProvidersGrid() {
@@ -20,7 +21,7 @@ export function ProvidersGrid() {
                     Pick a provider. Bring your key.
                 </h2>
                 <p className="mt-3 text-muted-foreground">
-                    Nine STT providers wired up out of the box. Swap any time — keys stay on your
+                    Ten STT providers wired up out of the box. Swap any time — keys stay on your
                     machine.
                 </p>
             </div>

@@ -18,7 +18,7 @@ describe('home sections', () => {
         expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(6);
     });
 
-    it('ProvidersGrid renders all 9 provider names', () => {
+    it('ProvidersGrid renders all 10 provider names', () => {
         render(<ProvidersGrid />);
         for (const name of [
             'AssemblyAI',
@@ -28,6 +28,7 @@ describe('home sections', () => {
             'Fal',
             'Gladia',
             'Groq',
+            'Grok (xAI)',
             'OpenAI',
             'Rev.ai',
         ]) {

@@ -78,7 +78,7 @@ describe('transcribe orchestration', () => {
         );
     });
 
-    it('PROVIDERS contains the 9 v1 provider ids', () => {
+    it('PROVIDERS contains the expected provider ids', () => {
         const ids = PROVIDERS.map((p) => p.id).sort();
         expect(ids).toEqual([
             'assemblyai',
@@ -90,6 +90,7 @@ describe('transcribe orchestration', () => {
             'groq',
             'openai',
             'revai',
+            'xai',
         ]);
     });
 });

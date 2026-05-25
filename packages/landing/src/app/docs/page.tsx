@@ -94,8 +94,8 @@ function QuickStart() {
                 </li>
                 <li>Open the app and grant microphone access (and on macOS, Accessibility).</li>
                 <li>
-                    Add an API key for any of 9 supported STT providers (OpenAI, Groq, Deepgram,
-                    AssemblyAI, ElevenLabs, Fal, Gladia, Azure OpenAI, Rev.ai).
+                    Add an API key for any of 10 supported STT providers (OpenAI, Groq, Grok (xAI),
+                    Deepgram, AssemblyAI, ElevenLabs, Fal, Gladia, Azure OpenAI, Rev.ai).
                 </li>
                 <li>
                     Pick a hotkey — default <code>⌘⇧Space</code> on macOS, <code>Ctrl+⇧Space</code>{' '}
@@ -265,6 +265,7 @@ function Configure() {
                     Get an API key from your provider:{' '}
                     <a href="https://platform.openai.com/api-keys">OpenAI</a>,{' '}
                     <a href="https://console.groq.com/keys">Groq</a>,{' '}
+                    <a href="https://console.x.ai/">Grok (xAI)</a>,{' '}
                     <a href="https://console.deepgram.com">Deepgram</a>,{' '}
                     <a href="https://www.assemblyai.com/dashboard/signup">AssemblyAI</a>,{' '}
                     <a href="https://elevenlabs.io/app/speech-to-text">ElevenLabs</a>,{' '}
