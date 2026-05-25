@@ -41,7 +41,36 @@ bluemacaw/
 - **Macros: reset macOS permissions:** `/reset-perms` (Plan B)
 - **Add a new STT provider:** `/add-provider <id>` (Plan B)
 - **Audit doc updates needed for current changes:** `/sync-docs`
-- **Cut a release:** `/release` (Plan D)
+- **Cut a release:** see [Releasing](#releasing) below.
+
+## Releasing
+
+The version lives in **five** places that must stay in lockstep: `packages/desktop/package.json`, `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, and `packages/landing/package.json`. The landing UI reads its version from `packages/landing/package.json` (via `src/lib/version.ts`), so no hand-edits there.
+
+Do **not** edit those files by hand. Use the scripts:
+
+```sh
+bun run version:check          # verify all five agree (no arg) or equal a given version
+bun run version:bump 0.2.0     # bump all five to 0.2.0
+```
+
+Full cut (branch + PR per the branching convention, since the release workflow's `verify-versions` gate requires `main` to already match the tag):
+
+```sh
+bun run version:bump 0.2.0
+git checkout -b chore/bump-v0.2.0
+git commit -am "chore: bump version to 0.2.0"
+# open PR, let CI pass, merge to main
+gh release create v0.2.0 --target main --generate-notes   # publishing fires .github/workflows/release.yml
+```
+
+Publishing the GitHub release triggers `release.yml`, which:
+
+1. **`verify-versions`** — fails fast if any of the five manifests ≠ the tag (so a forgotten `version:bump` doesn't burn the build matrix).
+2. Builds + signs the macOS / Linux / Windows bundles and attaches them.
+3. Publishes three JSON assets: `latest.json` (landing download buttons), `update.json` (in-app `tauri-plugin-updater`, minisign-signed), and `changelog.json` (fallback for the landing changelog page when the live GitHub API is unavailable).
+
+The in-app updater endpoint resolves via the `releases/latest/download/update.json` redirect, so the published release must be marked **Latest** (GitHub does this for the newest published non-prerelease). After a release, sanity-check that the live endpoint serves the new version. Full pipeline detail: [`docs/build-and-release.md`](./docs/build-and-release.md).
 
 ## Conventions
 
