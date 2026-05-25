@@ -85,6 +85,7 @@ pub fn run() {
             commands::set_fn_usage_type,
             commands::get_platform_info,
             commands::restart_app,
+            commands::present_overlay,
         ])
         .setup(|app| {
             log::info!("bluemacaw setup: building AppState with TauriClipboard");

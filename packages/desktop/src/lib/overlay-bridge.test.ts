@@ -1,23 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { emitMock, getByLabelMock, fakeOverlay, getOverlayEnabledMock } = vi.hoisted(() => {
-    const fakeOverlay = {
-        show: vi.fn(async () => undefined),
-        hide: vi.fn(async () => undefined),
-    };
-    return {
-        emitMock: vi.fn(async () => undefined),
-        getByLabelMock: vi.fn(async (_label: string) => fakeOverlay as unknown),
-        fakeOverlay,
-        getOverlayEnabledMock: vi.fn(async () => true),
-    };
-});
+const { emitMock, getByLabelMock, fakeOverlay, getOverlayEnabledMock, presentOverlayMock } =
+    vi.hoisted(() => {
+        const fakeOverlay = {
+            show: vi.fn(async () => undefined),
+            hide: vi.fn(async () => undefined),
+        };
+        return {
+            emitMock: vi.fn(async () => undefined),
+            getByLabelMock: vi.fn(async (_label: string) => fakeOverlay as unknown),
+            fakeOverlay,
+            getOverlayEnabledMock: vi.fn(async () => true),
+            // Show now routes through the Rust `present_overlay` command
+            // (vox.presentOverlay) so the pill lands on the active Space.
+            presentOverlayMock: vi.fn(async () => undefined),
+        };
+    });
 
 vi.mock('@tauri-apps/api/event', () => ({ emit: emitMock }));
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
     WebviewWindow: { getByLabel: getByLabelMock },
 }));
 vi.mock('./db', () => ({ getOverlayEnabled: getOverlayEnabledMock }));
+vi.mock('./invoke', () => ({ vox: { presentOverlay: presentOverlayMock } }));
 
 import { EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_TOGGLE } from './markers';
 import {
@@ -40,6 +45,7 @@ beforeEach(() => {
     getByLabelMock.mockReset().mockResolvedValue(fakeOverlay);
     fakeOverlay.show.mockClear();
     fakeOverlay.hide.mockClear();
+    presentOverlayMock.mockReset().mockResolvedValue(undefined);
     getOverlayEnabledMock.mockReset().mockResolvedValue(true);
     __resetPublishSeqForTests();
 });
@@ -50,41 +56,32 @@ describe('publishRecordingState (overlay enabled)', () => {
         expect(emitMock).toHaveBeenCalledWith(RECORDING_STATE_EVENT, { kind: 'idle' });
     });
 
-    it('shows the overlay window on recording', async () => {
+    it('presents the overlay on the active Space on recording', async () => {
         await publishRecordingState({ kind: 'recording', sessionId: 'session-1', startedAt: 0 });
-        expect(getByLabelMock).toHaveBeenCalledWith('overlay');
-        expect(fakeOverlay.show).toHaveBeenCalled();
+        expect(presentOverlayMock).toHaveBeenCalled();
         expect(fakeOverlay.hide).not.toHaveBeenCalled();
     });
 
-    it('shows the overlay window on transcribing', async () => {
+    it('presents the overlay on transcribing', async () => {
         await publishRecordingState({ kind: 'transcribing' });
-        expect(fakeOverlay.show).toHaveBeenCalled();
+        expect(presentOverlayMock).toHaveBeenCalled();
         expect(fakeOverlay.hide).not.toHaveBeenCalled();
     });
 
     it('hides the overlay window on idle', async () => {
         await publishRecordingState({ kind: 'idle' });
         expect(fakeOverlay.hide).toHaveBeenCalled();
-        expect(fakeOverlay.show).not.toHaveBeenCalled();
+        expect(presentOverlayMock).not.toHaveBeenCalled();
     });
 
     it('hides the overlay window on error', async () => {
         await publishRecordingState({ kind: 'error', message: 'boom' });
         expect(fakeOverlay.hide).toHaveBeenCalled();
-        expect(fakeOverlay.show).not.toHaveBeenCalled();
+        expect(presentOverlayMock).not.toHaveBeenCalled();
     });
 
-    it('does not throw if the overlay window is not registered', async () => {
-        getByLabelMock.mockResolvedValueOnce(null);
-        await expect(
-            publishRecordingState({ kind: 'recording', sessionId: 's', startedAt: 0 }),
-        ).resolves.not.toThrow();
-        expect(emitMock).toHaveBeenCalled();
-    });
-
-    it('does not throw if show fails', async () => {
-        fakeOverlay.show.mockRejectedValueOnce(new Error('boom'));
+    it('does not throw if presenting fails', async () => {
+        presentOverlayMock.mockRejectedValueOnce(new Error('boom'));
         await expect(
             publishRecordingState({ kind: 'recording', sessionId: 's', startedAt: 0 }),
         ).resolves.not.toThrow();
@@ -101,15 +98,15 @@ describe('publishRecordingState (overlay disabled)', () => {
         getOverlayEnabledMock.mockResolvedValue(false);
     });
 
-    it('hides the overlay window on recording (no show)', async () => {
+    it('hides the overlay window on recording (no present)', async () => {
         await publishRecordingState({ kind: 'recording', sessionId: 's', startedAt: 0 });
-        expect(fakeOverlay.show).not.toHaveBeenCalled();
+        expect(presentOverlayMock).not.toHaveBeenCalled();
         expect(fakeOverlay.hide).toHaveBeenCalled();
     });
 
-    it('hides the overlay window on transcribing (no show)', async () => {
+    it('hides the overlay window on transcribing (no present)', async () => {
         await publishRecordingState({ kind: 'transcribing' });
-        expect(fakeOverlay.show).not.toHaveBeenCalled();
+        expect(presentOverlayMock).not.toHaveBeenCalled();
         expect(fakeOverlay.hide).toHaveBeenCalled();
     });
 
@@ -120,10 +117,10 @@ describe('publishRecordingState (overlay disabled)', () => {
 });
 
 describe('publishRecordingState (getOverlayEnabled fails)', () => {
-    it('falls back to showing on recording', async () => {
+    it('falls back to presenting on recording', async () => {
         getOverlayEnabledMock.mockRejectedValueOnce(new Error('db boom'));
         await publishRecordingState({ kind: 'recording', sessionId: 's', startedAt: 0 });
-        expect(fakeOverlay.show).toHaveBeenCalled();
+        expect(presentOverlayMock).toHaveBeenCalled();
     });
 });
 
@@ -132,15 +129,11 @@ describe('publishRecordingState (concurrent transitions)', () => {
      * Regression: a fast transcription that runs `recording → transcribing
      * → idle` in quick succession used to leave the overlay pill stuck in
      * "Transcribing…". The `transcribing` publish awaits `getOverlayEnabled`
-     * before calling `overlay.show()`; the `idle` publish skips that await
-     * and calls `overlay.hide()` immediately. Without sequence guarding,
-     * the stale `show()` runs after the fresh `hide()` and re-shows the
-     * pill.
+     * before presenting; the `idle` publish skips that await and hides
+     * immediately. Without sequence guarding, the stale present runs after
+     * the fresh hide and re-shows the pill.
      */
-    it('drops the stale transcribing show() when an idle hide() raced ahead', async () => {
-        // Make getOverlayEnabled park until we let it through. Only the
-        // 'transcribing' call hits it; 'idle' returns false synchronously
-        // from shouldShowOverlay.
+    it('drops the stale transcribing present when an idle hide raced ahead', async () => {
         let releaseSlowGet: (v: boolean) => void = () => {};
         getOverlayEnabledMock.mockImplementationOnce(
             () =>
@@ -149,30 +142,20 @@ describe('publishRecordingState (concurrent transitions)', () => {
                 }),
         );
 
-        // Kick off the 'transcribing' publish; do not await yet.
         const transcribingPromise = publishRecordingState({ kind: 'transcribing' });
-        // Yield enough microtasks for the emit + getByLabel awaits to clear
-        // and the call to land on `await shouldShowOverlay`.
         await Promise.resolve();
         await Promise.resolve();
         await Promise.resolve();
 
-        // Now kick off (and await) the 'idle' publish. It does not await
-        // getOverlayEnabled, so it can complete hide() before the parked
-        // 'transcribing' call resumes.
         await publishRecordingState({ kind: 'idle' });
 
         expect(fakeOverlay.hide).toHaveBeenCalledTimes(1);
-        expect(fakeOverlay.show).not.toHaveBeenCalled();
+        expect(presentOverlayMock).not.toHaveBeenCalled();
 
-        // Release the parked getOverlayEnabled so the 'transcribing' call
-        // can finish. With the sequence guard in place, it should detect
-        // that a newer publish ran and skip its overlay.show() entirely.
         releaseSlowGet(true);
         await transcribingPromise;
 
-        expect(fakeOverlay.show).not.toHaveBeenCalled();
-        // The 'idle' hide is still the only OS-level call.
+        expect(presentOverlayMock).not.toHaveBeenCalled();
         expect(fakeOverlay.hide).toHaveBeenCalledTimes(1);
     });
 });
@@ -195,14 +178,14 @@ describe('hideOverlayWindow', () => {
 });
 
 describe('enterOverlayPositionSetup', () => {
-    it('emits setup-on and shows the overlay', async () => {
+    it('emits setup-on and presents the overlay', async () => {
         await enterOverlayPositionSetup();
         expect(emitMock).toHaveBeenCalledWith(OVERLAY_POSITION_SETUP_ON_EVENT, null);
-        expect(fakeOverlay.show).toHaveBeenCalled();
+        expect(presentOverlayMock).toHaveBeenCalled();
     });
 
-    it('does not throw if show fails', async () => {
-        fakeOverlay.show.mockRejectedValueOnce(new Error('boom'));
+    it('does not throw if presenting fails', async () => {
+        presentOverlayMock.mockRejectedValueOnce(new Error('boom'));
         await expect(enterOverlayPositionSetup()).resolves.not.toThrow();
     });
 });

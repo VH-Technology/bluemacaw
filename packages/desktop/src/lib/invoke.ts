@@ -137,6 +137,13 @@ export const vox = {
      * process.
      */
     restartApp: () => invoke<void>('restart_app'),
+
+    /**
+     * Show the recording overlay on the currently-active macOS Space. Used
+     * instead of a bare `window.show()` so the pill follows the user across
+     * Spaces instead of staying pinned to the one it first appeared on.
+     */
+    presentOverlay: () => invoke<void>('present_overlay'),
 };
 
 /**

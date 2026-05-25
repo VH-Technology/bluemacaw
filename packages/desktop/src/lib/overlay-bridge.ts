@@ -2,6 +2,7 @@ import { emit } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { currentMonitor } from '@tauri-apps/api/window';
 import { getOverlayEnabled, setOverlayPosition } from './db';
+import { vox } from './invoke';
 import { EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_TOGGLE } from './markers';
 import type { RecordingState } from './recording-controller';
 
@@ -87,7 +88,9 @@ export async function publishRecordingState(state: RecordingState): Promise<void
 
     try {
         if (show) {
-            await overlay.show();
+            // Present via the Rust command so the pill lands on the active
+            // macOS Space instead of staying pinned to its original one.
+            await vox.presentOverlay();
         } else {
             await overlay.hide();
         }
@@ -130,8 +133,7 @@ export async function enterOverlayPositionSetup(): Promise<void> {
         console.warn('overlay-bridge: enterOverlayPositionSetup emit failed', e);
     }
     try {
-        const overlay = await WebviewWindow.getByLabel(OVERLAY_LABEL);
-        await overlay?.show();
+        await vox.presentOverlay();
     } catch (e) {
         console.warn('overlay-bridge: enterOverlayPositionSetup show failed', e);
     }

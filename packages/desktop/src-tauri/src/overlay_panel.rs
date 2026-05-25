@@ -117,3 +117,31 @@ pub fn make_overlay_nonactivating<R: Runtime>(
     log::info!("overlay_panel: overlay converted to non-activating NSPanel");
     Ok(())
 }
+
+/// Bring the overlay panel onto the **currently-active** Space and re-assert
+/// its all-Spaces collection behavior.
+///
+/// The one-time setup in [`make_overlay_nonactivating`] sets
+/// `CanJoinAllSpaces`, but in practice that doesn't reliably keep the panel
+/// on whatever Space the user is on across hide/show cycles — it gets pinned
+/// to the Space it first appeared on. Calling this on every show fixes that:
+/// we re-apply the collection behavior and `orderFrontRegardless`, which
+/// surfaces the panel on the active Space *without* activating bluemacaw
+/// (so focus stays in whatever app the user is dictating into).
+pub fn present_on_active_space<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
+    let raw_ns_window = window.ns_window()?;
+    if raw_ns_window.is_null() {
+        return Ok(());
+    }
+    let any_obj: *mut AnyObject = raw_ns_window.cast();
+    unsafe {
+        let behavior = NSWindowCollectionBehavior::CanJoinAllSpaces
+            | NSWindowCollectionBehavior::Stationary
+            | NSWindowCollectionBehavior::FullScreenAuxiliary;
+        let _: () = msg_send![any_obj, setCollectionBehavior: behavior];
+        // orderFrontRegardless shows the panel on the active Space without
+        // making bluemacaw the active app.
+        let _: () = msg_send![any_obj, orderFrontRegardless];
+    }
+    Ok(())
+}

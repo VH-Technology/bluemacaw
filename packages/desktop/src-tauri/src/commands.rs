@@ -13,7 +13,7 @@ use crate::shortcut::parse::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use uuid::Uuid;
 
@@ -116,6 +116,25 @@ pub fn get_platform_info() -> PlatformInfo {
 pub fn restart_app(app: AppHandle) {
     log::info!("restart_app: relaunching bluemacaw");
     app.restart();
+}
+
+/// Show the recording overlay on the **active** Space. Called every time the
+/// pill is presented (recording/transcribing/position-setup) instead of a
+/// bare `window.show()`, because the overlay otherwise stays pinned to the
+/// Space it first appeared on. On macOS this re-asserts the panel's
+/// all-Spaces collection behavior and `orderFrontRegardless`; elsewhere it's
+/// a plain show.
+#[tauri::command]
+pub fn present_overlay(app: AppHandle) -> Result<(), String> {
+    let Some(overlay) = app.get_webview_window("overlay") else {
+        // Overlay window not registered (shouldn't happen in the packaged
+        // app); nothing to present.
+        return Ok(());
+    };
+    overlay.show().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    crate::overlay_panel::present_on_active_space(&overlay).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
