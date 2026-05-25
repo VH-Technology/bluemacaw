@@ -19,6 +19,10 @@
     "global-shortcut:allow-is-registered",
     "clipboard-manager:allow-write-text",
     "clipboard-manager:allow-read-text",
+    {
+      "identifier": "http:default",
+      "allow": [{ "url": "https://api.deepgram.com/*" }]
+    },
     "sql:default",
     "sql:allow-execute",
     "sql:allow-select",

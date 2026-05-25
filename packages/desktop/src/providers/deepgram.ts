@@ -1,4 +1,5 @@
 import { createDeepgram } from '@ai-sdk/deepgram';
+import { httpFetch } from '../lib/http';
 import type { Model, ProviderConfig } from './types';
 
 const DEFAULT_MODELS: Model[] = [
@@ -24,7 +25,11 @@ export const deepgramConfig: ProviderConfig = {
     docsUrl: 'https://developers.deepgram.com/docs/pre-recorded-audio',
     apiKeyHelpUrl: 'https://console.deepgram.com/',
     pricingDocsUrl: 'https://deepgram.com/pricing',
-    makeModel: (modelId, apiKey) => createDeepgram({ apiKey }).transcription(modelId),
+    // Routed through Tauri's HTTP plugin (httpFetch): Deepgram's REST API
+    // doesn't send CORS headers for the webview origin, so a browser fetch
+    // dies at the preflight. The Rust-side request has no such restriction.
+    makeModel: (modelId, apiKey) =>
+        createDeepgram({ apiKey, fetch: httpFetch }).transcription(modelId),
     listModels: null,
     defaultModels: DEFAULT_MODELS,
     pricing: {
