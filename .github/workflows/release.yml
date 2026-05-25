@@ -311,6 +311,21 @@ jobs:
       - name: Attach manifest to GitHub release
         run: gh release upload "$TAG" latest.json --clobber --repo "$GITHUB_REPOSITORY"
 
+      # Snapshot the full release list as changelog.json and attach it to the
+      # release. The landing's changelog page fetches the live GitHub API
+      # first, then falls back to this asset (via the
+      # releases/latest/download/ CDN redirect, which isn't subject to the
+      # 60 req/hr unauthenticated API rate limit). Shape matches the
+      # `Release` type in packages/landing/src/lib/github.ts.
+      - name: Build + attach changelog.json
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '[.[] | select(.draft | not) | {tag: .tag_name, name: .name, body: .body, publishedAt: .published_at, htmlUrl: .html_url}]' \
+            > changelog.json
+          echo "changelog.json: $(jq 'length' changelog.json) releases"
+          gh release upload "$TAG" changelog.json --clobber --repo "$GITHUB_REPOSITORY"
+
   # Generates the Tauri updater manifest (update.json) — distinct from
   # latest.json above:
   #   - latest.json     → consumed by the landing page; lists installer URLs.

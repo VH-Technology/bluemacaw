@@ -19,16 +19,19 @@ The Plan D rewrite of this doc will cover:
 
 bluemacaw ships with `tauri-plugin-updater`. Every release publishes a Tauri-shaped `update.json` manifest as a GitHub release asset; the running app polls it on startup, downloads the appropriate per-platform bundle if a newer version is available, verifies it against the embedded minisign public key, and offers an in-app "Install & restart" banner.
 
-### Two manifests, two consumers
+### Three JSON assets, three consumers
 
-The release workflow publishes **two** JSON files that look superficially similar but serve different consumers:
+The release workflow publishes **three** JSON files that look superficially similar but serve different consumers:
 
-| File          | Consumer                      | Schema                                                                     |
-| ------------- | ----------------------------- | -------------------------------------------------------------------------- |
-| `latest.json` | Landing page download buttons | `{ version, mac, win, linux }` — bare URLs to installers.                  |
-| `update.json` | `tauri-plugin-updater` in-app | `{ version, pub_date, notes, platforms.<key>.{signature, url} }`.          |
+| File             | Consumer                          | Schema                                                                     |
+| ---------------- | --------------------------------- | -------------------------------------------------------------------------- |
+| `latest.json`    | Landing page download buttons     | `{ version, mac, win, linux }` — bare URLs to installers.                  |
+| `update.json`    | `tauri-plugin-updater` in-app     | `{ version, pub_date, notes, platforms.<key>.{signature, url} }`.          |
+| `changelog.json` | Landing changelog page (fallback) | `Release[]` — `{ tag, name, body, publishedAt, htmlUrl }` per release.     |
 
-Both are emitted from `.github/workflows/release.yml`. Keep them separate — fusing them would couple the landing page deploy to the updater contract.
+All three are emitted from `.github/workflows/release.yml`. Keep them separate — fusing them would couple the landing page deploy to the updater contract.
+
+`changelog.json` is a **fallback** for the changelog page. That page (`packages/landing/src/app/changelog/page.tsx` → `lib/github.ts`) fetches the live GitHub Releases API at build time; if that fails (rate limit on a shared CI-runner IP, private repo, network), `fetchReleases` falls back to `https://github.com/<repo>/releases/latest/download/changelog.json`. That CDN redirect isn't subject to the 60 req/hr unauthenticated API limit, so it resolves when the JSON API 403s. Generated in the `publish-manifest` job via `gh api .../releases`.
 
 ### Key management
 

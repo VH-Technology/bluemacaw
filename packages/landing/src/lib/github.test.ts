@@ -29,13 +29,53 @@ describe('fetchReleases', () => {
         expect(releases[0]?.tag).toBe('v1.0.0');
     });
 
-    it('returns empty array when fetch fails', async () => {
+    it('returns empty array when both the API and the fallback asset fail', async () => {
         vi.stubGlobal(
             'fetch',
             vi.fn(async () => new Response('not found', { status: 404 })) as typeof fetch,
         );
         const releases = await fetchReleases('programow/ada');
         expect(releases).toEqual([]);
+    });
+
+    it('falls back to the changelog.json release asset when the API fails', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(async (url: string) => {
+                if (url.startsWith('https://api.github.com/')) {
+                    // API unavailable (404/private/rate-limited).
+                    return new Response('nope', { status: 404 });
+                }
+                if (url.includes('releases/latest/download/changelog.json')) {
+                    return new Response(
+                        JSON.stringify([
+                            {
+                                tag: 'v2.0.0',
+                                name: 'v2.0.0',
+                                body: 'from the pipeline fallback',
+                                publishedAt: '2026-03-01T00:00:00Z',
+                                htmlUrl: 'https://github.com/x/y/releases/tag/v2.0.0',
+                            },
+                        ]),
+                        { status: 200 },
+                    );
+                }
+                return new Response('not found', { status: 404 });
+            }) as typeof fetch,
+        );
+        const releases = await fetchReleases('programow/ada');
+        expect(releases).toHaveLength(1);
+        expect(releases[0]?.tag).toBe('v2.0.0');
+        expect(releases[0]?.body).toBe('from the pipeline fallback');
+    });
+
+    it('does not hit the fallback when the API succeeds (even with zero releases)', async () => {
+        const spy = vi.fn(async () => new Response('[]', { status: 200 }));
+        vi.stubGlobal('fetch', spy as unknown as typeof fetch);
+        const releases = await fetchReleases('programow/ada');
+        expect(releases).toEqual([]);
+        // Only the API call — no fallback fetch.
+        expect(spy).toHaveBeenCalledTimes(1);
     });
 
     it('sends an Authorization header when GITHUB_TOKEN is set', async () => {
