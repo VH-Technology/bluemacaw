@@ -18,12 +18,6 @@ export type ResolvedTheme = 'light' | 'dark';
 export const PREFERENCE_KEY = 'bluemacaw:theme-preference';
 export const RESOLVED_KEY = 'bluemacaw:resolved-theme';
 
-const CYCLE: Record<Theme, Theme> = {
-    light: 'dark',
-    dark: 'system',
-    system: 'light',
-};
-
 function readPreference(): Theme {
     if (typeof window === 'undefined') return 'system';
     const saved = window.localStorage.getItem(PREFERENCE_KEY);
@@ -91,17 +85,23 @@ export function ThemeToggle({ className }: { className?: string }) {
         return () => mql.removeEventListener('change', onChange);
     }, [mounted, preference]);
 
-    const cycle = useCallback(() => {
-        setPreference((current) => {
-            const next = CYCLE[current];
+    // Flip the *visible* theme on every click. Cycling through 'system'
+    // (the old behavior) produced no-op clicks whenever the next state
+    // resolved to the same theme already shown (e.g. 'system' when the OS
+    // matches) — which is why it sometimes took two clicks to switch. A
+    // straight dark⇄light flip guarantees every click changes what you see.
+    // The click sets an explicit preference; 'system' remains only as the
+    // untouched default / a saved value.
+    const toggleTheme = useCallback(() => {
+        setResolved((current) => {
+            const next: ResolvedTheme = current === 'dark' ? 'light' : 'dark';
+            setPreference(next);
             try {
                 window.localStorage.setItem(PREFERENCE_KEY, next);
             } catch {
                 // ignore
             }
-            const resolvedNext = resolveTheme(next);
-            setResolved(resolvedNext);
-            applyResolvedTheme(resolvedNext);
+            applyResolvedTheme(next);
             return next;
         });
     }, []);
@@ -111,7 +111,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     return (
         <button
             type="button"
-            onClick={cycle}
+            onClick={toggleTheme}
             aria-label={mounted ? `Theme: ${label}. Click to switch.` : 'Toggle theme'}
             title={label}
             data-testid="theme-toggle"

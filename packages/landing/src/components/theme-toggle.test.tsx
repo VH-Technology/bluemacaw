@@ -70,25 +70,33 @@ describe('ThemeToggle', () => {
         expect(document.documentElement.classList.contains('dark')).toBe(true);
     });
 
-    it('cycles preference: system → light → dark → system on consecutive clicks', () => {
+    it('flips the visible theme on every click (no no-op system step)', () => {
+        // OS reports light (stubMatchMedia(false)), so the default resolves to
+        // light. Each click must change what the user sees.
         render(<ThemeToggle />);
         const button = screen.getByTestId('theme-toggle');
+        expect(button.dataset.resolved).toBe('light');
 
-        fireEvent.click(button);
-        expect(button.dataset.preference).toBe('light');
-        expect(document.documentElement.classList.contains('dark')).toBe(false);
-        expect(window.localStorage.getItem(PREFERENCE_KEY)).toBe('light');
-        expect(window.localStorage.getItem(RESOLVED_KEY)).toBe('light');
-
+        // Click 1: light → dark (single click flips, even from the system default).
         fireEvent.click(button);
         expect(button.dataset.preference).toBe('dark');
+        expect(button.dataset.resolved).toBe('dark');
         expect(document.documentElement.classList.contains('dark')).toBe(true);
         expect(window.localStorage.getItem(PREFERENCE_KEY)).toBe('dark');
         expect(window.localStorage.getItem(RESOLVED_KEY)).toBe('dark');
 
+        // Click 2: dark → light.
         fireEvent.click(button);
-        expect(button.dataset.preference).toBe('system');
-        expect(window.localStorage.getItem(PREFERENCE_KEY)).toBe('system');
+        expect(button.dataset.preference).toBe('light');
+        expect(button.dataset.resolved).toBe('light');
+        expect(document.documentElement.classList.contains('dark')).toBe(false);
+        expect(window.localStorage.getItem(PREFERENCE_KEY)).toBe('light');
+        expect(window.localStorage.getItem(RESOLVED_KEY)).toBe('light');
+
+        // Click 3: light → dark again (always flips).
+        fireEvent.click(button);
+        expect(button.dataset.resolved).toBe('dark');
+        expect(document.documentElement.classList.contains('dark')).toBe(true);
     });
 
     it("reacts to live media-query changes only while preference is 'system'", () => {
