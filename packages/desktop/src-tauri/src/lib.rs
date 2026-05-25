@@ -117,31 +117,37 @@ pub fn run() {
                 }
             }
 
-            // Tray-resident behaviour: closing the main window hides it and
-            // (on macOS) hides the Dock icon, instead of quitting the app.
-            // Re-open via the tray "Open bluemacaw" item, which reverses this.
+            // Closing the main window hides it instead of quitting — the app
+            // keeps running (tray + global hotkey stay live). We deliberately
+            // keep the activation policy at `Regular` so the Dock icon stays
+            // put; clicking it re-opens the window via the `Reopen` handler
+            // below, just like the tray's "Open bluemacaw". Quitting (tray
+            // Quit / Cmd+Q) still exits the process.
             if let Some(main_window) = app.get_webview_window("main") {
                 let main_window_for_close = main_window.clone();
-                let app_handle = app.handle().clone();
                 main_window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
                         let _ = main_window_for_close.hide();
-                        #[cfg(target_os = "macos")]
-                        {
-                            let _ = app_handle
-                                .set_activation_policy(tauri::ActivationPolicy::Accessory);
-                        }
-                        // Reference app_handle on non-macOS too so the closure
-                        // doesn't drop it as unused.
-                        #[cfg(not(target_os = "macos"))]
-                        let _ = &app_handle;
                     }
                 });
             }
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running bluemacaw");
+        .build(tauri::generate_context!())
+        .expect("error while building bluemacaw")
+        .run(|_app_handle, _event| {
+            // macOS: clicking the Dock icon while the window is hidden fires
+            // a Reopen event (the app stays Dock-resident because we never
+            // drop to Accessory). Re-show + focus the main window, mirroring
+            // the tray's "Open bluemacaw".
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = _event {
+                if let Some(window) = _app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        });
 }
