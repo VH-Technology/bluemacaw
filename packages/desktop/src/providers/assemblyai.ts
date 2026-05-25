@@ -1,4 +1,5 @@
 import { createAssemblyAI } from '@ai-sdk/assemblyai';
+import { httpFetch } from '../lib/http';
 import type { Model, ProviderConfig } from './types';
 
 const DEFAULT_MODELS: Model[] = [
@@ -67,7 +68,10 @@ const rewritingFetch: typeof globalThis.fetch = async (input, init) => {
             // body wasn't JSON — leave it alone
         }
     }
-    return globalThis.fetch(input, outInit);
+    // Routed through Tauri's HTTP plugin (httpFetch) to bypass webview CORS,
+    // matching Deepgram/Rev.ai. httpFetch falls back to the global fetch
+    // outside a Tauri runtime (unit tests), so MSW still intercepts.
+    return httpFetch(input, outInit);
 };
 
 export const assemblyaiConfig: ProviderConfig = {

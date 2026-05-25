@@ -21,7 +21,17 @@
     "clipboard-manager:allow-read-text",
     {
       "identifier": "http:default",
-      "allow": [{ "url": "https://api.deepgram.com/*" }, { "url": "https://api.rev.ai/*" }]
+      "allow": [
+        { "url": "https://api.deepgram.com/*" },
+        { "url": "https://api.rev.ai/*" },
+        { "url": "https://api.assemblyai.com/*" },
+        { "url": "https://api.elevenlabs.io/*" },
+        { "url": "https://api.gladia.io/*" },
+        { "url": "https://*.openai.azure.com/*" },
+        { "url": "https://fal.run/*" },
+        { "url": "https://*.fal.run/*" },
+        { "url": "https://rest.alpha.fal.ai/*" }
+      ]
     },
     "sql:default",
     "sql:allow-execute",

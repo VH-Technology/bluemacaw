@@ -1,4 +1,5 @@
 import { createFal } from '@ai-sdk/fal';
+import { httpFetch } from '../lib/http';
 import type { Model, ProviderConfig } from './types';
 
 const DEFAULT_MODELS: Model[] = [
@@ -23,7 +24,9 @@ export const falConfig: ProviderConfig = {
     docsUrl: 'https://fal.ai/models/fal-ai/whisper',
     apiKeyHelpUrl: 'https://fal.ai/dashboard/keys',
     pricingDocsUrl: 'https://fal.ai/pricing',
-    makeModel: (modelId, apiKey) => createFal({ apiKey }).transcription(modelId),
+    // Routed through Tauri's HTTP plugin (httpFetch) to bypass webview CORS,
+    // matching Deepgram/Rev.ai.
+    makeModel: (modelId, apiKey) => createFal({ apiKey, fetch: httpFetch }).transcription(modelId),
     listModels: null,
     defaultModels: DEFAULT_MODELS,
     pricing: {

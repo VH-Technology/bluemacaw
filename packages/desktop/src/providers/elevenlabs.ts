@@ -1,4 +1,5 @@
 import { createElevenLabs } from '@ai-sdk/elevenlabs';
+import { httpFetch } from '../lib/http';
 import { makeScribeRealtimeModel } from './elevenlabs-realtime';
 import type { Model, ProviderConfig } from './types';
 
@@ -33,7 +34,11 @@ export const elevenlabsConfig: ProviderConfig = {
     docsUrl: 'https://elevenlabs.io/docs/capabilities/speech-to-text',
     apiKeyHelpUrl: 'https://elevenlabs.io/app/settings/api-keys',
     pricingDocsUrl: 'https://elevenlabs.io/pricing',
-    makeModel: (modelId, apiKey) => createElevenLabs({ apiKey }).transcription(modelId),
+    // Routed through Tauri's HTTP plugin (httpFetch) to bypass webview CORS
+    // on the batch /v1/speech-to-text endpoint, matching Deepgram/Rev.ai.
+    // (The realtime path is a WebSocket and is unaffected.)
+    makeModel: (modelId, apiKey) =>
+        createElevenLabs({ apiKey, fetch: httpFetch }).transcription(modelId),
     makeRealtimeModel: (modelId, apiKey) => makeScribeRealtimeModel(modelId, apiKey),
     listModels: async (apiKey) => {
         const res = await fetch('https://api.elevenlabs.io/v1/models', {
