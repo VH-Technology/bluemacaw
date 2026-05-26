@@ -1,6 +1,6 @@
 [package]
 name = "bluemacaw"
-version = "0.1.9"
+version = "0.1.10"
 description = "bluemacaw desktop"
 authors = ["Programow"]
 edition = "2021"
