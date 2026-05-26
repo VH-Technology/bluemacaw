@@ -9,6 +9,7 @@ pub mod paste;
 pub mod platform;
 pub mod secrets;
 pub mod shortcut;
+pub mod system_volume;
 pub mod tray;
 
 use std::sync::{Arc, Mutex};
@@ -86,6 +87,8 @@ pub fn run() {
             commands::get_platform_info,
             commands::restart_app,
             commands::present_overlay,
+            commands::duck_system_volume,
+            commands::restore_system_volume,
         ])
         .setup(|app| {
             log::info!("bluemacaw setup: building AppState with TauriClipboard");
@@ -98,6 +101,7 @@ pub fn run() {
                 paster: Arc::new(EnigoPaster::new(clipboard)),
                 current_hotkey: Mutex::new(None),
                 current_cancel_hotkey: Mutex::new(None),
+                saved_volume: Mutex::new(None),
                 #[cfg(target_os = "macos")]
                 fn_tap: Mutex::new(None),
                 #[cfg(target_os = "macos")]

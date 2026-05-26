@@ -44,6 +44,10 @@ pub struct AppState {
     /// the Tauri global-shortcut plugin tracks each `Shortcut` handle
     /// separately, so two registrations coexist without conflict.
     pub current_cancel_hotkey: Mutex<Option<Shortcut>>,
+    /// System output volume captured by `duck_system_volume` when a recording
+    /// starts, so `restore_system_volume` can put it back exactly. `None`
+    /// when not currently ducked.
+    pub saved_volume: Mutex<Option<f32>>,
     /// macOS Fn-key tap. Lazily initialized the first time the user picks
     /// `"Fn"` as their hotkey. Once running it survives the app lifetime
     /// (CFRunLoop has no clean stop in v1); switching back to a standard
@@ -116,6 +120,52 @@ pub fn get_platform_info() -> PlatformInfo {
 pub fn restart_app(app: AppHandle) {
     log::info!("restart_app: relaunching bluemacaw");
     app.restart();
+}
+
+/// Fraction of the current output volume to keep while recording — i.e.
+/// "duck by 70%" leaves 30%.
+const DUCK_TARGET_FRACTION: f32 = 0.30;
+
+/// Lower the system output volume while a recording is in progress so
+/// background audio doesn't bleed into the mic. Saves the current level
+/// first (in `AppState::saved_volume`) so [`restore_system_volume`] can put
+/// it back exactly. No-ops if already ducked or if the OS volume can't be
+/// read — it must never break a recording.
+#[tauri::command]
+pub fn duck_system_volume(state: State<'_, AppState>) {
+    // Already ducked? Re-reading now would capture the ducked level as the
+    // "original", so bail.
+    match state.saved_volume.lock() {
+        Ok(g) if g.is_some() => return,
+        Ok(_) => {}
+        Err(_) => return,
+    }
+    let Some(current) = crate::system_volume::get_output_volume() else {
+        return;
+    };
+    if let Ok(mut saved) = state.saved_volume.lock() {
+        if saved.is_some() {
+            return; // raced with another duck; leave the existing original
+        }
+        *saved = Some(current);
+    } else {
+        return;
+    }
+    crate::system_volume::set_output_volume(current * DUCK_TARGET_FRACTION);
+}
+
+/// Restore the output volume saved by [`duck_system_volume`], then clear it.
+/// No-op if nothing was ducked. Called when a recording finishes or is
+/// cancelled.
+#[tauri::command]
+pub fn restore_system_volume(state: State<'_, AppState>) {
+    let original = match state.saved_volume.lock() {
+        Ok(mut g) => g.take(),
+        Err(_) => return,
+    };
+    if let Some(level) = original {
+        crate::system_volume::set_output_volume(level);
+    }
 }
 
 /// Show the recording overlay on the **active** Space. Called every time the

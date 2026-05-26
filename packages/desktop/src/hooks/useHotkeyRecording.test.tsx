@@ -50,6 +50,8 @@ function makeDeps(): RecordingDeps {
             pasteText: vi.fn(async () => undefined),
             checkMicrophonePermission: vi.fn(async () => 'Granted' as const),
             requestMicrophonePermission: vi.fn(async () => 'Granted' as const),
+            duckSystemVolume: vi.fn(async () => undefined),
+            restoreSystemVolume: vi.fn(async () => undefined),
         },
         transcribe: vi.fn(async () => 'hi'),
         // Provide DB-backed deps explicitly: mocking `@/lib/db` at the

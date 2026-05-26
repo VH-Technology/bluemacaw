@@ -144,6 +144,15 @@ export const vox = {
      * Spaces instead of staying pinned to the one it first appeared on.
      */
     presentOverlay: () => invoke<void>('present_overlay'),
+
+    /**
+     * Lower the system output volume while recording (saving the current
+     * level), so background audio doesn't bleed into the mic. Best-effort
+     * on the Rust side — no-ops if the OS volume can't be read.
+     */
+    duckSystemVolume: () => invoke<void>('duck_system_volume'),
+    /** Restore the volume saved by `duckSystemVolume` (exactly). */
+    restoreSystemVolume: () => invoke<void>('restore_system_volume'),
 };
 
 /**

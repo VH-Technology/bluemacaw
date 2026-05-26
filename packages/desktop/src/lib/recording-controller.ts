@@ -34,6 +34,8 @@ export interface RecordingDeps {
         | 'pasteText'
         | 'checkMicrophonePermission'
         | 'requestMicrophonePermission'
+        | 'duckSystemVolume'
+        | 'restoreSystemVolume'
     >;
     transcribe: typeof transcribeFn;
     /** Persist a finished transcription. Defaults to db.saveTranscription. */
@@ -55,6 +57,15 @@ export type SetState = (next: RecordingState) => void;
 
 function errMessage(e: unknown): string {
     return e instanceof Error ? e.message : String(e);
+}
+
+// Fire-and-forget volume ducking. Never awaited — a slow/failed OS volume
+// call must not delay capture start/stop or surface as a recording error.
+function duckVolume(deps: RecordingDeps): void {
+    void deps.vox.duckSystemVolume().catch(() => {});
+}
+function restoreVolume(deps: RecordingDeps): void {
+    void deps.vox.restoreSystemVolume().catch(() => {});
 }
 
 /**
@@ -108,10 +119,12 @@ async function startFromIdle(deps: RecordingDeps, setState: SetState): Promise<v
                 startedAt: Date.now(),
                 realtime,
             });
+            duckVolume(deps);
             return;
         }
         const sessionId = await deps.vox.startRecording();
         setState({ kind: 'recording', sessionId, startedAt: Date.now() });
+        duckVolume(deps);
     } catch (e) {
         setState({ kind: 'error', message: errMessage(e) });
     }
@@ -133,6 +146,9 @@ async function stopAndTranscribe(
     deps: RecordingDeps,
     setState: SetState,
 ): Promise<void> {
+    // Restore the volume the moment the user finishes — transcription/paste
+    // can run at normal volume.
+    restoreVolume(deps);
     try {
         const durationMs = Math.max(0, Date.now() - state.startedAt);
         let text: string;
@@ -244,6 +260,8 @@ export async function cancel(
     setState: SetState,
 ): Promise<void> {
     if (state.kind !== 'recording') return;
+    // Cancelling ends the recording too — put the volume back.
+    restoreVolume(deps);
     if (state.realtime) {
         // Realtime: drop the WS session and unsubscribe BEFORE we ask Rust
         // to stop, so the few chunks still in flight don't trigger a
