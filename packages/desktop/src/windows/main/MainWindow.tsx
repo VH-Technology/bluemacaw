@@ -66,6 +66,9 @@ export function MainWindowInner() {
     const [historyEntries, setHistoryEntries] = useState<readonly HistoryEntry[]>([]);
     const [refreshKey, setRefreshKey] = useState(0);
     const [undoToast, setUndoToast] = useState<UndoToastState>({ open: false, rowId: null });
+    // Controlled so the update banner can be shown on the Dashboard only —
+    // the Settings tab surfaces updates via its own Install & restart button.
+    const [activeTab, setActiveTab] = useState('dashboard');
     const [appVersion, setAppVersion] = useState<string | null>(null);
 
     // Silent background check once on mount. Failures here are non-fatal —
@@ -144,7 +147,9 @@ export function MainWindowInner() {
 
     return (
         <main className="min-h-screen bg-bg p-6 text-fg">
-            <UpdateBanner status={updaterStatus} onInstall={() => void installAndRestart()} />
+            {activeTab === 'dashboard' && (
+                <UpdateBanner status={updaterStatus} onInstall={() => void installAndRestart()} />
+            )}
             <header className="mb-6 flex flex-row items-start justify-between gap-4">
                 <div className="flex flex-row items-center gap-3">
                     <img src="/logo.svg" alt="" className="h-12 w-12" />
@@ -157,7 +162,7 @@ export function MainWindowInner() {
                 </div>
                 <RecordingStatusPill state={recordingState} />
             </header>
-            <Tabs defaultValue="dashboard" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList>
                     <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                     <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -198,6 +203,7 @@ export function MainWindowInner() {
                     <SettingsUpdates
                         status={updaterStatus}
                         onCheckNow={() => void checkForUpdates()}
+                        onInstall={() => void installAndRestart()}
                     />
                     {appVersion && (
                         <p
