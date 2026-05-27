@@ -27,3 +27,12 @@ export function modelPriceLabel(providerId: string, modelId: string): string | n
     if (!entry) return null;
     return formatPricePerMin(entry.perMinuteUSD);
 }
+
+/**
+ * Returns the raw per-minute USD rate for a provider/model pair, or null when
+ * the provider is unknown or the model has no pricing entry. Used by the cost
+ * forecast to turn recorded audio minutes into a dollar estimate.
+ */
+export function modelPricePerMinute(providerId: string, modelId: string): number | null {
+    return PROVIDERS.find((p) => p.id === providerId)?.pricing[modelId]?.perMinuteUSD ?? null;
+}

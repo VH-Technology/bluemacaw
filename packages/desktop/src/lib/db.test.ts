@@ -1,3 +1,4 @@
+import { modelPricePerMinute } from '@/providers/util';
 import * as core from '@tauri-apps/api/core';
 import Database from '@tauri-apps/plugin-sql';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -786,6 +787,58 @@ describe('db.getHistoryStats', () => {
         expect(stats.streakDays).toBe(0);
         expect(stats.timeSavedMinutes).toBe(0);
         expect(stats.topProvider).toBeNull();
+        expect(stats.estCostUSD).toBe(0);
+        expect(stats.projectedMonthlyUSD).toBeNull();
+    });
+
+    it('estimates cost from audio minutes × the provider/model per-minute rate', async () => {
+        const now = Date.now();
+        const price = modelPricePerMinute('openai', 'whisper-1');
+        if (price == null) throw new Error('precondition: openai/whisper-1 must have pricing');
+        // 2 minutes of audio, recorded today.
+        await insertTranscription({
+            providerId: 'openai',
+            modelId: 'whisper-1',
+            durationMs: 120_000,
+            createdAt: now,
+        });
+        const stats = await getHistoryStats('all');
+        expect(stats.estCostUSD).toBeCloseTo(2 * price, 6);
+        // Span collapses to a single day → monthly projection is 30× the day's spend.
+        expect(stats.projectedMonthlyUSD ?? 0).toBeCloseTo(2 * price * 30, 5);
+    });
+
+    it('projects monthly cost from the daily spend rate over the active span', async () => {
+        const now = Date.now();
+        const price = modelPricePerMinute('openai', 'whisper-1');
+        if (price == null) throw new Error('precondition: openai/whisper-1 must have pricing');
+        // 1 min today + 1 min nine days ago → span = 9 days, est = 2×price.
+        await insertTranscription({
+            providerId: 'openai',
+            modelId: 'whisper-1',
+            durationMs: 60_000,
+            createdAt: now,
+        });
+        await insertTranscription({
+            providerId: 'openai',
+            modelId: 'whisper-1',
+            durationMs: 60_000,
+            createdAt: now - 9 * DAY_MS,
+        });
+        const stats = await getHistoryStats('all');
+        expect(stats.estCostUSD).toBeCloseTo(2 * price, 6);
+        expect(stats.projectedMonthlyUSD ?? 0).toBeCloseTo(((2 * price) / 9) * 30, 4);
+    });
+
+    it('treats an unpriced provider/model as zero cost and yields no projection', async () => {
+        await insertTranscription({
+            providerId: 'mystery-co',
+            modelId: 'nope',
+            durationMs: 60_000,
+        });
+        const stats = await getHistoryStats('all');
+        expect(stats.estCostUSD).toBe(0);
+        expect(stats.projectedMonthlyUSD).toBeNull();
     });
 
     it('streakDays counts the consecutive run ending today, NOT the count of distinct days', async () => {

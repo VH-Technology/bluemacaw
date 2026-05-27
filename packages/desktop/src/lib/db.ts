@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import Database from '@tauri-apps/plugin-sql';
+import { modelPricePerMinute } from '../providers/util';
 import { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_OTHER } from './defaults';
 import { getPlatform } from './use-platform';
 import type { Theme } from './use-theme';
@@ -559,12 +560,21 @@ export interface HistoryStats {
     avgWPM: number | null;
     timeSavedMinutes: number;
     topProvider: string | null;
+    /** Estimated USD spent across the selected range, summed per row as
+     * (audio minutes × the provider/model per-minute rate). Rows whose
+     * provider/model has no published price contribute 0. */
+    estCostUSD: number;
+    /** Projected USD/month, extrapolated from the daily spend rate over the
+     * active span (first transcription in range → now). null when there is
+     * no priced usage to extrapolate from. */
+    projectedMonthlyUSD: number | null;
 }
 
 export type HistoryStatsRange = 'week' | 'month' | 'all';
 
 interface RawStatsRow {
     provider_id: string;
+    model_id: string;
     word_count: number;
     duration_ms: number;
     created_at: number;
@@ -602,8 +612,8 @@ export async function getHistoryStats(range: HistoryStatsRange): Promise<History
     const start = rangeStartMs(range, now);
     const rows = (await conn.select(
         start === null
-            ? 'SELECT provider_id, word_count, duration_ms, created_at FROM transcriptions WHERE deleted_at IS NULL'
-            : 'SELECT provider_id, word_count, duration_ms, created_at FROM transcriptions WHERE deleted_at IS NULL AND created_at >= ?',
+            ? 'SELECT provider_id, model_id, word_count, duration_ms, created_at FROM transcriptions WHERE deleted_at IS NULL'
+            : 'SELECT provider_id, model_id, word_count, duration_ms, created_at FROM transcriptions WHERE deleted_at IS NULL AND created_at >= ?',
         start === null ? [] : [start],
     )) as RawStatsRow[];
     if (rows.length === 0) {
@@ -613,6 +623,8 @@ export async function getHistoryStats(range: HistoryStatsRange): Promise<History
             avgWPM: null,
             timeSavedMinutes: 0,
             topProvider: null,
+            estCostUSD: 0,
+            projectedMonthlyUSD: null,
         };
     }
     const totalWords = rows.reduce((a, r) => a + r.word_count, 0);
@@ -633,11 +645,27 @@ export async function getHistoryStats(range: HistoryStatsRange): Promise<History
             topCount = c;
         }
     }
+    // Cost: audio minutes × the per-minute rate for each row's provider/model.
+    // Rows on a provider/model with no published price are skipped (count 0).
+    const estCostUSD = rows.reduce((sum, r) => {
+        const perMin = modelPricePerMinute(r.provider_id, r.model_id);
+        return perMin == null ? sum : sum + (r.duration_ms / 60000) * perMin;
+    }, 0);
+    // Forecast: extrapolate the daily spend rate (over the active span) to a
+    // 30-day month. A single-day span collapses to 30× that day's spend.
+    let projectedMonthlyUSD: number | null = null;
+    if (estCostUSD > 0) {
+        const earliest = rows.reduce((min, r) => Math.min(min, r.created_at), now);
+        const spanDays = Math.max(1, (now - earliest) / (24 * 60 * 60 * 1000));
+        projectedMonthlyUSD = (estCostUSD / spanDays) * 30;
+    }
     return {
         totalWords,
         streakDays: computeStreakDays(rows, now),
         avgWPM,
         timeSavedMinutes,
         topProvider,
+        estCostUSD,
+        projectedMonthlyUSD,
     };
 }
