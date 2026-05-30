@@ -79,7 +79,9 @@ macOS ships a single universal binary listed under all three `darwin-*` keys so 
 
 ### In-app UX
 
-The frontend lives in `packages/desktop/src/hooks/useUpdater.ts` and `packages/desktop/src/windows/main/UpdateBanner.tsx`. On main-window mount the app calls `check()`; if an update is available, a banner appears at the top of the window with "Install & restart". Clicking it streams the bundle (with progress) and then calls the existing `restart_app` Tauri command. Errors surface inline; the user can also trigger a manual check from Settings → Updates.
+The frontend lives in `packages/desktop/src/hooks/useUpdater.ts` and `packages/desktop/src/windows/main/UpdateBanner.tsx`. On main-window mount the app calls `check()`; if an update is available, a banner appears at the top of the window with "Install & restart". Clicking it streams the bundle (with progress) and then calls the existing `restart_app` Tauri command.
+
+`check()` retries with exponential backoff (5 attempts: ~1s/2s/4s/8s ≈ 15s total) before giving up — this rides out the cold-boot window where the network isn't up yet when the app launches at login. The status stays "checking" across retries. A failure after all retries surfaces as a transient, auto-dismissing error **toast** (not a persistent banner), and is also reflected in the Settings → Updates "Last check failed: …" line. The user can trigger a manual check from Settings → Updates at any time.
 
 The relaunch path uses `AppHandle::restart()` directly rather than `@tauri-apps/plugin-process` — see `packages/desktop/src-tauri/src/commands.rs::restart_app`.
 

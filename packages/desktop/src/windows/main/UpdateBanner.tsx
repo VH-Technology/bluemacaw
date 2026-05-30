@@ -5,17 +5,22 @@ import { cn } from '@/lib/utils';
 export interface UpdateBannerProps {
     status: UpdaterStatus;
     onInstall: () => void;
-    onDismissError?: () => void;
 }
 
 /**
  * In-window banner that surfaces an available/installing update at the top
- * of the main window. Renders nothing for terminal states the user doesn't
- * need to act on (idle, checking, up-to-date) so it only appears when
- * there's something to do or report.
+ * of the main window. Renders nothing for states the user doesn't need to
+ * act on here (idle, checking, up-to-date) so it only appears when there's
+ * something to do. Check failures are surfaced as a transient toast in
+ * MainWindow rather than a persistent banner, so 'error' renders nothing too.
  */
-export function UpdateBanner({ status, onInstall, onDismissError }: UpdateBannerProps) {
-    if (status.kind === 'idle' || status.kind === 'checking' || status.kind === 'up-to-date') {
+export function UpdateBanner({ status, onInstall }: UpdateBannerProps) {
+    if (
+        status.kind === 'idle' ||
+        status.kind === 'checking' ||
+        status.kind === 'up-to-date' ||
+        status.kind === 'error'
+    ) {
         return null;
     }
 
@@ -52,31 +57,14 @@ export function UpdateBanner({ status, onInstall, onDismissError }: UpdateBanner
         );
     }
 
-    if (status.kind === 'installing') {
-        return (
-            <output
-                data-testid="update-banner-installing"
-                className={cn(baseClasses, 'bg-blue-300 text-fg')}
-                aria-live="polite"
-            >
-                <span>Installing update… the app will restart.</span>
-            </output>
-        );
-    }
-
-    // error
+    // installing
     return (
-        <div
-            data-testid="update-banner-error"
-            className={cn(baseClasses, 'bg-red-300 text-fg')}
-            role="alert"
+        <output
+            data-testid="update-banner-installing"
+            className={cn(baseClasses, 'bg-blue-300 text-fg')}
+            aria-live="polite"
         >
-            <span>Update failed: {status.message}</span>
-            {onDismissError && (
-                <Button size="sm" variant="outline" onClick={onDismissError}>
-                    Dismiss
-                </Button>
-            )}
-        </div>
+            <span>Installing update… the app will restart.</span>
+        </output>
     );
 }

@@ -39,18 +39,14 @@ describe('<UpdateBanner />', () => {
         expect(screen.getByText(/installing/i)).toBeInTheDocument();
     });
 
-    it('shows the error message and dismiss button when given a handler', async () => {
-        const onDismiss = vi.fn();
-        const user = userEvent.setup();
+    it('renders nothing for the error state (failures surface as a toast instead)', () => {
         render(
             <UpdateBanner
                 status={{ kind: 'error', message: 'signature mismatch' }}
                 onInstall={vi.fn()}
-                onDismissError={onDismiss}
             />,
         );
-        expect(screen.getByText(/signature mismatch/i)).toBeInTheDocument();
-        await user.click(screen.getByRole('button', { name: /dismiss/i }));
-        expect(onDismiss).toHaveBeenCalledTimes(1);
+        expect(screen.queryByTestId('update-banner-error')).toBeNull();
+        expect(screen.queryByText(/signature mismatch/i)).toBeNull();
     });
 });

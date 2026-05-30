@@ -10,6 +10,8 @@ export interface ToastProps {
     duration?: number;
     /** Optional test id; defaults to "toast". */
     testId?: string;
+    /** Visual tone — 'success' is green (default), 'error' is red. */
+    variant?: 'success' | 'error';
 }
 
 /**
@@ -17,7 +19,14 @@ export interface ToastProps {
  * window. Auto-dismisses after `duration`. Uses a portal so callers can
  * mount it anywhere in the React tree without the layout caring.
  */
-export function Toast({ message, open, onClose, duration = 2500, testId = 'toast' }: ToastProps) {
+export function Toast({
+    message,
+    open,
+    onClose,
+    duration = 2500,
+    testId = 'toast',
+    variant = 'success',
+}: ToastProps) {
     useEffect(() => {
         if (!open) return;
         const timer = setTimeout(onClose, duration);
@@ -32,7 +41,8 @@ export function Toast({ message, open, onClose, duration = 2500, testId = 'toast
             data-testid={testId}
             className={cn(
                 'pointer-events-none fixed top-6 right-6 z-50 block',
-                'border-3 border-border bg-green-500/90 px-4 py-2 shadow-neo-lg',
+                'border-3 border-border px-4 py-2 shadow-neo-lg',
+                variant === 'error' ? 'bg-red-500/90' : 'bg-green-500/90',
                 'text-xs font-bold uppercase tracking-widest text-white',
             )}
         >
