@@ -25,7 +25,7 @@ export default function DocsPage() {
                                 Everything you need to install bluemacaw, point it at an STT
                                 provider, and start dictating. The full technical spec lives in the{' '}
                                 <a
-                                    href="https://github.com/programow/ada/tree/main/docs"
+                                    href="https://github.com/VH-Technology/bluemacaw/tree/main/docs"
                                     className="font-semibold text-main hover:underline"
                                 >
                                     /docs directory on GitHub
@@ -122,7 +122,10 @@ function InstallMacOS() {
             <ol>
                 <li>
                     Download <code>bluemacaw_x.y.z_universal.dmg</code> from the{' '}
-                    <a href="https://github.com/programow/ada/releases/latest">latest release</a>.
+                    <a href="https://github.com/VH-Technology/bluemacaw/releases/latest">
+                        latest release
+                    </a>
+                    .
                 </li>
                 <li>Open the DMG and drag bluemacaw into Applications.</li>
                 <li>
@@ -149,7 +152,7 @@ function InstallMacOS() {
             </ul>
             <p>
                 See{' '}
-                <a href="https://github.com/programow/ada/blob/main/docs/permissions.md">
+                <a href="https://github.com/VH-Technology/bluemacaw/blob/main/docs/permissions.md">
                     docs/permissions.md
                 </a>{' '}
                 for the exact platform APIs used.
@@ -170,7 +173,10 @@ function InstallWindows() {
             <ol>
                 <li>
                     Download <code>bluemacaw_x.y.z_x64-setup.exe</code> from the{' '}
-                    <a href="https://github.com/programow/ada/releases/latest">latest release</a>.
+                    <a href="https://github.com/VH-Technology/bluemacaw/releases/latest">
+                        latest release
+                    </a>
+                    .
                 </li>
                 <li>
                     Run the installer. SmartScreen may show a “Windows protected your PC” dialog
@@ -289,7 +295,7 @@ function Configure() {
             </ol>
             <p>
                 Full provider details and pricing notes:{' '}
-                <a href="https://github.com/programow/ada/blob/main/docs/providers.md">
+                <a href="https://github.com/VH-Technology/bluemacaw/blob/main/docs/providers.md">
                     docs/providers.md
                 </a>
                 .
@@ -338,7 +344,7 @@ function Privacy() {
             </p>
             <p>
                 Full threat model: <a href="/privacy/">privacy page</a> — source paths:{' '}
-                <a href="https://github.com/programow/ada/blob/main/docs/secrets.md">
+                <a href="https://github.com/VH-Technology/bluemacaw/blob/main/docs/secrets.md">
                     docs/secrets.md
                 </a>
                 .
@@ -380,9 +386,9 @@ function Troubleshooting() {
             </ul>
             <p>
                 If you hit something else, open an issue on{' '}
-                <a href="https://github.com/programow/ada/issues">GitHub</a> or check the full
-                troubleshooting log:{' '}
-                <a href="https://github.com/programow/ada/blob/main/docs/troubleshooting.md">
+                <a href="https://github.com/VH-Technology/bluemacaw/issues">GitHub</a> or check the
+                full troubleshooting log:{' '}
+                <a href="https://github.com/VH-Technology/bluemacaw/blob/main/docs/troubleshooting.md">
                     docs/troubleshooting.md
                 </a>
                 .

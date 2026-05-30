@@ -16,7 +16,6 @@
       "**/test-results",
       "**/playwright-report",
       "packages/desktop/src-tauri/gen/**",
-      "legacy/**",
       "docs/superpowers/**",
       "**/*.lock",
       "**/bun.lockb"

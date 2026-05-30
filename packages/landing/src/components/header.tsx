@@ -47,7 +47,11 @@ export function Header() {
                 <div className="flex items-center gap-2">
                     <ThemeToggle />
                     <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex">
-                        <a href="https://github.com/programow/ada" target="_blank" rel="noreferrer">
+                        <a
+                            href="https://github.com/VH-Technology/bluemacaw"
+                            target="_blank"
+                            rel="noreferrer"
+                        >
                             GitHub
                         </a>
                     </Button>

@@ -17,7 +17,7 @@ describe('Docs page', () => {
         render(<DocsPage />);
         expect(screen.getByRole('link', { name: /docs\/providers\.md/i })).toHaveAttribute(
             'href',
-            'https://github.com/programow/ada/blob/main/docs/providers.md',
+            'https://github.com/VH-Technology/bluemacaw/blob/main/docs/providers.md',
         );
     });
 

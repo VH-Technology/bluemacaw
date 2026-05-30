@@ -29,10 +29,6 @@ You shouldn't normally, but valid cases:
 - **Reproducing a specific signing or capability bug:** you may want to run `tauri build` directly with extra `--verbose` flags. `/build-clean` won't let you skip steps.
 - **Investigating TCC behavior with a non-bluemacaw bundle id:** `tccutil` by hand, since `/reset-perms` hardcodes `com.vhtechnology.bluemacaw`.
 
-## Legacy Electron app
-
-The archived Ada Electron app under `legacy/electron/` still has its own `/dev` and `/diagnose-mic` slash commands. They are scoped to that subtree and operate on `com.programow.ada`, not bluemacaw. See [`legacy/electron/README.md`](../legacy/electron/README.md). The legacy tree is removed at the end of Plan D.
-
 ## Adding a new command
 
 Drop a new markdown file in `.claude/commands/<name>.md` with:

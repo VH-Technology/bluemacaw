@@ -4,13 +4,13 @@ AI dev workflow guide for bluemacaw — a cross-platform speech-to-text desktop 
 
 ## What bluemacaw is
 
-**bluemacaw** is the new Tauri-based version of what was originally **Ada** (a macOS-only Electron app). The migration is in flight on branch `execution` (branched from `tech-stack` at the start of Plan A; final PR `execution` → `main` lives at the end of Plan D). The legacy Electron app lives under `legacy/electron/` for reference and is removed at the end of Plan D.
+**bluemacaw** is the new Tauri-based version of what was originally **Ada** (a macOS-only Electron app). The migration is in flight on branch `execution` (branched from `tech-stack` at the start of Plan A; final PR `execution` → `main` lives at the end of Plan D).
 
 - **Display name:** bluemacaw
 - **URL slug:** `bluemacaw`
 - **Identifier (no hyphens):** `bluemacaw` (used for Cargo crate name and macOS bundle id `com.vhtechnology.bluemacaw`)
 - **Domain:** `bluemacaw.com`
-- **GitHub repo:** `programow/vox-era`
+- **GitHub repo:** `VH-Technology/bluemacaw`
 - **License:** Apache 2.0
 
 ## Monorepo layout
@@ -21,7 +21,6 @@ bluemacaw/
 │   ├── desktop/    # Tauri app: Rust backend + React webview
 │   ├── landing/    # Next.js static landing page
 │   └── infra/      # Pulumi IaC: AWS + Cloudflare DNS
-├── legacy/electron/  # Archived Ada Electron app (removed in Plan D)
 ├── docs/             # Long-form documentation
 ├── .claude/commands/ # Slash commands
 ├── .github/workflows/ # CI/CD

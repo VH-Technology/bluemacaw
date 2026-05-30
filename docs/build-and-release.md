@@ -58,19 +58,19 @@ The `release.yml` build step exports `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGN
 
 ### Building `update.json`
 
-The `publish-update-manifest` job in `release.yml` reads the `.sig` file contents and assembles the manifest below. The endpoint baked into `tauri.conf.json` is `https://github.com/programow/ada/releases/latest/download/update.json`, which GitHub redirects to the asset on the most recently published release.
+The `publish-update-manifest` job in `release.yml` reads the `.sig` file contents and assembles the manifest below. The endpoint baked into `tauri.conf.json` is `https://github.com/VH-Technology/bluemacaw/releases/latest/download/update.json`, which GitHub redirects to the asset on the most recently published release.
 
 ```json
 {
   "version": "0.1.3",
   "pub_date": "2026-05-16T21:30:00Z",
-  "notes": "See release notes at https://github.com/programow/ada/releases/tag/v0.1.3",
+  "notes": "See release notes at https://github.com/VH-Technology/bluemacaw/releases/tag/v0.1.3",
   "platforms": {
-    "darwin-aarch64":  { "signature": "untrusted comment: …", "url": "https://github.com/programow/ada/releases/download/v0.1.3/bluemacaw_0.1.3_universal.app.tar.gz" },
-    "darwin-x86_64":   { "signature": "untrusted comment: …", "url": "https://github.com/programow/ada/releases/download/v0.1.3/bluemacaw_0.1.3_universal.app.tar.gz" },
-    "darwin-universal": { "signature": "untrusted comment: …", "url": "https://github.com/programow/ada/releases/download/v0.1.3/bluemacaw_0.1.3_universal.app.tar.gz" },
-    "linux-x86_64":    { "signature": "untrusted comment: …", "url": "https://github.com/programow/ada/releases/download/v0.1.3/bluemacaw_0.1.3_amd64.AppImage.tar.gz" },
-    "windows-x86_64":  { "signature": "untrusted comment: …", "url": "https://github.com/programow/ada/releases/download/v0.1.3/bluemacaw_0.1.3_x64-setup.nsis.zip" }
+    "darwin-aarch64":  { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_universal.app.tar.gz" },
+    "darwin-x86_64":   { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_universal.app.tar.gz" },
+    "darwin-universal": { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_universal.app.tar.gz" },
+    "linux-x86_64":    { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_amd64.AppImage.tar.gz" },
+    "windows-x86_64":  { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_x64-setup.nsis.zip" }
   }
 }
 ```

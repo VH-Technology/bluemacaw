@@ -4,7 +4,7 @@ import { fetchReleases } from '@/lib/github';
 import { APP_VERSION } from '@/lib/version';
 
 export default async function ChangelogPage() {
-    const releases = await fetchReleases('programow/ada');
+    const releases = await fetchReleases('VH-Technology/bluemacaw');
     return (
         <>
             <Header />

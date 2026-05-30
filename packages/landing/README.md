@@ -20,7 +20,7 @@ Three routes — all pre-rendered to static HTML:
 |---|---|---|
 | `/` | `src/app/page.tsx` | Hero → Demo → Features → ProvidersGrid → PrivacyTeaser → Download → Footer |
 | `/privacy` | `src/app/privacy/page.tsx` | Threat model, OS keychain story, zero-telemetry promise |
-| `/changelog` | `src/app/changelog/page.tsx` | Async server component fetching `https://api.github.com/repos/programow/ada/releases` at build time, renders entries newest first, empty state when no releases yet |
+| `/changelog` | `src/app/changelog/page.tsx` | Async server component fetching `https://api.github.com/repos/VH-Technology/bluemacaw/releases` at build time, renders entries newest first, empty state when no releases yet |
 
 ## Commands
 

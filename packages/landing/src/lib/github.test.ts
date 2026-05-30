@@ -24,7 +24,7 @@ vi.stubGlobal(
 
 describe('fetchReleases', () => {
     it('returns parsed releases', async () => {
-        const releases = await fetchReleases('programow/ada');
+        const releases = await fetchReleases('VH-Technology/bluemacaw');
         expect(releases).toHaveLength(1);
         expect(releases[0]?.tag).toBe('v1.0.0');
     });
@@ -34,7 +34,7 @@ describe('fetchReleases', () => {
             'fetch',
             vi.fn(async () => new Response('not found', { status: 404 })) as typeof fetch,
         );
-        const releases = await fetchReleases('programow/ada');
+        const releases = await fetchReleases('VH-Technology/bluemacaw');
         expect(releases).toEqual([]);
     });
 
@@ -63,7 +63,7 @@ describe('fetchReleases', () => {
                 return new Response('not found', { status: 404 });
             }) as typeof fetch,
         );
-        const releases = await fetchReleases('programow/ada');
+        const releases = await fetchReleases('VH-Technology/bluemacaw');
         expect(releases).toHaveLength(1);
         expect(releases[0]?.tag).toBe('v2.0.0');
         expect(releases[0]?.body).toBe('from the pipeline fallback');
@@ -72,7 +72,7 @@ describe('fetchReleases', () => {
     it('does not hit the fallback when the API succeeds (even with zero releases)', async () => {
         const spy = vi.fn(async () => new Response('[]', { status: 200 }));
         vi.stubGlobal('fetch', spy as unknown as typeof fetch);
-        const releases = await fetchReleases('programow/ada');
+        const releases = await fetchReleases('VH-Technology/bluemacaw');
         expect(releases).toEqual([]);
         // Only the API call — no fallback fetch.
         expect(spy).toHaveBeenCalledTimes(1);
@@ -85,7 +85,7 @@ describe('fetchReleases', () => {
         vi.stubGlobal('fetch', spy as unknown as typeof fetch);
         vi.stubEnv('GITHUB_TOKEN', 'tok_abc123');
 
-        await fetchReleases('programow/ada');
+        await fetchReleases('VH-Technology/bluemacaw');
 
         const headers = (spy.mock.calls[0]?.[1]?.headers ?? {}) as Record<string, string>;
         expect(headers.Authorization).toBe('Bearer tok_abc123');
@@ -100,7 +100,7 @@ describe('fetchReleases', () => {
         vi.stubEnv('GITHUB_TOKEN', '');
         vi.stubEnv('GH_TOKEN', '');
 
-        await fetchReleases('programow/ada');
+        await fetchReleases('VH-Technology/bluemacaw');
 
         const headers = (spy.mock.calls[0]?.[1]?.headers ?? {}) as Record<string, string>;
         expect(headers.Authorization).toBeUndefined();
@@ -135,7 +135,7 @@ describe('fetchReleases', () => {
                     ),
             ) as typeof fetch,
         );
-        const releases = await fetchReleases('programow/ada');
+        const releases = await fetchReleases('VH-Technology/bluemacaw');
         expect(releases).toHaveLength(1);
         expect(releases[0]?.tag).toBe('v1.0.0');
     });

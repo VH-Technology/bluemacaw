@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Download } from './download';
 
-const RELEASES_FALLBACK = 'https://github.com/programow/ada/releases/latest';
+const RELEASES_FALLBACK = 'https://github.com/VH-Technology/bluemacaw/releases/latest';
 
 describe('Download', () => {
     it('renders fallback download buttons before the manifest resolves', () => {

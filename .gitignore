@@ -15,6 +15,7 @@ coverage/
 playwright-report/
 blob-report/
 playwright/.cache/
+.playwright-mcp/
 *.lcov
 
 # Editor + OS
@@ -42,7 +43,3 @@ config.json
 # Local-only AI workflow artifacts (specs/plans gitignored per project policy)
 docs/superpowers/
 docs/sessions/
-
-# Legacy Electron app artifacts
-legacy/electron/node_modules/
-legacy/electron/dist/

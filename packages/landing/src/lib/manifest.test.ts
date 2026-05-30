@@ -14,12 +14,12 @@ describe('fetchManifest', () => {
                     {
                         name: 'Vox.Era_0.1.0_universal.dmg',
                         browser_download_url:
-                            'https://github.com/programow/ada/releases/download/v0.1.0/Vox.Era_0.1.0_universal.dmg',
+                            'https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.0/Vox.Era_0.1.0_universal.dmg',
                     },
                     {
                         name: 'Vox.Era_universal.app.tar.gz',
                         browser_download_url:
-                            'https://github.com/programow/ada/releases/download/v0.1.0/Vox.Era_universal.app.tar.gz',
+                            'https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.0/Vox.Era_universal.app.tar.gz',
                     },
                 ]),
             ) as typeof fetch,

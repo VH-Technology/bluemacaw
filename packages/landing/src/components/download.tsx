@@ -4,7 +4,7 @@ import { MaskIcon } from '@/components/ui/mask-icon';
 import { type DownloadManifest, fetchManifest } from '@/lib/manifest';
 import { useEffect, useState } from 'react';
 
-const RELEASES_FALLBACK = 'https://github.com/programow/ada/releases/latest';
+const RELEASES_FALLBACK = 'https://github.com/VH-Technology/bluemacaw/releases/latest';
 
 export function Download() {
     const [manifest, setManifest] = useState<DownloadManifest | null>(null);

@@ -41,7 +41,7 @@ export function Hero() {
                         </Button>
                         <Button asChild size="xl" variant="outline">
                             <a
-                                href="https://github.com/programow/ada"
+                                href="https://github.com/VH-Technology/bluemacaw"
                                 target="_blank"
                                 rel="noreferrer"
                             >

@@ -2,7 +2,7 @@
 
 Cross-platform speech-to-text desktop app. Press a global shortcut, dictate, get text pasted wherever your cursor is. Bring your own API key for any of 9 STT providers (OpenAI, Groq, Deepgram, AssemblyAI, ElevenLabs, Fal, Gladia, Azure OpenAI, Rev.ai).
 
-**Status:** in active migration from a legacy Electron build. The new Tauri-based app lives under `packages/desktop/` (in development — see Plan B).
+**Status:** the Tauri-based app lives under `packages/desktop/` (see Plan B).
 
 ## Install
 
@@ -27,7 +27,6 @@ bluemacaw/
 │   ├── desktop/      # Tauri app — see Plan B
 │   └── landing/      # Next.js landing page — see Plan C
 ├── docs/             # Architecture, testing, permissions, secrets, build/release
-├── legacy/electron/  # Original Ada Electron app — archived during migration, removed in Plan D
 └── .claude/commands/ # Slash commands for AI-assisted development
 ```
 

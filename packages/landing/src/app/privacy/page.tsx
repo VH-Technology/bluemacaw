@@ -67,7 +67,10 @@ export default function PrivacyPage() {
                     <p>
                         bluemacaw is open source under Apache 2.0. If you want to verify any of the
                         above, the code is at{' '}
-                        <a href="https://github.com/programow/ada">github.com/programow/ada</a>.
+                        <a href="https://github.com/VH-Technology/bluemacaw">
+                            github.com/VH-Technology/bluemacaw
+                        </a>
+                        .
                     </p>
                 </article>
             </main>

@@ -8,7 +8,8 @@ export interface DownloadManifest {
 // We hit the API (not the releases/latest/download/latest.json asset URL)
 // because github.com's release-download redirect doesn't set CORS headers,
 // so browser fetch() blocks it. api.github.com is CORS-friendly.
-export const RELEASES_API_URL = 'https://api.github.com/repos/programow/ada/releases/latest';
+export const RELEASES_API_URL =
+    'https://api.github.com/repos/VH-Technology/bluemacaw/releases/latest';
 
 interface ReleaseAsset {
     name: string;

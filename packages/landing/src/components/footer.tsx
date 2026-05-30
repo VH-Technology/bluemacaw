@@ -36,7 +36,7 @@ export function Footer({ version }: FooterProps) {
                         Changelog
                     </a>
                     <a
-                        href="https://github.com/programow/ada"
+                        href="https://github.com/VH-Technology/bluemacaw"
                         className="font-semibold text-muted-foreground transition-colors hover:text-fg"
                         rel="noopener noreferrer"
                     >
