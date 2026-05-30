@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-    title: 'bluemacaw — cross-platform speech-to-text',
+    title: 'bluemacaw | Open Source Speech to Text',
     description:
         'A dictation app you own. Press a shortcut, talk, get text pasted wherever your cursor is. Bring your own key for any of 10 STT providers. Open source.',
     icons: {
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
         ],
     },
     openGraph: {
-        title: 'bluemacaw — cross-platform speech-to-text',
+        title: 'bluemacaw | Open Source Speech to Text',
         description:
             'A dictation app you own. Bring your own key, pick from 10 STT providers, ship text anywhere your cursor is.',
         type: 'website',
