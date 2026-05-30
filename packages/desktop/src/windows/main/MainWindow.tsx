@@ -66,6 +66,10 @@ export function MainWindowInner() {
     const [historyEntries, setHistoryEntries] = useState<readonly HistoryEntry[]>([]);
     const [refreshKey, setRefreshKey] = useState(0);
     const [undoToast, setUndoToast] = useState<UndoToastState>({ open: false, rowId: null });
+    // Update-check failures are transient (often a cold-boot network blip), so
+    // we surface them as an auto-dismissing toast rather than a banner that
+    // lingers on the Dashboard until the user notices it.
+    const [updateErrorToast, setUpdateErrorToast] = useState<string | null>(null);
     // Controlled so the update banner can be shown on the Dashboard only —
     // the Settings tab surfaces updates via its own Install & restart button.
     const [activeTab, setActiveTab] = useState('dashboard');
@@ -76,6 +80,14 @@ export function MainWindowInner() {
     useEffect(() => {
         void checkForUpdates();
     }, [checkForUpdates]);
+
+    // Surface any update-check/install failure as a toast. updaterStatus only
+    // changes identity on a real transition, so this fires once per failure.
+    useEffect(() => {
+        if (updaterStatus.kind === 'error') {
+            setUpdateErrorToast(updaterStatus.message);
+        }
+    }, [updaterStatus]);
 
     // Pull the running binary's version (not the JS bundle's package.json) so
     // the footer reflects what's actually installed.
@@ -220,6 +232,14 @@ export function MainWindowInner() {
                 message="Transcription deleted."
                 duration={5000}
                 onClose={() => setUndoToast({ open: false, rowId: null })}
+            />
+            <Toast
+                open={updateErrorToast !== null}
+                variant="error"
+                testId="update-error-toast"
+                message={updateErrorToast ? `Update check failed: ${updateErrorToast}` : ''}
+                duration={6000}
+                onClose={() => setUpdateErrorToast(null)}
             />
             {undoToast.open && (
                 <div className="fixed top-20 right-6 z-50">

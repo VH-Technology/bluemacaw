@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -87,6 +87,7 @@ vi.mock('@/lib/use-onboarding-gate', () => ({
 }));
 
 import { useOnboardingGate } from '@/lib/use-onboarding-gate';
+import { check } from '@tauri-apps/plugin-updater';
 import { MainWindow } from './MainWindow';
 
 describe('<MainWindow />', () => {
@@ -142,5 +143,28 @@ describe('<MainWindow />', () => {
         });
         render(<MainWindow />);
         expect(screen.getByTestId('onboarding-screen')).toBeInTheDocument();
+    });
+
+    it('surfaces a transient error toast (not a persistent banner) when the update check keeps failing', async () => {
+        vi.useFakeTimers();
+        vi.mocked(check).mockImplementation(async () => {
+            throw new Error('network down');
+        });
+        try {
+            render(<MainWindow />);
+            // Exhaust the default backoff schedule (~1+2+4+8 = 15s) so every
+            // retry has fired and the hook gives up.
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(15_000);
+            });
+            const toast = screen.getByTestId('update-error-toast');
+            expect(toast).toHaveTextContent(/network down/i);
+            // The old persistent banner must not appear.
+            expect(screen.queryByTestId('update-banner-error')).toBeNull();
+        } finally {
+            vi.mocked(check).mockReset();
+            vi.mocked(check).mockImplementation(async () => null);
+            vi.useRealTimers();
+        }
     });
 });

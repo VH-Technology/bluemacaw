@@ -14,16 +14,34 @@ export type UpdaterStatus =
 export interface UpdaterDeps {
     check: typeof check;
     restartApp: () => Promise<void>;
+    /** Delay between backoff retries; injectable so tests skip real timers. */
+    sleep: (ms: number) => Promise<void>;
 }
 
 const defaultDeps: UpdaterDeps = {
     check,
     restartApp: () => vox.restartApp(),
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 };
+
+export interface RetryConfig {
+    /** Total attempts including the first (so 5 = 1 try + 4 retries). */
+    attempts: number;
+    /** Delay before the first retry; doubles each subsequent retry. */
+    baseDelayMs: number;
+    /** Upper bound for any single backoff delay. */
+    maxDelayMs: number;
+}
+
+// Rides out the cold-boot window where the network isn't up yet when the app
+// is launched at login: ~1s + 2s + 4s + 8s ≈ 15s of total backoff.
+const DEFAULT_RETRY: RetryConfig = { attempts: 5, baseDelayMs: 1000, maxDelayMs: 8000 };
 
 export interface UseUpdaterOptions {
     /** Override deps in tests. */
     deps?: UpdaterDeps;
+    /** Override the backoff schedule (defaults to {@link DEFAULT_RETRY}). */
+    retry?: Partial<RetryConfig>;
 }
 
 export interface UseUpdaterReturn {
@@ -34,6 +52,9 @@ export interface UseUpdaterReturn {
 
 export function useUpdater(options: UseUpdaterOptions = {}): UseUpdaterReturn {
     const deps = options.deps ?? defaultDeps;
+    const attempts = options.retry?.attempts ?? DEFAULT_RETRY.attempts;
+    const baseDelayMs = options.retry?.baseDelayMs ?? DEFAULT_RETRY.baseDelayMs;
+    const maxDelayMs = options.retry?.maxDelayMs ?? DEFAULT_RETRY.maxDelayMs;
     const [status, setStatus] = useState<UpdaterStatus>({ kind: 'idle' });
     // Hold the latest Update across callbacks without forcing re-renders or
     // depending on it in the install callback's closure.
@@ -41,21 +62,34 @@ export function useUpdater(options: UseUpdaterOptions = {}): UseUpdaterReturn {
 
     const checkForUpdates = useCallback(async () => {
         setStatus({ kind: 'checking' });
-        try {
-            const result = await deps.check();
-            updateRef.current = result;
-            if (result) {
-                setStatus({ kind: 'available', version: result.version });
-            } else {
-                setStatus({ kind: 'up-to-date' });
+        // Retry with exponential backoff before surfacing an error. Network
+        // access often isn't up yet when the app launches at login, so a
+        // first-attempt failure is usually transient. We stay in 'checking'
+        // across retries and only report 'error' once every attempt fails.
+        let lastError: unknown;
+        for (let attempt = 1; attempt <= attempts; attempt++) {
+            try {
+                const result = await deps.check();
+                updateRef.current = result;
+                setStatus(
+                    result
+                        ? { kind: 'available', version: result.version }
+                        : { kind: 'up-to-date' },
+                );
+                return;
+            } catch (e) {
+                lastError = e;
+                if (attempt < attempts) {
+                    const delay = Math.min(baseDelayMs * 2 ** (attempt - 1), maxDelayMs);
+                    await deps.sleep(delay);
+                }
             }
-        } catch (e) {
-            setStatus({
-                kind: 'error',
-                message: e instanceof Error ? e.message : String(e),
-            });
         }
-    }, [deps]);
+        setStatus({
+            kind: 'error',
+            message: lastError instanceof Error ? lastError.message : String(lastError),
+        });
+    }, [deps, attempts, baseDelayMs, maxDelayMs]);
 
     const installAndRestart = useCallback(async () => {
         const update = updateRef.current;
