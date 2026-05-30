@@ -53,6 +53,7 @@ export function Download() {
                     href={winHref}
                     docsHref="/docs/#install-windows"
                     icon={<MaskIcon src="/icons/windows.svg" className="h-7 w-7" />}
+                    tags={['Beta']}
                 />
                 <PlatformCard
                     name="Linux"
@@ -60,6 +61,7 @@ export function Download() {
                     href={linuxHref}
                     docsHref="/docs/#install-linux"
                     icon={<MaskIcon src="/icons/linux.svg" className="h-7 w-7" />}
+                    tags={['Beta', 'amd64 only']}
                 />
             </div>
         </section>
@@ -72,9 +74,11 @@ interface PlatformCardProps {
     href: string | null;
     docsHref: string;
     icon: React.ReactNode;
+    /** Small support-status pills shown next to the platform name (e.g. "Beta"). */
+    tags?: readonly string[];
 }
 
-function PlatformCard({ name, detail, href, docsHref, icon }: PlatformCardProps) {
+function PlatformCard({ name, detail, href, docsHref, icon, tags }: PlatformCardProps) {
     const comingSoon = href === null;
     return (
         <div
@@ -84,7 +88,17 @@ function PlatformCard({ name, detail, href, docsHref, icon }: PlatformCardProps)
             <span className="inline-flex h-12 w-12 items-center justify-center rounded-pill bg-main/10 text-main">
                 {icon}
             </span>
-            <div className="text-xl font-bold tracking-tight">{name}</div>
+            <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xl font-bold tracking-tight">{name}</span>
+                {tags?.map((tag) => (
+                    <span
+                        key={tag}
+                        className="inline-flex items-center rounded-pill bg-brand-yellow px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-brand-navy"
+                    >
+                        {tag}
+                    </span>
+                ))}
+            </div>
             <div className="text-sm text-muted-foreground">
                 {comingSoon ? 'Coming soon' : detail}
             </div>
