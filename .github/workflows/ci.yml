@@ -1,10 +1,13 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
+  # main is branch-protected with "require branches up to date before
+  # merging", so a PR's pre-merge run validates the exact post-merge state.
+  # A second run on push to main would be redundant, so CI is PR-only.
+  # workflow_dispatch stays as a manual safety valve for re-validating main.
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
