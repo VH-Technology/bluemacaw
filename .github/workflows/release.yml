@@ -92,6 +92,15 @@ jobs:
             args: ""
             rust-targets: ""
             rust-toolchain: "1.88.0"
+          # Built natively on GitHub's hosted arm64 runner — no cross-compile,
+          # so the WebKitGTK/appindicator system libs resolve from apt exactly
+          # as on x86_64. Same toolchain pin as linux-x86_64 (the glib trait-
+          # solver bug noted above is arch-independent).
+          - name: linux-aarch64
+            os: ubuntu-22.04-arm
+            args: ""
+            rust-targets: ""
+            rust-toolchain: "1.88.0"
           - name: windows-x86_64
             os: windows-latest
             args: ""
@@ -119,10 +128,13 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             packages/desktop/src-tauri/target
-          key: ${{ runner.os }}-cargo-release-${{ hashFiles('packages/desktop/src-tauri/Cargo.lock', 'packages/desktop/src-tauri/Cargo.toml') }}
+          # Include the platform name in the key: runner.os is "Linux" for both
+          # the x86_64 and aarch64 jobs, so without it the two would share (and
+          # corrupt) one cache of arch-specific compiled artifacts.
+          key: ${{ matrix.platform.name }}-cargo-release-${{ hashFiles('packages/desktop/src-tauri/Cargo.lock', 'packages/desktop/src-tauri/Cargo.toml') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-release-
-            ${{ runner.os }}-cargo-
+            ${{ matrix.platform.name }}-cargo-release-
+            ${{ matrix.platform.name }}-cargo-
 
       # The cache above restores `target/` to speed up builds. That includes
       # `target/.../bundle/`, which holds artifacts from the previous run —
@@ -142,7 +154,7 @@ jobs:
           rm -rf packages/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle
 
       - name: Install Linux build deps
-        if: matrix.platform.os == 'ubuntu-22.04'
+        if: startsWith(matrix.platform.os, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -286,7 +298,10 @@ jobs:
           pick() { echo "$assets" | grep -E "$1" | head -n1 || true; }
           mac=$(pick '\.dmg$')
           win=$(pick '\.msi$|-setup\.exe$')
-          lin=$(pick '\.AppImage$')
+          # Match each Linux arch explicitly so the aarch64 AppImage can't land
+          # in the amd64 `linux` field (or vice versa).
+          lin=$(pick '(amd64|x86_64)\.AppImage$')
+          lin_arm64=$(pick '(aarch64|arm64)\.AppImage$')
 
           # Emit a JSON value: either `null` or a JSON-quoted URL string.
           # `jq -n` (no -r) writes valid JSON, which feeds straight into
@@ -305,7 +320,8 @@ jobs:
             --argjson mac "$(url_for "$mac")" \
             --argjson win "$(url_for "$win")" \
             --argjson linux "$(url_for "$lin")" \
-            '{version: $version, mac: $mac, win: $win, linux: $linux}' > latest.json
+            --argjson linuxArm64 "$(url_for "$lin_arm64")" \
+            '{version: $version, mac: $mac, win: $win, linux: $linux, linuxArm64: $linuxArm64}' > latest.json
           cat latest.json
 
       - name: Attach manifest to GitHub release
@@ -368,7 +384,11 @@ jobs:
           pick() { echo "$assets" | grep -E "$1" | head -n1 || true; }
 
           mac_bundle=$(pick '\.app\.tar\.gz$')
-          linux_bundle=$(pick '\.AppImage\.tar\.gz$')
+          # Two Linux arches now — match each explicitly so they don't collide
+          # on a bare `.AppImage.tar.gz`. Tauri tags AppImages with the Debian
+          # arch (amd64 for x86_64, aarch64 for arm64).
+          linux_x64_bundle=$(pick '(amd64|x86_64)\.AppImage\.tar\.gz$')
+          linux_arm64_bundle=$(pick '(aarch64|arm64)\.AppImage\.tar\.gz$')
           # Prefer NSIS for the updater on Windows (Tauri 2 default); fall
           # back to MSI if NSIS wasn't produced.
           win_bundle=$(pick '-setup\.nsis\.zip$')
@@ -399,7 +419,8 @@ jobs:
           }
 
           mac_entry=$(platform_entry "$mac_bundle")
-          linux_entry=$(platform_entry "$linux_bundle")
+          linux_x64_entry=$(platform_entry "$linux_x64_bundle")
+          linux_arm64_entry=$(platform_entry "$linux_arm64_bundle")
           win_entry=$(platform_entry "$win_bundle")
 
           # macOS bundle is a universal binary — list it under all darwin
@@ -410,7 +431,8 @@ jobs:
             --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg notes "See release notes at https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}" \
             --argjson mac "$mac_entry" \
-            --argjson linux "$linux_entry" \
+            --argjson linux "$linux_x64_entry" \
+            --argjson linux_arm64 "$linux_arm64_entry" \
             --argjson win "$win_entry" \
             '{
               version: $version,
@@ -421,6 +443,7 @@ jobs:
                 "darwin-x86_64": $mac,
                 "darwin-universal": $mac,
                 "linux-x86_64": $linux,
+                "linux-aarch64": $linux_arm64,
                 "windows-x86_64": $win
               }
             }' > update.json

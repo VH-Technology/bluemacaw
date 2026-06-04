@@ -25,7 +25,7 @@ The release workflow publishes **three** JSON files that look superficially simi
 
 | File             | Consumer                          | Schema                                                                     |
 | ---------------- | --------------------------------- | -------------------------------------------------------------------------- |
-| `latest.json`    | Landing page download buttons     | `{ version, mac, win, linux }` — bare URLs to installers.                  |
+| `latest.json`    | Landing page download buttons     | `{ version, mac, win, linux, linuxArm64 }` — bare URLs to installers.      |
 | `update.json`    | `tauri-plugin-updater` in-app     | `{ version, pub_date, notes, platforms.<key>.{signature, url} }`.          |
 | `changelog.json` | Landing changelog page (fallback) | `Release[]` — `{ tag, name, body, publishedAt, htmlUrl }` per release.     |
 
@@ -70,6 +70,7 @@ The `publish-update-manifest` job in `release.yml` reads the `.sig` file content
     "darwin-x86_64":   { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_universal.app.tar.gz" },
     "darwin-universal": { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_universal.app.tar.gz" },
     "linux-x86_64":    { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_amd64.AppImage.tar.gz" },
+    "linux-aarch64":   { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_aarch64.AppImage.tar.gz" },
     "windows-x86_64":  { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_x64-setup.nsis.zip" }
   }
 }

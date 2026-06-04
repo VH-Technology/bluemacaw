@@ -8,13 +8,51 @@ describe('Download', () => {
     it('renders fallback download buttons before the manifest resolves', () => {
         vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})) as unknown as typeof fetch);
         render(<Download />);
+        // Exact-string names so "Linux" doesn't also match the "Linux on ARM64" link.
         for (const name of [
-            /download bluemacaw for macos/i,
-            /download bluemacaw for windows/i,
-            /download bluemacaw for linux/i,
+            'Download bluemacaw for macOS',
+            'Download bluemacaw for Windows',
+            'Download bluemacaw for Linux',
+            'Download bluemacaw for Linux on ARM64',
         ]) {
             expect(screen.getByRole('link', { name })).toHaveAttribute('href', RELEASES_FALLBACK);
         }
+    });
+
+    it('surfaces a separate ARM64 download when the manifest exposes an aarch64 build', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(
+                async () =>
+                    new Response(
+                        JSON.stringify({
+                            tag_name: 'v0.2.0',
+                            assets: [
+                                {
+                                    name: 'bluemacaw_0.2.0_amd64.AppImage',
+                                    browser_download_url: 'https://example.test/amd64.AppImage',
+                                },
+                                {
+                                    name: 'bluemacaw_0.2.0_aarch64.AppImage',
+                                    browser_download_url: 'https://example.test/aarch64.AppImage',
+                                },
+                            ],
+                        }),
+                        { status: 200 },
+                    ),
+            ) as typeof fetch,
+        );
+        render(<Download />);
+        await waitFor(() => {
+            expect(
+                screen.getByRole('link', { name: 'Download bluemacaw for Linux' }),
+            ).toHaveAttribute('href', 'https://example.test/amd64.AppImage');
+        });
+        expect(
+            screen.getByRole('link', { name: 'Download bluemacaw for Linux on ARM64' }),
+        ).toHaveAttribute('href', 'https://example.test/aarch64.AppImage');
+        // The old "amd64 only" support tag must be gone now that ARM ships.
+        expect(screen.queryByText(/amd64 only/i)).toBeNull();
     });
 
     it('each platform card exposes a Setup guide link to /docs/#install-<os>', () => {
