@@ -10,6 +10,7 @@ import {
     requestRecordingToggle,
 } from '@/lib/overlay-bridge';
 import type { RecordingState } from '@/lib/recording-controller';
+import { usePlatform } from '@/lib/use-platform';
 import { listen } from '@tauri-apps/api/event';
 import {
     PhysicalPosition,
@@ -266,15 +267,20 @@ export function OverlayApp() {
     const recordingState = useOverlayRecordingState();
     const { setupActive } = useOverlayPositionSetup(recordingState);
     const level = useOverlayRecordingLevel(recordingState);
+    const platform = usePlatform();
     useOverlayInitialPosition();
     useOverlayPositionPersistence();
     useOverlayResetHandler();
+
+    const appearance = platform?.os === 'windows' ? 'solid' : 'macos-blur';
+
     return (
         <OverlayWindow
             state={determineOverlayState(recordingState, setupActive)}
             onStop={() => void requestRecordingToggle()}
             onCancel={() => void requestRecordingCancel()}
             level={level}
+            appearance={appearance}
         />
     );
 }

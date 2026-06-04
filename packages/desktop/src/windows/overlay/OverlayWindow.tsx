@@ -24,15 +24,31 @@ export interface OverlayWindowProps {
      * sensible static pill.
      */
     level?: number;
+    /**
+     * Overlay pill appearance variant. macOS uses `backdrop-blur` against
+     * the desktop compositor via Core Animation. Windows WebView2 cannot
+     * blur native content behind the window, so backdrop-filter renders
+     * as a visible blur box. Use `'solid'` on Windows to skip the blur
+     * and instead apply a slightly denser background.
+     */
+    appearance?: PillAppearance;
 }
 
-const PILL = cn(
-    'fixed bottom-3 left-1/2 -translate-x-1/2',
-    'flex items-center gap-2',
-    'rounded-full bg-brand-navy/85 backdrop-blur-md',
-    'pl-2 pr-4 py-2.5',
-    'select-none text-white',
-);
+export type PillAppearance = 'macos-blur' | 'solid';
+
+interface PillClassProps {
+    appearance: PillAppearance;
+}
+
+function pillClass({ appearance }: PillClassProps): string {
+    return cn(
+        'fixed bottom-3 left-1/2 -translate-x-1/2',
+        'flex items-center gap-2',
+        'rounded-full pl-2 pr-4 py-2.5',
+        'select-none text-white',
+        appearance === 'macos-blur' ? 'bg-brand-navy/85 backdrop-blur-md' : 'bg-brand-navy/92',
+    );
+}
 
 const HANDLE = cn(
     'flex items-center justify-center',
@@ -205,12 +221,20 @@ function TranscribingDots() {
     );
 }
 
-export function OverlayWindow({ state, onStop, onCancel, level = 0 }: OverlayWindowProps) {
+export function OverlayWindow({
+    state,
+    onStop,
+    onCancel,
+    level = 0,
+    appearance = 'macos-blur',
+}: OverlayWindowProps) {
+    const cls = pillClass({ appearance });
+
     if (state.kind === 'hidden') return null;
 
     if (state.kind === 'recording') {
         return (
-            <div className={PILL} data-testid="overlay-pill" data-state="recording">
+            <div className={cls} data-testid="overlay-pill" data-state="recording">
                 <DragHandle />
                 <RecordingDot level={level} />
                 <Waveform level={level} />
@@ -225,7 +249,7 @@ export function OverlayWindow({ state, onStop, onCancel, level = 0 }: OverlayWin
 
     if (state.kind === 'transcribing') {
         return (
-            <div className={PILL} data-testid="overlay-pill" data-state="transcribing">
+            <div className={cls} data-testid="overlay-pill" data-state="transcribing">
                 <DragHandle />
                 <TranscribingDots />
                 <span className="pointer-events-none text-[11px] font-semibold tracking-wide">
@@ -236,7 +260,7 @@ export function OverlayWindow({ state, onStop, onCancel, level = 0 }: OverlayWin
     }
 
     return (
-        <div className={PILL} data-testid="overlay-pill" data-state="positioning">
+        <div className={cls} data-testid="overlay-pill" data-state="positioning">
             <DragHandle />
             <span className="pointer-events-none text-[11px] font-medium tracking-wide">
                 Drag to position

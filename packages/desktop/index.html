@@ -5,6 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>bluemacaw</title>
     <script>
+      // Overlay window: clear html/body/root backgrounds before the
+      // stylesheet even downloads, so the native window surface renders
+      // transparent on the very first paint. This is critical on Windows
+      // where WebView2's compositor may otherwise latch onto the default
+      // body background and show an opaque rectangle around the pill.
+      (function () {
+        if (window.location.search.indexOf('window=overlay') !== -1) {
+          var root = document.getElementById('root');
+          document.documentElement.style.setProperty('background-color', 'transparent', 'important');
+          document.body.style.setProperty('background-color', 'transparent', 'important');
+          if (root) root.style.setProperty('background-color', 'transparent', 'important');
+        }
+      })();
+
       // FOUC-prevention: apply the resolved theme to <html> before any
       // stylesheet parses, so the first paint matches what the React
       // useTheme hook will resolve once it mounts. Reads the resolved
