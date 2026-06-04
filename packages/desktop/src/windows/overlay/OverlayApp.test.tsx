@@ -77,7 +77,10 @@ vi.mock('@/lib/overlay-bridge', () => ({
     exitOverlayPositionSetup: exitOverlayPositionSetupMock,
 }));
 vi.mock('@/lib/invoke', () => ({
-    vox: { getRecordingLevel: getRecordingLevelMock },
+    vox: {
+        getRecordingLevel: getRecordingLevelMock,
+        getPlatformInfo: vi.fn(async () => ({ os: 'macos', isWayland: false })),
+    },
 }));
 
 import { OverlayApp } from './OverlayApp';
