@@ -24,13 +24,6 @@ export interface OverlayWindowProps {
      * sensible static pill.
      */
     level?: number;
-    /**
-     * Overlay pill appearance variant. macOS uses `backdrop-blur` against
-     * the desktop compositor via Core Animation. Windows WebView2 cannot
-     * blur native content behind the window, so backdrop-filter renders
-     * as a visible blur box. Use `'solid'` on Windows to skip the blur
-     * and instead apply a slightly denser background.
-     */
     appearance?: PillAppearance;
 }
 

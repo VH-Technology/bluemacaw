@@ -5,11 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>bluemacaw</title>
     <script>
-      // Overlay window: clear html/body/root backgrounds before the
-      // stylesheet even downloads, so the native window surface renders
-      // transparent on the very first paint. This is critical on Windows
-      // where WebView2's compositor may otherwise latch onto the default
-      // body background and show an opaque rectangle around the pill.
       (function () {
         if (window.location.search.indexOf('window=overlay') !== -1) {
           var root = document.getElementById('root');

@@ -123,9 +123,6 @@ pub fn run() {
                 }
             }
 
-            // Windows: mark the overlay window as non-activating so
-            // ShowWindow(SW_SHOW) — which Tauri's window.show() calls —
-            // does not steal foreground focus from the target app.
             #[cfg(target_os = "windows")]
             if let Some(overlay_window) = app.get_webview_window("overlay") {
                 if let Err(e) = overlay_win::make_overlay_nonactivating(&overlay_window) {
