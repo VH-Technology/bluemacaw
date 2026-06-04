@@ -53,6 +53,7 @@ windows = { version = "0.58", features = [
     "Win32_Media_Audio",
     "Win32_Media_Audio_Endpoints",
     "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [dev-dependencies]
