@@ -1,5 +1,7 @@
 use crate::audio::{AudioDeviceInfo, AudioSource, CaptureSession, PermissionState, microphone::MicrophoneSource, resampler::Resampler};
-use crate::markers::{ERR_ACCESSIBILITY_REQUIRED, EVT_AUDIO_CHUNK, EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_TOGGLE};
+use crate::markers::{EVT_AUDIO_CHUNK, EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_TOGGLE};
+#[cfg(target_os = "macos")]
+use crate::markers::ERR_ACCESSIBILITY_REQUIRED;
 #[cfg(target_os = "macos")]
 use crate::markers::ERR_INPUT_MONITORING_REQUIRED;
 #[cfg(target_os = "linux")]

@@ -9,7 +9,6 @@ pub fn make_overlay_nonactivating<R: Runtime>(
     window: &WebviewWindow<R>,
 ) -> tauri::Result<()> {
     let hwnd = window.hwnd()?;
-    let hwnd = windows::Win32::Foundation::HWND(hwnd as *mut std::ffi::c_void);
 
     unsafe {
         let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
