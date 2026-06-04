@@ -92,10 +92,6 @@ jobs:
             args: ""
             rust-targets: ""
             rust-toolchain: "1.88.0"
-          # Built natively on GitHub's hosted arm64 runner — no cross-compile,
-          # so the WebKitGTK/appindicator system libs resolve from apt exactly
-          # as on x86_64. Same toolchain pin as linux-x86_64 (the glib trait-
-          # solver bug noted above is arch-independent).
           - name: linux-aarch64
             os: ubuntu-22.04-arm
             args: ""
@@ -128,9 +124,6 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             packages/desktop/src-tauri/target
-          # Include the platform name in the key: runner.os is "Linux" for both
-          # the x86_64 and aarch64 jobs, so without it the two would share (and
-          # corrupt) one cache of arch-specific compiled artifacts.
           key: ${{ matrix.platform.name }}-cargo-release-${{ hashFiles('packages/desktop/src-tauri/Cargo.lock', 'packages/desktop/src-tauri/Cargo.toml') }}
           restore-keys: |
             ${{ matrix.platform.name }}-cargo-release-
@@ -298,8 +291,6 @@ jobs:
           pick() { echo "$assets" | grep -E "$1" | head -n1 || true; }
           mac=$(pick '\.dmg$')
           win=$(pick '\.msi$|-setup\.exe$')
-          # Match each Linux arch explicitly so the aarch64 AppImage can't land
-          # in the amd64 `linux` field (or vice versa).
           lin=$(pick '(amd64|x86_64)\.AppImage$')
           lin_arm64=$(pick '(aarch64|arm64)\.AppImage$')
 
@@ -384,9 +375,6 @@ jobs:
           pick() { echo "$assets" | grep -E "$1" | head -n1 || true; }
 
           mac_bundle=$(pick '\.app\.tar\.gz$')
-          # Two Linux arches now — match each explicitly so they don't collide
-          # on a bare `.AppImage.tar.gz`. Tauri tags AppImages with the Debian
-          # arch (amd64 for x86_64, aarch64 for arm64).
           linux_x64_bundle=$(pick '(amd64|x86_64)\.AppImage\.tar\.gz$')
           linux_arm64_bundle=$(pick '(aarch64|arm64)\.AppImage\.tar\.gz$')
           # Prefer NSIS for the updater on Windows (Tauri 2 default); fall

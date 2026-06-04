@@ -74,8 +74,6 @@ describe('fetchManifest', () => {
             ) as typeof fetch,
         );
         const manifest = await fetchManifest();
-        // The amd64 and aarch64 AppImages must land in distinct fields — a bare
-        // /\.AppImage$/ matcher would let whichever sorts first win both.
         expect(manifest?.linux).toContain('amd64.AppImage');
         expect(manifest?.linux).not.toContain('aarch64');
         expect(manifest?.linuxArm64).toContain('aarch64.AppImage');

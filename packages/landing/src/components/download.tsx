@@ -79,9 +79,7 @@ interface PlatformCardProps {
     icon: React.ReactNode;
     /** Small support-status pills shown next to the platform name (e.g. "Beta"). */
     tags?: readonly string[];
-    /** Optional secondary-architecture download (e.g. Linux ARM64). */
     altHref?: string | null;
-    /** Label for the secondary-architecture download (e.g. "ARM64"). */
     altLabel?: string;
 }
 

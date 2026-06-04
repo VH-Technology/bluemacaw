@@ -8,7 +8,6 @@ describe('Download', () => {
     it('renders fallback download buttons before the manifest resolves', () => {
         vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})) as unknown as typeof fetch);
         render(<Download />);
-        // Exact-string names so "Linux" doesn't also match the "Linux on ARM64" link.
         for (const name of [
             'Download bluemacaw for macOS',
             'Download bluemacaw for Windows',
@@ -51,7 +50,6 @@ describe('Download', () => {
         expect(
             screen.getByRole('link', { name: 'Download bluemacaw for Linux on ARM64' }),
         ).toHaveAttribute('href', 'https://example.test/aarch64.AppImage');
-        // The old "amd64 only" support tag must be gone now that ARM ships.
         expect(screen.queryByText(/amd64 only/i)).toBeNull();
     });
 

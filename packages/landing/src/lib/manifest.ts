@@ -2,9 +2,7 @@ export interface DownloadManifest {
     version: string;
     mac: string | null;
     win: string | null;
-    /** AppImage for x86_64 (amd64) Linux. */
     linux: string | null;
-    /** AppImage for aarch64 (arm64) Linux. */
     linuxArm64: string | null;
 }
 
@@ -37,9 +35,6 @@ export async function fetchManifest(): Promise<DownloadManifest | null> {
             version: data.tag_name.replace(/^v/, ''),
             mac: find(/\.dmg$/),
             win: find(/\.msi$|-setup\.exe$/),
-            // Match each Linux arch explicitly so the two AppImages don't
-            // collide on a bare /\.AppImage$/ (Tauri names them with the
-            // Debian arch token: amd64 for x86_64, aarch64 for arm64).
             linux: find(/(amd64|x86_64)\.AppImage$/),
             linuxArm64: find(/(aarch64|arm64)\.AppImage$/),
         };
