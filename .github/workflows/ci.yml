@@ -40,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, ubuntu-22.04-arm, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -60,12 +60,13 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             packages/desktop/src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('packages/desktop/src-tauri/Cargo.lock', 'packages/desktop/src-tauri/Cargo.toml') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ hashFiles('packages/desktop/src-tauri/Cargo.lock', 'packages/desktop/src-tauri/Cargo.toml') }}
           restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-cargo-
             ${{ runner.os }}-cargo-
 
       - name: Install Linux build deps
-        if: matrix.os == 'ubuntu-latest'
+        if: startsWith(matrix.os, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -129,7 +130,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, ubuntu-22.04-arm, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -149,13 +150,15 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             packages/desktop/src-tauri/target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('packages/desktop/src-tauri/Cargo.lock', 'packages/desktop/src-tauri/Cargo.toml') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-build-${{ hashFiles('packages/desktop/src-tauri/Cargo.lock', 'packages/desktop/src-tauri/Cargo.toml') }}
           restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-cargo-build-
+            ${{ runner.os }}-${{ runner.arch }}-cargo-
             ${{ runner.os }}-cargo-build-
             ${{ runner.os }}-cargo-
 
       - name: Install Linux build deps
-        if: matrix.os == 'ubuntu-latest'
+        if: startsWith(matrix.os, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
