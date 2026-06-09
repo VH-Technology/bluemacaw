@@ -25,6 +25,7 @@ export function Download() {
     const macHref = manifest?.mac ?? (resolved ? null : RELEASES_FALLBACK);
     const winHref = manifest?.win ?? (resolved ? null : RELEASES_FALLBACK);
     const linuxHref = manifest?.linux ?? (resolved ? null : RELEASES_FALLBACK);
+    const linuxArm64Href = manifest?.linuxArm64 ?? (resolved ? null : RELEASES_FALLBACK);
 
     return (
         <section id="download" className="mx-auto max-w-6xl px-6 py-20">
@@ -57,11 +58,13 @@ export function Download() {
                 />
                 <PlatformCard
                     name="Linux"
-                    detail="AppImage, .deb, .rpm"
+                    detail="AppImage, .deb, .rpm — amd64 + arm64"
                     href={linuxHref}
+                    altHref={linuxArm64Href}
+                    altLabel="ARM64"
                     docsHref="/docs/#install-linux"
                     icon={<MaskIcon src="/icons/linux.svg" className="h-7 w-7" />}
-                    tags={['Beta', 'amd64 only']}
+                    tags={['Beta']}
                 />
             </div>
         </section>
@@ -76,9 +79,20 @@ interface PlatformCardProps {
     icon: React.ReactNode;
     /** Small support-status pills shown next to the platform name (e.g. "Beta"). */
     tags?: readonly string[];
+    altHref?: string | null;
+    altLabel?: string;
 }
 
-function PlatformCard({ name, detail, href, docsHref, icon, tags }: PlatformCardProps) {
+function PlatformCard({
+    name,
+    detail,
+    href,
+    docsHref,
+    icon,
+    tags,
+    altHref,
+    altLabel,
+}: PlatformCardProps) {
     const comingSoon = href === null;
     return (
         <div
@@ -113,6 +127,16 @@ function PlatformCard({ name, detail, href, docsHref, icon, tags }: PlatformCard
                         <span aria-hidden="true">↓</span>
                     </a>
                 )}
+                {!comingSoon && altHref && altLabel ? (
+                    <a
+                        href={altHref}
+                        aria-label={`Download bluemacaw for ${name} on ${altLabel}`}
+                        className="inline-flex items-center gap-1 text-sm font-semibold text-main hover:underline"
+                    >
+                        {altLabel}
+                        <span aria-hidden="true">↓</span>
+                    </a>
+                ) : null}
                 <a
                     href={docsHref}
                     className="inline-flex items-center gap-1 text-sm font-semibold text-main hover:underline"

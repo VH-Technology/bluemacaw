@@ -3,6 +3,7 @@ export interface DownloadManifest {
     mac: string | null;
     win: string | null;
     linux: string | null;
+    linuxArm64: string | null;
 }
 
 // We hit the API (not the releases/latest/download/latest.json asset URL)
@@ -34,7 +35,8 @@ export async function fetchManifest(): Promise<DownloadManifest | null> {
             version: data.tag_name.replace(/^v/, ''),
             mac: find(/\.dmg$/),
             win: find(/\.msi$|-setup\.exe$/),
-            linux: find(/\.AppImage$/),
+            linux: find(/(amd64|x86_64)\.AppImage$/),
+            linuxArm64: find(/(aarch64|arm64)\.AppImage$/),
         };
     } catch {
         return null;

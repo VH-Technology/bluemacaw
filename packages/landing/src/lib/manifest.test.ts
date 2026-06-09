@@ -50,8 +50,33 @@ describe('fetchManifest', () => {
         );
         const manifest = await fetchManifest();
         expect(manifest?.win).toContain('.msi');
-        expect(manifest?.linux).toContain('.AppImage');
+        expect(manifest?.linux).toContain('amd64.AppImage');
+        expect(manifest?.linuxArm64).toBeNull();
         expect(manifest?.mac).toBeNull();
+    });
+
+    it('maps the amd64 and aarch64 AppImages to separate linux fields', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(async () =>
+                apiResponse([
+                    {
+                        name: 'bluemacaw_0.2.0_aarch64.AppImage',
+                        browser_download_url:
+                            'https://example.test/v0.2.0/bluemacaw_0.2.0_aarch64.AppImage',
+                    },
+                    {
+                        name: 'bluemacaw_0.2.0_amd64.AppImage',
+                        browser_download_url:
+                            'https://example.test/v0.2.0/bluemacaw_0.2.0_amd64.AppImage',
+                    },
+                ]),
+            ) as typeof fetch,
+        );
+        const manifest = await fetchManifest();
+        expect(manifest?.linux).toContain('amd64.AppImage');
+        expect(manifest?.linux).not.toContain('aarch64');
+        expect(manifest?.linuxArm64).toContain('aarch64.AppImage');
     });
 
     it('returns null when the response is not OK', async () => {
