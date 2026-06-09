@@ -34,7 +34,8 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "visible": false,
-        "url": "index.html?window=overlay"
+        "url": "index.html?window=overlay",
+        "shadow": false
       }
     ],
     "security": {
