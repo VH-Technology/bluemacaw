@@ -77,11 +77,11 @@ const TARGETS: Target[] = [
         path: 'packages/desktop/src-tauri/Cargo.lock',
         label: 'desktop (cargo.lock)',
         read: (text) => {
-            const m = text.match(/name = "bluemacaw"\nversion = "([^"]+)"/);
+            const m = text.match(/name = "bluemacaw"\r?\nversion = "([^"]+)"/);
             return m ? m[1] : null;
         },
         write: (text, next) =>
-            text.replace(/(name = "bluemacaw"\nversion = ")([^"]+)(")/, `$1${next}$3`),
+            text.replace(/(name = "bluemacaw"\r?\nversion = ")([^"]+)(")/, `$1${next}$3`),
     },
     jsonVersionTarget('packages/landing/package.json', 'landing (npm)'),
 ];
