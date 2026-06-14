@@ -54,7 +54,6 @@ export function Download() {
                     href={winHref}
                     docsHref="/docs/#install-windows"
                     icon={<MaskIcon src="/icons/windows.svg" className="h-7 w-7" />}
-                    tags={['Beta']}
                 />
                 <PlatformCard
                     name="Linux"
