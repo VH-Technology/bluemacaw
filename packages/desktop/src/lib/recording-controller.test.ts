@@ -25,6 +25,7 @@ function makeDeps(): RecordingDeps {
             restoreSystemVolume: vi.fn(async () => undefined),
         },
         transcribe: vi.fn(async () => 'hello world'),
+        getSelectedMicDeviceId: vi.fn(async () => null),
     };
 }
 
@@ -49,7 +50,7 @@ describe('recording-controller toggle', () => {
             await toggle({ kind: 'idle' }, deps, setState);
             expect(deps.vox.checkMicrophonePermission).toHaveBeenCalled();
             expect(deps.vox.requestMicrophonePermission).not.toHaveBeenCalled();
-            expect(deps.vox.startRecording).toHaveBeenCalled();
+            expect(deps.vox.startRecording).toHaveBeenCalledWith(undefined);
             expect(states).toHaveLength(1);
             const first = states[0];
             if (!first || first.kind !== 'recording') {
@@ -57,6 +58,14 @@ describe('recording-controller toggle', () => {
             }
             expect(first.sessionId).toBe('session-1');
             expect(typeof first.startedAt).toBe('number');
+        });
+
+        it('forwards the selected mic device id to startRecording', async () => {
+            vi.mocked(deps.getSelectedMicDeviceId).mockResolvedValueOnce('hyperx-alsa');
+            const { setState, states } = makeSetState();
+            await toggle({ kind: 'idle' }, deps, setState);
+            expect(deps.vox.startRecording).toHaveBeenCalledWith('hyperx-alsa');
+            expect(states.at(-1)?.kind).toBe('recording');
         });
 
         it('requests permission when undetermined and starts on grant (in order)', async () => {
@@ -307,7 +316,7 @@ describe('recording-controller realtime path', () => {
         const deps = makeRealtimeDeps();
         const { setState, states } = makeSetState();
         await toggle({ kind: 'idle' }, deps, setState);
-        expect(deps.startRealtimeCapture).toHaveBeenCalled();
+        expect(deps.startRealtimeCapture).toHaveBeenCalledWith(undefined);
         expect(deps.vox.startRecording).not.toHaveBeenCalled();
         const last = states.at(-1);
         if (last?.kind !== 'recording' || !last.realtime) {
@@ -315,6 +324,16 @@ describe('recording-controller realtime path', () => {
         }
         expect(last.sessionId).toBe('rt-session-1');
         expect(last.realtime.session).toBe(deps.session);
+    });
+
+    it('forwards the selected mic device id to startRealtimeCapture', async () => {
+        const deps = makeRealtimeDeps();
+        vi.mocked(deps.getSelectedMicDeviceId).mockResolvedValueOnce('hyperx-alsa');
+        const { setState, states } = makeSetState();
+        await toggle({ kind: 'idle' }, deps, setState);
+        expect(deps.startRealtimeCapture).toHaveBeenCalledWith('hyperx-alsa');
+        expect(deps.vox.startRecording).not.toHaveBeenCalled();
+        expect(states.at(-1)?.kind).toBe('recording');
     });
 
     it('stopAndTranscribe awaits session.finish() and pastes the result', async () => {

@@ -1,4 +1,9 @@
-import { getActiveModelConfigId, getModelConfigWithApiKey, saveTranscription } from './db';
+import {
+    getActiveModelConfigId,
+    getModelConfigWithApiKey,
+    getSelectedMicDeviceId,
+    saveTranscription,
+} from './db';
 import type { vox as voxApi } from './invoke';
 import {
     ERR_ACCESSIBILITY_REQUIRED,
@@ -49,8 +54,10 @@ export interface RecordingDeps {
      * config never silently engages the realtime pipeline.
      */
     resolveActiveMode?: () => Promise<'batch' | 'realtime'>;
+    /** Read the mic the user selected in Settings. Defaults to DB lookup. */
+    getSelectedMicDeviceId?: () => Promise<string | null>;
     /** Inject for tests — defaults to the production realtime orchestrator. */
-    startRealtimeCapture?: () => Promise<RealtimeCapture>;
+    startRealtimeCapture?: (deviceId?: string) => Promise<RealtimeCapture>;
 }
 
 export type SetState = (next: RecordingState) => void;
@@ -108,11 +115,15 @@ async function startFromIdle(deps: RecordingDeps, setState: SetState): Promise<v
             setState({ kind: 'error', message: gate.reason });
             return;
         }
+        const getDeviceId = deps.getSelectedMicDeviceId ?? getSelectedMicDeviceId;
+        const selectedDeviceId = await getDeviceId();
+        const deviceId = selectedDeviceId ?? undefined;
+
         const resolveMode = deps.resolveActiveMode ?? defaultResolveActiveMode;
         const mode = await resolveMode();
         if (mode === 'realtime') {
             const startRt = deps.startRealtimeCapture ?? defaultStartRealtimeCapture;
-            const realtime = await startRt();
+            const realtime = await startRt(deviceId);
             setState({
                 kind: 'recording',
                 sessionId: realtime.rustSessionId,
@@ -122,7 +133,7 @@ async function startFromIdle(deps: RecordingDeps, setState: SetState): Promise<v
             duckVolume(deps);
             return;
         }
-        const sessionId = await deps.vox.startRecording();
+        const sessionId = await deps.vox.startRecording(deviceId);
         setState({ kind: 'recording', sessionId, startedAt: Date.now() });
         duckVolume(deps);
     } catch (e) {
