@@ -85,10 +85,14 @@ export function useHotkeyRecording(options: UseHotkeyRecordingOptions = {}): {
             }
         };
         const togglePromise = listen(SHORTCUT_EVENT, () => {
-            void toggle(stateRef.current, depsRef.current, applyNext);
+            toggle(stateRef.current, depsRef.current, applyNext).catch((e) => {
+                console.error('hotkey toggle failed', e);
+            });
         });
         const cancelPromise = listen(EVT_SHORTCUT_CANCEL, () => {
-            void cancel(stateRef.current, depsRef.current, applyNext);
+            cancel(stateRef.current, depsRef.current, applyNext).catch((e) => {
+                console.error('hotkey cancel failed', e);
+            });
         });
         return () => {
             cancelled = true;

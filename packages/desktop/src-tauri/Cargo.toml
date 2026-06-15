@@ -1,6 +1,6 @@
 [package]
 name = "bluemacaw"
-version = "1.0.2"
+version = "1.0.3"
 description = "bluemacaw desktop"
 authors = ["Programow"]
 edition = "2021"
@@ -45,6 +45,9 @@ objc2-foundation = "0.3"
 objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSPanel", "NSResponder", "NSGraphics"] }
 objc2-av-foundation = { version = "0.3", features = ["AVCaptureDevice", "AVMediaFormat", "block2"] }
 block2 = "0.6"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+alsa = "0.9"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = [

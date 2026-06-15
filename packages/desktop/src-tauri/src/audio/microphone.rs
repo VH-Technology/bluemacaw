@@ -87,8 +87,201 @@ impl MicrophoneSource {
                 });
             }
         }
+        #[cfg(target_os = "linux")]
+        {
+            out = normalize_linux_devices(out);
+        }
         Ok(out)
     }
+}
+
+/// Linux-specific post-processing for cpal's raw ALSA PCM names.
+///
+/// cpal returns one entry per ALSA PCM node, so a single physical USB mic
+/// (e.g. a HyperX QuadCast S) can appear many times: `hw:CARD=S,DEV=0`,
+/// `plughw:CARD=S,DEV=0`, `default:CARD=S`, `front:CARD=S,DEV=0`, etc.
+/// This function groups nodes by ALSA card and returns one representative
+/// entry per physical card, using ALSA's card long name as the label.
+#[cfg(target_os = "linux")]
+fn normalize_linux_devices(
+    devices: Vec<crate::audio::AudioDeviceInfo>,
+) -> Vec<crate::audio::AudioDeviceInfo> {
+    use std::collections::HashMap;
+
+    let mut by_card: HashMap<String, Vec<crate::audio::AudioDeviceInfo>> = HashMap::new();
+    for d in devices {
+        let key = parse_alsa_card(&d.id).map(str::to_string).unwrap_or_else(|| d.id.clone());
+        by_card.entry(key).or_default().push(d);
+    }
+
+    let mut out = Vec::with_capacity(by_card.len());
+    for (card, mut entries) in by_card {
+        let is_default = entries.iter().any(|d| d.is_default);
+        entries.sort_by_key(|d| alsa_device_rank(&d.id));
+        let rep = entries.into_iter().next().expect("non-empty group");
+        let label = alsa_card_label(&card).unwrap_or_else(|| {
+            log::warn!(
+                "failed to resolve label for ALSA card \"{card}\" (representative device \"{}\")",
+                rep.id,
+            );
+            // Fall back to the card short name (e.g. "S") instead of the raw
+            // ALSA PCM path (e.g. "default:CARD=S") when label resolution
+            // can't read /proc/asound/cards or the ALSA control API.
+            parse_alsa_card(&rep.id)
+                .map(str::to_string)
+                .unwrap_or(rep.label)
+        });
+        out.push(crate::audio::AudioDeviceInfo {
+            id: rep.id,
+            label,
+            is_default,
+        });
+    }
+
+    out.sort_by(|a, b| {
+        b.is_default
+            .cmp(&a.is_default)
+            .then_with(|| a.label.to_lowercase().cmp(&b.label.to_lowercase()))
+    });
+    out
+}
+
+#[cfg(target_os = "linux")]
+fn parse_alsa_card(name: &str) -> Option<&str> {
+    let start = name.find("CARD=")? + 5;
+    let rest = &name[start..];
+    let len = rest.find(',').unwrap_or(rest.len());
+    Some(&rest[..len])
+}
+
+/// Rank ALSA PCM device names so we pick the most useful representative
+/// per physical card. Lower is better.
+#[cfg(target_os = "linux")]
+fn alsa_device_rank(name: &str) -> usize {
+    if name.starts_with("default:CARD=") {
+        0
+    } else if name.starts_with("sysdefault:CARD=") {
+        1
+    } else if name.starts_with("hw:CARD=") && name.contains(",DEV=0") {
+        2
+    } else if name.starts_with("hw:CARD=") {
+        3
+    } else if name.starts_with("plughw:CARD=") && name.contains(",DEV=0") {
+        4
+    } else if name.starts_with("plughw:CARD=") {
+        5
+    } else {
+        6
+    }
+}
+
+/// Look up a human-readable label for an ALSA card short name.
+///
+/// Tries the ALSA crate first, but keeps iterating on per-card errors.
+/// Falls back to parsing `/proc/asound/cards` when the crate can't open
+/// every card (common on Raspberry Pi where HDMI outputs may error out).
+#[cfg(target_os = "linux")]
+fn alsa_card_label(card_short_name: &str) -> Option<String> {
+    let iter = alsa::card::Iter::new();
+    for result in iter {
+        if let Ok(card) = result {
+            if let Ok(name) = card.get_name() {
+                if name == card_short_name {
+                    if let Ok(long) = card.get_longname() {
+                        if let Some(label) = clean_alsa_label(&long) {
+                            return Some(label);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    label_from_proc_asound_cards(card_short_name)
+}
+
+/// Strip the trailing location/speed suffix ALSA adds to card long names,
+/// e.g. "HP, Inc HyperX QuadCast S at usb-0000:01:00.0-1.3.4, full speed"
+/// becomes "HP, Inc HyperX QuadCast S".
+/// Handles any bus type (USB, PCI, HDMI, etc.) via splitting on " at ".
+#[cfg(target_os = "linux")]
+fn clean_alsa_label(longname: &str) -> Option<String> {
+    let label = longname
+        .trim()
+        .split(" at ")
+        .next()
+        .unwrap_or(longname)
+        .trim()
+        .to_string();
+    if label.is_empty() { None } else { Some(label) }
+}
+
+#[cfg(target_os = "linux")]
+fn label_from_proc_asound_cards(card_short_name: &str) -> Option<String> {
+    let contents = std::fs::read_to_string("/proc/asound/cards").ok()?;
+    label_from_cards_text(&contents, card_short_name)
+}
+
+/// Parse `/proc/asound/cards`-formatted text and return the best label for
+/// the given card short name. Exposed as a pure helper so tests don't need
+/// the real ALSA filesystem.
+///
+/// The kernel may or may not place blank lines between card entries (some
+/// embedded kernels don't), so we parse line-by-line instead of splitting
+/// on `\n\n`. Card header lines start with a digit (the card number).
+#[cfg(target_os = "linux")]
+fn label_from_cards_text(contents: &str, card_short_name: &str) -> Option<String> {
+    let lines: Vec<&str> = contents.lines().collect();
+    let mut i = 0;
+    while i < lines.len() {
+        let raw = lines[i];
+        let line = raw.trim();
+
+        // Blank lines — skip.
+        if line.is_empty() {
+            i += 1;
+            continue;
+        }
+
+        // Card entries start with their number, e.g. " 3 [S ..."
+        // Lines that don't start with a digit are continuation lines.
+        let starts_with_digit = line
+            .as_bytes()
+            .first()
+            .map(u8::is_ascii_digit)
+            .unwrap_or(false);
+        if !starts_with_digit {
+            i += 1;
+            continue;
+        }
+
+        // Extract short name from brackets: " 3 [S              ]: USB-Audio - HyperX QuadCast S"
+        let bracket_open = line.find('[')? + 1;
+        let bracket_close = line.find(']')?;
+        let current_short = &line[bracket_open..bracket_close];
+        if current_short.trim() != card_short_name {
+            // Next line is the longname for this card; skip both.
+            i += 2;
+            continue;
+        }
+
+        // Prefer the product name after " - " on the first line; this is
+        // usually the cleanest description (e.g. "HyperX QuadCast S").
+        if let Some(product) = line.split(" - ").nth(1) {
+            let product = product.trim();
+            if !product.is_empty() {
+                return Some(product.to_string());
+            }
+        }
+
+        // Otherwise use the indented longname line below it.
+        if let Some(second) = lines.get(i + 1) {
+            if let Some(label) = clean_alsa_label(second) {
+                return Some(label);
+            }
+        }
+        return None;
+    }
+    None
 }
 
 impl Default for MicrophoneSource {
@@ -655,5 +848,139 @@ mod tests {
         // RIFF chunk size = 36 + data_len = 36 when empty.
         let riff_len = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
         assert_eq!(riff_len, 36);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn parse_alsa_card_extracts_short_card_name() {
+        assert_eq!(parse_alsa_card("hw:CARD=S,DEV=0"), Some("S"));
+        assert_eq!(parse_alsa_card("plughw:CARD=S,DEV=0"), Some("S"));
+        assert_eq!(parse_alsa_card("default:CARD=S"), Some("S"));
+        assert_eq!(parse_alsa_card("sysdefault:CARD=S"), Some("S"));
+        assert_eq!(parse_alsa_card("front:CARD=S,DEV=0"), Some("S"));
+        assert_eq!(parse_alsa_card("surround40:CARD=S,DEV=0"), Some("S"));
+        assert_eq!(parse_alsa_card("iec958:CARD=S,DEV=0"), Some("S"));
+        assert_eq!(parse_alsa_card("no-card-here"), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn alsa_device_rank_prefers_default_then_hw_dev_zero() {
+        // Lower rank is better.
+        assert!(alsa_device_rank("default:CARD=S") < alsa_device_rank("sysdefault:CARD=S"));
+        assert!(alsa_device_rank("sysdefault:CARD=S") < alsa_device_rank("hw:CARD=S,DEV=0"));
+        assert!(alsa_device_rank("hw:CARD=S,DEV=0") < alsa_device_rank("hw:CARD=S,DEV=1"));
+        assert!(alsa_device_rank("hw:CARD=S,DEV=0") < alsa_device_rank("plughw:CARD=S,DEV=0"));
+        assert!(alsa_device_rank("plughw:CARD=S,DEV=0") < alsa_device_rank("front:CARD=S,DEV=0"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn normalize_linux_devices_groups_subdevices_by_card() {
+        let devices = vec![
+            crate::audio::AudioDeviceInfo {
+                id: "hw:CARD=S,DEV=0".into(),
+                label: "hw:CARD=S,DEV=0".into(),
+                is_default: false,
+            },
+            crate::audio::AudioDeviceInfo {
+                id: "plughw:CARD=S,DEV=0".into(),
+                label: "plughw:CARD=S,DEV=0".into(),
+                is_default: false,
+            },
+            crate::audio::AudioDeviceInfo {
+                id: "default:CARD=S".into(),
+                label: "default:CARD=S".into(),
+                is_default: true,
+            },
+            crate::audio::AudioDeviceInfo {
+                id: "front:CARD=S,DEV=0".into(),
+                label: "front:CARD=S,DEV=0".into(),
+                is_default: false,
+            },
+            crate::audio::AudioDeviceInfo {
+                id: "hw:CARD=PCH,DEV=0".into(),
+                label: "hw:CARD=PCH,DEV=0".into(),
+                is_default: false,
+            },
+        ];
+        let normalized = normalize_linux_devices(devices);
+        // Should collapse the four CARD=S subdevices into one entry,
+        // preferring default:CARD=S as the representative ID.
+        let s = normalized.iter().find(|d| d.id == "default:CARD=S");
+        assert!(s.is_some(), "expected default:CARD=S representative, got {normalized:?}");
+        let s = s.unwrap();
+        assert!(s.is_default, "default flag should be preserved across the group");
+
+        let pch = normalized.iter().find(|d| d.id == "hw:CARD=PCH,DEV=0");
+        assert!(pch.is_some(), "expected PCH entry, got {normalized:?}");
+
+        assert_eq!(normalized.len(), 2, "expected one entry per card, got {normalized:?}");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn label_from_cards_text_extracts_product_name() {
+        let sample = " 0 [Headphones     ]: bcm2835_headpho - bcm2835 Headphones\n                      bcm2835 Headphones\n\n 3 [S              ]: USB-Audio - HyperX QuadCast S\n                      HP, Inc HyperX QuadCast S at usb-0000:01:00.0-1.3.4, full speed\n";
+        assert_eq!(
+            label_from_cards_text(sample, "S"),
+            Some("HyperX QuadCast S".to_string())
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn label_from_cards_text_ignores_leading_and_trailing_blank_lines() {
+        let sample = "\n\n 3 [S              ]: USB-Audio - HyperX QuadCast S\n                      HP, Inc HyperX QuadCast S at usb-0000:01:00.0-1.3.4, full speed\n\n\n";
+        assert_eq!(
+            label_from_cards_text(sample, "S"),
+            Some("HyperX QuadCast S".to_string())
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn label_from_cards_text_falls_back_to_longname() {
+        let sample = " 3 [S              ]: USB-Audio\n                      HP, Inc HyperX QuadCast S at usb-0000:01:00.0-1.3.4, full speed\n";
+        assert_eq!(
+            label_from_cards_text(sample, "S"),
+            Some("HP, Inc HyperX QuadCast S".to_string())
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn label_from_cards_text_handles_compact_format_no_blank_lines() {
+        // Some kernels (e.g. Raspberry Pi) emit card entries back-to-back
+        // with no blank lines between them. The parser must handle this.
+        let sample = " 0 [Headphones     ]: bcm2835_headpho - bcm2835 Headphones\n                      bcm2835 Headphones\n 1 [vc4hdmi0       ]: vc4-hdmi - vc4-hdmi-0\n                      vc4-hdmi-0\n 2 [vc4hdmi1       ]: vc4-hdmi - vc4-hdmi-1\n                      vc4-hdmi-1\n 3 [S              ]: USB-Audio - HyperX QuadCast S\n                      HP, Inc HyperX QuadCast S at usb-0000:01:00.0-1.3.4, full speed\n";
+        assert_eq!(
+            label_from_cards_text(sample, "S"),
+            Some("HyperX QuadCast S".to_string())
+        );
+        assert_eq!(
+            label_from_cards_text(sample, "Headphones"),
+            Some("bcm2835 Headphones".to_string())
+        );
+        // Unknown card
+        assert_eq!(label_from_cards_text(sample, "Foobar"), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn clean_alsa_label_strips_trailing_location() {
+        assert_eq!(
+            clean_alsa_label("HP, Inc HyperX QuadCast S at usb-0000:01:00.0-1.3.4, full speed"),
+            Some("HP, Inc HyperX QuadCast S".to_string())
+        );
+        assert_eq!(
+            clean_alsa_label("HDA Intel PCH at 0x0000... irq ..."),
+            Some("HDA Intel PCH".to_string())
+        );
+        assert_eq!(
+            clean_alsa_label("bcm2835 Headphones"),
+            Some("bcm2835 Headphones".to_string())
+        );
+        assert_eq!(clean_alsa_label("   "), None);
     }
 }

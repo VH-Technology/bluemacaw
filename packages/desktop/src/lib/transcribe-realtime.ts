@@ -19,7 +19,12 @@ import type { UnlistenFn } from '@tauri-apps/api/event';
 import { PROVIDERS } from '../providers';
 import type { RealtimeSession } from '../providers/types';
 import { bufferRealtimeSession } from './buffering-realtime-session';
-import { type ModelConfigWithApiKey, getActiveModelConfigId, getModelConfigWithApiKey } from './db';
+import {
+    type ModelConfigWithApiKey,
+    getActiveModelConfigId,
+    getModelConfigWithApiKey,
+    getSelectedMicDeviceId,
+} from './db';
 import { listenAudioChunks, vox } from './invoke';
 
 export interface RealtimeCapture {
@@ -82,7 +87,7 @@ async function resolveActiveConfig(): Promise<ModelConfigWithApiKey | null> {
  * so the UX degrades to "speak, release, see error" — strictly better
  * than "stare at idle for a full RTT before you're allowed to speak".
  */
-export async function startRealtimeCapture(): Promise<RealtimeCapture> {
+export async function startRealtimeCapture(deviceId?: string): Promise<RealtimeCapture> {
     const cfg = await resolveActiveConfig();
     if (!cfg) {
         throw new Error('No model selected');
@@ -99,6 +104,9 @@ export async function startRealtimeCapture(): Promise<RealtimeCapture> {
         throw new Error(`No API key found in keychain for ${cfg.apiKeyNickname}`);
     }
 
+    // Honour the user's chosen mic; fall back to system default if unset.
+    const selectedDeviceId = deviceId ?? (await getSelectedMicDeviceId()) ?? undefined;
+
     // 1. Kick off the WS handshake without awaiting. Attach a no-op
     //    catch so an early rejection doesn't surface as an unhandled
     //    rejection — the buffering session re-throws it via finish().
@@ -110,7 +118,7 @@ export async function startRealtimeCapture(): Promise<RealtimeCapture> {
     // 2. Start Rust capture. Mic is live as soon as this resolves.
     let rustSessionId: string;
     try {
-        rustSessionId = await vox.startRecordingRealtime();
+        rustSessionId = await vox.startRecordingRealtime(selectedDeviceId);
     } catch (e) {
         session.abort();
         throw e;

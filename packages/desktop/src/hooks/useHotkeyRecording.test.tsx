@@ -60,6 +60,7 @@ function makeDeps(): RecordingDeps {
         // for. Passing stubs here keeps the controller path test-isolated.
         saveTranscription: vi.fn(async () => undefined),
         resolveActiveConfig: vi.fn(async () => null),
+        getSelectedMicDeviceId: vi.fn(async () => null),
     };
 }
 
