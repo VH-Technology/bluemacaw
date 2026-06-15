@@ -61,6 +61,7 @@ describe('recording-controller toggle', () => {
         });
 
         it('forwards the selected mic device id to startRecording', async () => {
+            if (!deps.getSelectedMicDeviceId) throw new Error('missing dep');
             vi.mocked(deps.getSelectedMicDeviceId).mockResolvedValueOnce('hyperx-alsa');
             const { setState, states } = makeSetState();
             await toggle({ kind: 'idle' }, deps, setState);
@@ -328,6 +329,7 @@ describe('recording-controller realtime path', () => {
 
     it('forwards the selected mic device id to startRealtimeCapture', async () => {
         const deps = makeRealtimeDeps();
+        if (!deps.getSelectedMicDeviceId) throw new Error('missing dep');
         vi.mocked(deps.getSelectedMicDeviceId).mockResolvedValueOnce('hyperx-alsa');
         const { setState, states } = makeSetState();
         await toggle({ kind: 'idle' }, deps, setState);
