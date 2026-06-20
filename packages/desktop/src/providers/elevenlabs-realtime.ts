@@ -25,29 +25,14 @@
  * than network machinery.
  */
 
-import TauriWebSocket, { type Message as TauriWsMessage } from '@tauri-apps/plugin-websocket';
+import { type WebSocketFactory, defaultWebSocketFactory } from './realtime-ws';
 import type { RealtimeModel, RealtimeSession } from './types';
+
+// Re-exported so existing importers (and tests) keep a single entry point.
+export type { WebSocketFactory, WebSocketLike } from './realtime-ws';
 
 const BASE_URL = 'wss://api.elevenlabs.io/v1/speech-to-text/realtime';
 const TOKEN_URL = 'https://api.elevenlabs.io/v1/single-use-token/realtime_scribe';
-
-/**
- * Minimal `WebSocket`-shaped interface — exactly what the adapter calls
- * into. Lets tests inject a mock without requiring the full DOM type.
- */
-export interface WebSocketLike {
-    readonly readyState: number;
-    binaryType: string;
-    addEventListener: (
-        type: 'open' | 'message' | 'close' | 'error',
-        // biome-ignore lint/suspicious/noExplicitAny: WS event shapes vary by mock vs. native
-        listener: (ev: any) => void,
-    ) => void;
-    send: (data: string | ArrayBuffer | ArrayBufferView) => void;
-    close: (code?: number, reason?: string) => void;
-}
-
-export type WebSocketFactory = (url: string) => WebSocketLike;
 
 export interface ConnectScribeRealtimeOpts {
     modelId: string;
@@ -277,88 +262,6 @@ export async function connectScribeRealtime(
             if (closed) return;
             closed = true;
             ws.close(1000, 'abort');
-        },
-    };
-}
-
-/**
- * Default WebSocket factory. Inside a Tauri runtime the socket is opened
- * from the Rust side via the websocket plugin: WKWebView refuses a native
- * `new WebSocket()` under the packaged app's custom `tauri://` document
- * origin with `SecurityError: The operation is insecure.` (works in dev,
- * where the origin is `http://localhost`). Outside Tauri — a context we
- * don't actually ship, kept only as a safe fallback — it uses the native
- * WebSocket. Tests bypass this entirely via the `webSocketFactory` seam.
- */
-const defaultWebSocketFactory: WebSocketFactory = (url) => {
-    const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-    return inTauri ? tauriWebSocket(url) : (new WebSocket(url) as unknown as WebSocketLike);
-};
-
-/**
- * Adapt the Tauri websocket plugin (async `connect`, single `addListener`
- * delivering typed frames) to the synchronous, native-`WebSocket`-shaped
- * [`WebSocketLike`] the session code expects. Listeners registered before
- * the async connect resolves are buffered and replayed; sends issued before
- * connect are queued.
- */
-function tauriWebSocket(url: string): WebSocketLike {
-    // biome-ignore lint/suspicious/noExplicitAny: event shapes mirror the native WS events the caller consumes
-    type Listener = (ev: any) => void;
-    const listeners: Record<'open' | 'message' | 'close' | 'error', Listener[]> = {
-        open: [],
-        message: [],
-        close: [],
-        error: [],
-    };
-    const emit = (type: keyof typeof listeners, ev: unknown) => {
-        for (const l of listeners[type]) l(ev);
-    };
-
-    let conn: Awaited<ReturnType<typeof TauriWebSocket.connect>> | null = null;
-    let state = 0; // CONNECTING
-    const pending: string[] = [];
-
-    TauriWebSocket.connect(url)
-        .then((c) => {
-            conn = c;
-            state = 1; // OPEN
-            c.addListener((msg: TauriWsMessage) => {
-                if (msg.type === 'Text') {
-                    emit('message', { data: msg.data });
-                } else if (msg.type === 'Binary') {
-                    emit('message', { data: new Uint8Array(msg.data).buffer });
-                } else if (msg.type === 'Close') {
-                    state = 3; // CLOSED
-                    emit('close', { code: msg.data?.code, reason: msg.data?.reason });
-                }
-            });
-            for (const p of pending) void conn.send(p);
-            pending.length = 0;
-            emit('open', {});
-        })
-        .catch((e: unknown) => {
-            state = 3;
-            emit('error', { message: e instanceof Error ? e.message : String(e) });
-        });
-
-    return {
-        get readyState() {
-            return state;
-        },
-        binaryType: 'arraybuffer',
-        addEventListener: (type, listener) => {
-            listeners[type].push(listener);
-        },
-        send: (data) => {
-            // The Scribe protocol only ever sends JSON text frames.
-            const payload = typeof data === 'string' ? data : '';
-            if (conn) void conn.send(payload);
-            else pending.push(payload);
-        },
-        close: () => {
-            state = 3;
-            if (conn) void conn.disconnect();
         },
     };
 }

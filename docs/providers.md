@@ -6,16 +6,18 @@ bluemacaw ships ten STT (speech-to-text) providers. The registry is data-driven 
 
 | ID | Name | Default models | Has `listModels` |
 |---|---|---|---|
-| `assemblyai` | AssemblyAI | `universal-3-pro`, `universal-2` | static |
+| `assemblyai` | AssemblyAI | `universal-3-pro`, `universal-2`, `u3-rt-pro` ⚡ | static |
 | `azure-openai` | Azure OpenAI | `whisper` (deployment id) | static |
-| `deepgram` | Deepgram | `nova-3`, `nova-2`, `enhanced` | static |
-| `elevenlabs` | ElevenLabs | `scribe_v1` | live (`/v1/models`, filtered to `can_do_transcribe`) |
+| `deepgram` | Deepgram | `nova-3`, `nova-2`, `enhanced`, `flux-general-en` ⚡ | static |
+| `elevenlabs` | ElevenLabs | `scribe_v2_realtime` ⚡, `scribe_v1` | live (`/v1/models`, filtered to `can_do_transcribe`) |
 | `fal` | Fal | `whisper`, `wizper` | static |
-| `gladia` | Gladia | `whisper-large-v3` | static |
+| `gladia` | Gladia | `solaria-1`, `solaria-3` | static |
 | `groq` | Groq | `whisper-large-v3`, `whisper-large-v3-turbo` | live (`/openai/v1/models`, filtered by `whisper` in id) |
 | `openai` | OpenAI | `whisper-1`, `gpt-4o-transcribe`, `gpt-4o-mini-transcribe` | live (`/v1/models`, filtered to known transcription ids) |
-| `revai` | Rev.ai | `machine`, `low_cost`, `fusion` | static |
+| `revai` | Rev.ai | `machine`, `low_cost` (Reverb Turbo), `fusion` | static |
 | `xai` | Grok (xAI) | `grok-stt` | static |
+
+⚡ = `mode: 'realtime'` (streaming). All other models are `mode: 'batch'`.
 
 (Authoritative source: `packages/desktop/src/providers/*.ts`.)
 
@@ -33,8 +35,23 @@ A few providers translate retired model ids on the fly so persisted user configs
 
 - `assemblyai.ts` aliases `best → universal-3-pro`, `nano → universal-2`. The same file also wraps the AI SDK's `fetch` (`rewritingFetch`) to translate the deprecated `speech_model` (singular) request body field to `speech_models` (plural array) until `@ai-sdk/assemblyai` ships the rename.
 - `groq.ts` aliases `distil-whisper-large-v3-en → whisper-large-v3-turbo` (Groq retired the distil model on 2025-08-23).
+- `gladia.ts` aliases `whisper-large-v3 → solaria-1`. The previous build labeled its single model `whisper-large-v3`, but `@ai-sdk/gladia` never actually sent a `model` field — requests fell back to Gladia's default, which is now Solaria-1. The same file wraps the SDK's `fetch` (`makeModelInjectingFetch`) to inject the selected `model` into the `/v2/pre-recorded` body, since the adapter has no model option.
 
 When removing one of these aliases, delete both the entry in `LEGACY_MODEL_ALIASES` and the corresponding test.
+
+## Realtime (streaming) models
+
+Models with `mode: 'realtime'` stream audio over a WebSocket instead of POSTing a finished recording. A provider that exposes at least one realtime model implements the optional `makeRealtimeModel(modelId, apiKey)` hook, which returns a `RealtimeModel` whose `connect()` opens the session. The recording controller routes to this path automatically when the active model's `mode` is `realtime` (see `lib/transcribe-realtime.ts` → `resolveActiveMode`); no per-provider wiring is needed beyond the config.
+
+The Vercel AI SDK transcription adapters are batch-only, so each realtime provider hand-rolls a small WebSocket client. Shared plumbing lives in `providers/realtime-ws.ts` (the `WebSocketLike` test seam, the Tauri-backed `defaultWebSocketFactory`, binary-frame support, and header/subprotocol auth). Current realtime adapters:
+
+| Provider | Model | Adapter | Auth | Audio frames |
+|---|---|---|---|---|
+| ElevenLabs | `scribe_v2_realtime` | `elevenlabs-realtime.ts` | single-use token (`?token=`) | base64 PCM in JSON |
+| Deepgram | `flux-general-en` | `deepgram-flux-realtime.ts` | `Authorization: Token` header + `token` subprotocol | raw binary PCM (`linear16`) |
+| AssemblyAI | `u3-rt-pro` | `assemblyai-realtime.ts` | minted temp token (`?token=`) | raw binary PCM (`pcm_s16le`) |
+
+Each adapter satisfies the `RealtimeSession` contract from `types.ts`: `sendAudio(pcm: Int16Array)`, `finish(): Promise<string>`, `abort()`. Sessions accumulate finalized turn/segment transcripts and join them on `finish()`.
 
 ## The `ProviderConfig` contract
 
@@ -49,6 +66,10 @@ export interface ProviderConfig {
     apiKeyHelpUrl: string;
     pricingDocsUrl: string;
     makeModel: (modelId: string, apiKey: string) => TranscriptionModel;
+    // Optional: direct REST path for providers with no AI SDK adapter (xAI).
+    transcribeBatch?: (audio: Uint8Array, modelId: string, apiKey: string) => Promise<string>;
+    // Optional: factory for realtime/streaming models (see "Realtime models").
+    makeRealtimeModel?: (modelId: string, apiKey: string) => RealtimeModel;
     listModels: ((apiKey: string) => Promise<Model[]>) | null;
     defaultModels: Model[];
     pricing: Record<string, PricingEntry>;

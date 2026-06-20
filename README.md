@@ -1,5 +1,8 @@
 # bluemacaw
 
+[![GitHub release downloads](https://img.shields.io/github/downloads/VH-Technology/bluemacaw/total?label=downloads&color=2ea44f)](https://github.com/VH-Technology/bluemacaw/releases)
+[![Latest release](https://img.shields.io/github/v/release/VH-Technology/bluemacaw?label=release)](https://github.com/VH-Technology/bluemacaw/releases/latest)
+
 Cross-platform speech-to-text desktop app. Press a global shortcut, dictate, get text pasted wherever your cursor is. Bring your own API key for any of 9 STT providers (OpenAI, Groq, Deepgram, AssemblyAI, ElevenLabs, Fal, Gladia, Azure OpenAI, Rev.ai).
 
 **Status:** the Tauri-based app lives under `packages/desktop/` (see Plan B).

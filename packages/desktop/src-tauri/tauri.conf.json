@@ -39,7 +39,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.openai.com https://api.groq.com https://api.deepgram.com https://api.assemblyai.com https://api.elevenlabs.io https://fal.run https://api.gladia.io https://*.openai.azure.com https://api.rev.ai"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.openai.com https://api.groq.com https://api.deepgram.com https://api.assemblyai.com https://streaming.assemblyai.com https://api.elevenlabs.io https://fal.run https://api.gladia.io https://*.openai.azure.com https://api.rev.ai wss://api.deepgram.com wss://streaming.assemblyai.com wss://api.elevenlabs.io"
     }
   },
   "bundle": {

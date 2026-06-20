@@ -11,8 +11,8 @@ const DEFAULT_MODELS: Model[] = [
     },
     {
         id: 'low_cost',
-        displayName: 'Low Cost',
-        description: 'Discounted asynchronous transcription tier',
+        displayName: 'Reverb Turbo',
+        description: "Fast, low-cost async tier powered by Rev's Reverb Turbo model",
         mode: 'batch',
     },
     {
@@ -42,7 +42,9 @@ export const revaiConfig: ProviderConfig = {
     defaultModels: DEFAULT_MODELS,
     pricing: {
         machine: { perMinuteUSD: 0.025, lastUpdated: '2026-05-03' },
-        low_cost: { perMinuteUSD: 0.0167, lastUpdated: '2026-05-03' },
+        // Reverb Turbo is published at $0.10/hr ≈ $0.001667/min (the prior
+        // 0.0167 figure was ~10× too high). Re-verify quarterly per spec §6.7.
+        low_cost: { perMinuteUSD: 0.001667, lastUpdated: '2026-06-20' },
         fusion: { perMinuteUSD: 0.04, lastUpdated: '2026-05-03' },
     },
 };

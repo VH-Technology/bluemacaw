@@ -21,8 +21,15 @@ describe('gladia provider config', () => {
             const entry = cfg.pricing[m.id];
             expect(entry).toBeDefined();
             expect(entry?.perMinuteUSD).toBeGreaterThan(0);
-            expect(entry?.lastUpdated).toBe('2026-05-03');
+            // Solaria entries were audited 2026-06-20; require a valid ISO
+            // date rather than one shared value.
+            expect(entry?.lastUpdated).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         }
+    });
+
+    it('default models are solaria-1 and solaria-3', () => {
+        const ids = cfg.defaultModels.map((m) => m.id).sort();
+        expect(ids).toEqual(['solaria-1', 'solaria-3']);
     });
 
     it('listModels is null (Gladia exposes a single transcription model)', () => {
@@ -98,7 +105,7 @@ describe('gladia transcription HTTP', () => {
 
     it('uploads, submits, polls, and returns text using x-gladia-key auth', async () => {
         const { captured } = setupHappyPath();
-        const model = cfg.makeModel('whisper-large-v3', 'gladia-test-key');
+        const model = cfg.makeModel('solaria-1', 'gladia-test-key');
         const result = await transcribe({ model, audio: fakeAudio, maxRetries: 0 });
 
         expect(result.text).toBe('hello from gladia');
@@ -108,6 +115,20 @@ describe('gladia transcription HTTP', () => {
         expect(captured.submitUrl.host).toBe('api.gladia.io');
         expect(captured.submitUrl.pathname).toBe('/v2/pre-recorded');
         expect(captured.submitBody.audio_url).toBe('https://cdn.gladia.io/uploads/fake.wav');
+    });
+
+    it('injects the selected model into the pre-recorded submit body', async () => {
+        const { captured } = setupHappyPath();
+        const model = cfg.makeModel('solaria-3', 'gladia-test-key');
+        await transcribe({ model, audio: fakeAudio, maxRetries: 0 });
+        expect(captured.submitBody.model).toBe('solaria-3');
+    });
+
+    it('maps the legacy whisper-large-v3 id forward to solaria-1', async () => {
+        const { captured } = setupHappyPath();
+        const model = cfg.makeModel('whisper-large-v3', 'gladia-test-key');
+        await transcribe({ model, audio: fakeAudio, maxRetries: 0 });
+        expect(captured.submitBody.model).toBe('solaria-1');
     });
 
     it('propagates 401 unauthorized errors on upload', async () => {

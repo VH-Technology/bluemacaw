@@ -1,5 +1,6 @@
 import { createAssemblyAI } from '@ai-sdk/assemblyai';
 import { httpFetch } from '../lib/http';
+import { makeU3RealtimeModel } from './assemblyai-realtime';
 import type { Model, ProviderConfig } from './types';
 
 const DEFAULT_MODELS: Model[] = [
@@ -14,6 +15,12 @@ const DEFAULT_MODELS: Model[] = [
         displayName: 'Universal 2',
         description: 'AssemblyAI previous-generation transcription model',
         mode: 'batch',
+    },
+    {
+        id: 'u3-rt-pro',
+        displayName: 'Universal 3 Pro Streaming',
+        description: 'Low-latency realtime streaming (~150 ms P50)',
+        mode: 'realtime',
     },
 ];
 
@@ -89,6 +96,7 @@ export const assemblyaiConfig: ProviderConfig = {
         createAssemblyAI({ apiKey, fetch: rewritingFetch }).transcription(
             modelId as 'best' | 'nano',
         ),
+    makeRealtimeModel: (modelId, apiKey) => makeU3RealtimeModel(modelId, apiKey),
     listModels: null,
     defaultModels: DEFAULT_MODELS,
     pricing: {
@@ -98,5 +106,8 @@ export const assemblyaiConfig: ProviderConfig = {
         // Re-verify quarterly per spec §6.7 audit cadence.
         'universal-3-pro': { perMinuteUSD: 0.00617, lastUpdated: '2026-05-11' },
         'universal-2': { perMinuteUSD: 0.00617, lastUpdated: '2026-05-11' },
+        // Universal 3 Pro Streaming base rate: $0.45/hr ≈ $0.0075/min.
+        // Re-verify quarterly per spec §6.7.
+        'u3-rt-pro': { perMinuteUSD: 0.0075, lastUpdated: '2026-06-20' },
     },
 };
