@@ -354,7 +354,7 @@ dependencies = [
 
 [[package]]
 name = "bluemacaw"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "alsa",
  "block2 0.6.2",
