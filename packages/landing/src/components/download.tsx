@@ -1,5 +1,6 @@
 'use client';
 
+import { DownloadCount } from '@/components/download-count';
 import { MaskIcon } from '@/components/ui/mask-icon';
 import { type DownloadManifest, fetchManifest } from '@/lib/manifest';
 import { useEffect, useState } from 'react';
@@ -39,6 +40,7 @@ export function Download() {
                         Full setup guide →
                     </a>
                 </p>
+                <DownloadCount />
             </div>
             <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
                 <PlatformCard
