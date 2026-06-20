@@ -25,6 +25,7 @@
         { "url": "https://api.deepgram.com/*" },
         { "url": "https://api.rev.ai/*" },
         { "url": "https://api.assemblyai.com/*" },
+        { "url": "https://streaming.assemblyai.com/*" },
         { "url": "https://api.elevenlabs.io/*" },
         { "url": "https://api.gladia.io/*" },
         { "url": "https://*.openai.azure.com/*" },

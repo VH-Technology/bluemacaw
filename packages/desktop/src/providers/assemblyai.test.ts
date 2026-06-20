@@ -12,9 +12,9 @@ describe('assemblyai provider config', () => {
         expect(cfg.docsUrl).toMatch(/^https:\/\//);
     });
 
-    it('default models include universal-3-pro and universal-2', () => {
+    it('default models include the batch and streaming Universal-3 Pro models', () => {
         const ids = cfg.defaultModels.map((m) => m.id).sort();
-        expect(ids).toEqual(['universal-2', 'universal-3-pro']);
+        expect(ids).toEqual(['u3-rt-pro', 'universal-2', 'universal-3-pro']);
     });
 
     it('has pricing entries for every default model', () => {
@@ -22,8 +22,15 @@ describe('assemblyai provider config', () => {
             const entry = cfg.pricing[m.id];
             expect(entry).toBeDefined();
             expect(entry?.perMinuteUSD).toBeGreaterThan(0);
-            expect(entry?.lastUpdated).toBe('2026-05-11');
+            // u3-rt-pro carries its own audit date; require a valid ISO date.
+            expect(entry?.lastUpdated).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         }
+    });
+
+    it('exposes u3-rt-pro as a realtime model with makeRealtimeModel', () => {
+        const streaming = cfg.defaultModels.find((m) => m.id === 'u3-rt-pro');
+        expect(streaming?.mode).toBe('realtime');
+        expect(cfg.makeRealtimeModel).toBeDefined();
     });
 
     it('listModels is null (AssemblyAI tier is configured by feature flags)', () => {

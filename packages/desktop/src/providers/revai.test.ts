@@ -23,8 +23,17 @@ describe('revai provider config', () => {
             const entry = cfg.pricing[m.id];
             expect(entry).toBeDefined();
             expect(entry?.perMinuteUSD).toBeGreaterThan(0);
-            expect(entry?.lastUpdated).toBe('2026-05-03');
+            // Entries carry their own audit date (low_cost was re-priced
+            // 2026-06-20); require a valid ISO date, not one shared value.
+            expect(entry?.lastUpdated).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         }
+    });
+
+    it('exposes low_cost as the Reverb Turbo tier with corrected pricing', () => {
+        const turbo = cfg.defaultModels.find((m) => m.id === 'low_cost');
+        expect(turbo?.displayName).toBe('Reverb Turbo');
+        // Reverb Turbo is $0.10/hr ≈ $0.001667/min (was mis-recorded at $0.0167).
+        expect(cfg.pricing.low_cost?.perMinuteUSD).toBeCloseTo(0.001667, 5);
     });
 
     it('listModels is null (Rev.ai uses hardcoded list)', () => {

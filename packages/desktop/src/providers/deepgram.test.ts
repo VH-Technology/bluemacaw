@@ -27,8 +27,16 @@ describe('deepgram provider config', () => {
             const entry = cfg.pricing[m.id];
             expect(entry).toBeDefined();
             expect(entry?.perMinuteUSD).toBeGreaterThan(0);
-            expect(entry?.lastUpdated).toBe('2026-05-03');
+            // Flux carries its own audit date (2026-06-20); require a valid
+            // ISO date rather than one shared value.
+            expect(entry?.lastUpdated).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         }
+    });
+
+    it('exposes flux-general-en as a realtime model with makeRealtimeModel', () => {
+        const flux = cfg.defaultModels.find((m) => m.id === 'flux-general-en');
+        expect(flux?.mode).toBe('realtime');
+        expect(cfg.makeRealtimeModel).toBeDefined();
     });
 
     it('listModels is null (Deepgram uses hardcoded list)', () => {
