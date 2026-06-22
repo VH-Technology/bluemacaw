@@ -2,8 +2,8 @@
 
 bluemacaw needs up to three privacy grants on platforms that gate them:
 
-- **Microphone** — to record audio. Gated on macOS (TCC) and Windows; never gated on Linux.
-- **Accessibility** — to inject the synthetic `Cmd+V` / `Ctrl+V` paste keystroke. Gated on macOS only; Windows allows `SendInput` without a per-app grant, Linux's `enigo` (XTest / libei) works without one.
+- **Microphone** — to record audio. Gated on macOS (TCC) and Windows.
+- **Accessibility** — to inject the synthetic `Cmd+V` / `Ctrl+V` paste keystroke. Gated on macOS only; Windows allows `SendInput` without a per-app grant.
 - **Input Monitoring** — only when the user picks the macOS Fn key as their hotkey. Gates `CGEventTap`, which is a distinct TCC bucket from Accessibility (`kTCCServiceListenEvent` vs `kTCCServiceAccessibility`).
 
 Per-platform implementations live under `packages/desktop/src-tauri/src/audio/permissions/`. The webview never speaks to the OS directly — it calls the Tauri commands `check_*_permission`, `request_*_permission`, and `open_settings_panel`.
@@ -54,27 +54,13 @@ Windows 10/11 gates microphone access via the privacy settings UI (`Settings →
 
 Not gated. The Windows variants of `check_accessibility_permission` and `check_input_monitoring_permission` return `Granted`. Windows allows synthetic key injection via `SendInput` without a per-app grant.
 
-## Linux
-
-### Microphone
-
-Linux desktops do not gate microphone access at the OS level. PulseAudio / PipeWire grants by default; `cpal` opens the input device directly. `check_microphone_permission` returns `Granted` unconditionally.
-
-Flatpak / sandboxed builds need the `device=all` permission — that's a Plan D concern.
-
-### Accessibility / Input Monitoring
-
-Not gated. Synthetic keystrokes via `enigo` (XTest under X11) work without a per-app grant.
-
-**Wayland caveat:** Wayland blocks synthetic keystrokes for non-compositor apps. When `platform::is_wayland_session()` is true, the paste path returns `ERR_WAYLAND_PASTE_UNSUPPORTED` (defined in `markers.rs`). The webview catches this marker, leaves the text on the clipboard, and prompts the user to press Ctrl+V manually. The onboarding screen surfaces a Wayland paste-fallback info banner on these sessions.
-
 ## Dev mode vs packaged build (macOS)
 
 `bun run tauri:dev` runs bluemacaw from your terminal in debug mode. macOS Microphone, Accessibility, and Input Monitoring grants are inherited from the parent process — i.e. from your terminal application (Terminal.app, iTerm, Ghostty, etc.). If the terminal already has those grants, dev-mode bluemacaw just works without prompting. **This means a dev build is not a fair test of the packaged permission flow.**
 
 A packaged build (`/Applications/bluemacaw.app`) has its own bundle id (`com.vhtechnology.bluemacaw`) and asks TCC for its own grants. Always test permission-related changes against the packaged build via `/build-clean`.
 
-Windows and Linux do not have this dev-mode shortcut; the privacy panels see the binary path, not the parent process.
+Windows does not have this dev-mode shortcut; the privacy panels see the binary path, not the parent process.
 
 ## Resetting (macOS)
 

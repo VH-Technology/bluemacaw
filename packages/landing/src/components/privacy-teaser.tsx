@@ -12,8 +12,8 @@ export function PrivacyTeaser() {
                 </h2>
                 <p className="relative mt-4 max-w-2xl text-base text-fg/80 sm:text-lg">
                     Your API keys go straight into your OS&apos;s native credential store — Keychain
-                    on macOS, Credential Manager on Windows, Secret Service on Linux. They never
-                    touch a bluemacaw server because there isn&apos;t one.
+                    on macOS, Credential Manager on Windows. They never touch a bluemacaw server
+                    because there isn&apos;t one.
                 </p>
                 <a
                     href="/privacy/"

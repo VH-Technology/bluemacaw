@@ -27,10 +27,6 @@ export default function PrivacyPage() {
                             <strong>Windows:</strong> Credential Manager / DPAPI (per-user,
                             encrypted at rest with your login credentials)
                         </li>
-                        <li>
-                            <strong>Linux:</strong> Secret Service via gnome-keyring or KWallet
-                            (per-user, encrypted at rest)
-                        </li>
                     </ul>
                     <p>
                         Keys are fetched only at the moment of transcription, held in memory for the
@@ -59,10 +55,10 @@ export default function PrivacyPage() {
                     <h2>Threat model</h2>
                     <p>
                         Any process running as your user account can ask the OS keychain for secrets
-                        it knows about — this is a platform-level limitation on Windows and Linux,
-                        not specific to bluemacaw. macOS Keychain provides stronger per-app
-                        isolation. If you require stronger isolation on Windows or Linux, consider
-                        running bluemacaw under a dedicated user account.
+                        it knows about — this is a platform-level limitation on Windows, not
+                        specific to bluemacaw. macOS Keychain provides stronger per-app isolation.
+                        If you require stronger isolation on Windows, consider running bluemacaw
+                        under a dedicated user account.
                     </p>
                     <p>
                         bluemacaw is open source under Apache 2.0. If you want to verify any of the

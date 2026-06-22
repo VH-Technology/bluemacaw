@@ -13,7 +13,6 @@ Long-form docs for bluemacaw. Most of these are written across Plans B and D as 
 ## Build, release, deploy
 
 - [`build-and-release.md`](./build-and-release.md) — Local build, signing, notarization, release workflow walkthrough. **Plan D — placeholder.**
-- [`install-linux.md`](./install-linux.md) — Apt + dnf install instructions for end users. **Plan D — not yet written.**
 - [`ci-cd.md`](./ci-cd.md) — GitHub Actions overview, branch protection, OIDC, secrets list. **Plan D — not yet written.**
 
 ## Operations & dev workflow

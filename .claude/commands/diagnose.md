@@ -15,7 +15,6 @@ uname -s
 ```
 
 - `Darwin` → run macOS checks.
-- `Linux` → run Linux checks.
 - Anything containing `MINGW`/`MSYS`/`CYGWIN` (or run from PowerShell) → Windows checks.
 
 ## Common checks (all platforms)
@@ -65,16 +64,6 @@ Not an automatic ✗ — print informational "bluemacaw.app not installed (run `
 ### TCC for `com.vhtechnology.bluemacaw`
 
 Informational only — `tccutil` cannot read state, only reset. Suggest: "System Settings → Privacy & Security → Microphone / Accessibility — confirm `bluemacaw` is enabled."
-
-## Linux
-
-### Webkit / appindicator runtime libs present
-
-```bash
-ldconfig -p | grep -E 'libwebkit2gtk-4\.1|libayatana-appindicator3' >/dev/null
-```
-
-Fix hint: "Install the deb deps from `tauri.conf.json` (libwebkit2gtk-4.1-0, libayatana-appindicator3-1)."
 
 ## Windows
 

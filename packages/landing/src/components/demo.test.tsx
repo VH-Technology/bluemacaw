@@ -13,7 +13,7 @@ describe('Demo', () => {
     it('idle shows the dictate prompt + shortcut keys (Space is OS-agnostic)', () => {
         render(<Demo initialPhase="idle" />);
         expect(screen.getByText(/press to dictate/i)).toBeInTheDocument();
-        // Both macOS (⌘⇧Space) and Windows/Linux (Ctrl+⇧Space) end in Space.
+        // Both macOS (⌘⇧Space) and Windows (Ctrl+⇧Space) end in Space.
         expect(screen.getByText('Space')).toBeInTheDocument();
         expect(screen.getByTestId('demo-pill')).toHaveAttribute('data-state', 'idle');
     });

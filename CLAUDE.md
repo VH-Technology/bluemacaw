@@ -66,7 +66,7 @@ gh release create v0.2.0 --target main --generate-notes   # publishing fires .gi
 Publishing the GitHub release triggers `release.yml`, which:
 
 1. **`verify-versions`** — fails fast if any of the five manifests ≠ the tag (so a forgotten `version:bump` doesn't burn the build matrix).
-2. Builds + signs the macOS / Linux / Windows bundles and attaches them.
+2. Builds + signs the macOS / Windows bundles and attaches them.
 3. Publishes three JSON assets: `latest.json` (landing download buttons), `update.json` (in-app `tauri-plugin-updater`, minisign-signed), and `changelog.json` (fallback for the landing changelog page when the live GitHub API is unavailable).
 
 The in-app updater endpoint resolves via the `releases/latest/download/update.json` redirect, so the published release must be marked **Latest** (GitHub does this for the newest published non-prerelease). After a release, sanity-check that the live endpoint serves the new version. Full pipeline detail: [`docs/build-and-release.md`](./docs/build-and-release.md).
@@ -105,6 +105,5 @@ See [`docs/README.md`](./docs/README.md) for the full doc index. Quick links onc
 - [`docs/secrets.md`](./docs/secrets.md) — keychain backend per platform, threat model (Plan B)
 - [`docs/providers.md`](./docs/providers.md) — how to add an STT provider (Plan B)
 - [`docs/build-and-release.md`](./docs/build-and-release.md) — local build + signing + release workflow (Plan D)
-- [`docs/install-linux.md`](./docs/install-linux.md) — apt + dnf user install instructions (Plan D)
 - [`docs/ci-cd.md`](./docs/ci-cd.md) — GitHub Actions overview, branch protection, OIDC (Plan D)
 - [`docs/troubleshooting.md`](./docs/troubleshooting.md) — symptom-keyed punch list (Plan D)

@@ -6,12 +6,11 @@ Until then:
 
 - **Local clean build & install (macOS):** `/build-clean` slash command (defined in `.claude/commands/build-clean.md`). Runs `tauri build`, copies the bundle into `/Applications/bluemacaw.app`, performs a TCC reset so a fresh permission flow can be exercised.
 - **Dev loop:** `/dev-desktop` (Vite + cargo watch).
-- **CI release workflow:** `.github/workflows/release.yml`. Currently builds the macOS bundle on tag pushes; Linux and Windows targets are temporarily disabled (see commit `99c5b37`).
+- **CI release workflow:** `.github/workflows/release.yml`. Currently builds the macOS and Windows bundles on tag pushes.
 
 The Plan D rewrite of this doc will cover:
 
 - Apple Developer ID signing + notarytool stapling.
-- Linux GPG-signed deb / rpm + self-hosted apt / dnf repository metadata.
 - S3 + CloudFront publication and CloudFront invalidation.
 - GitHub Releases artifact upload via OIDC.
 
@@ -25,7 +24,7 @@ The release workflow publishes **three** JSON files that look superficially simi
 
 | File             | Consumer                          | Schema                                                                     |
 | ---------------- | --------------------------------- | -------------------------------------------------------------------------- |
-| `latest.json`    | Landing page download buttons     | `{ version, mac, win, linux, linuxArm64 }` — bare URLs to installers.      |
+| `latest.json`    | Landing page download buttons     | `{ version, mac, win }` — bare URLs to installers.      |
 | `update.json`    | `tauri-plugin-updater` in-app     | `{ version, pub_date, notes, platforms.<key>.{signature, url} }`.          |
 | `changelog.json` | Landing changelog page (fallback) | `Release[]` — `{ tag, name, body, publishedAt, htmlUrl }` per release.     |
 
@@ -54,7 +53,7 @@ The public key is committed in plaintext in `packages/desktop/src-tauri/tauri.co
 
 ### Signing in CI
 
-The `release.yml` build step exports `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to `tauri-apps/tauri-action`. When both are set, the bundler emits updater bundles (`.app.tar.gz`, `.AppImage.tar.gz`, `.msi.zip`, `.nsis.zip`) and matching `*.sig` files alongside the user-facing installers. Both sets are uploaded to the GitHub release.
+The `release.yml` build step exports `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to `tauri-apps/tauri-action`. When both are set, the bundler emits updater bundles (`.app.tar.gz`, `.msi.zip`, `.nsis.zip`) and matching `*.sig` files alongside the user-facing installers. Both sets are uploaded to the GitHub release.
 
 ### Building `update.json`
 
@@ -69,8 +68,6 @@ The `publish-update-manifest` job in `release.yml` reads the `.sig` file content
     "darwin-aarch64":  { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_universal.app.tar.gz" },
     "darwin-x86_64":   { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_universal.app.tar.gz" },
     "darwin-universal": { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_universal.app.tar.gz" },
-    "linux-x86_64":    { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_amd64.AppImage.tar.gz" },
-    "linux-aarch64":   { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_aarch64.AppImage.tar.gz" },
     "windows-x86_64":  { "signature": "untrusted comment: …", "url": "https://github.com/VH-Technology/bluemacaw/releases/download/v0.1.3/bluemacaw_0.1.3_x64-setup.nsis.zip" }
   }
 }
@@ -92,7 +89,7 @@ The relaunch path uses `AppHandle::restart()` directly rather than `@tauri-apps/
 2. Update `pubkey` in `tauri.conf.json` to the new public key.
 3. Ship a release. This release is signed with the **new** key; users on the previous version will reject it because it's signed with a key they don't trust.
 
-Because of step 3, **key rotation requires a manual installer path for affected users**: post the DMG/MSI/AppImage link in release notes and accept that users will re-onboard via the user-facing installers, not the in-app updater.
+Because of step 3, **key rotation requires a manual installer path for affected users**: post the DMG/MSI link in release notes and accept that users will re-onboard via the user-facing installers, not the in-app updater.
 
 ### Troubleshooting
 
@@ -102,6 +99,5 @@ Because of step 3, **key rotation requires a manual installer path for affected 
 | App reports 404 on update check                           | The `update.json` asset failed to upload (check the `publish-update-manifest` job logs).            |
 | Updater never offers an update despite a newer release    | `tauri.conf.json` `version` field on the running build is `>=` the manifest `version`.             |
 | In-app install hangs at 0%                                | Bundle URL in `update.json` is wrong — re-run the manifest job after fixing the asset name.        |
-| Update installs but app doesn't relaunch on Linux         | Some AppImage launchers don't re-exec cleanly. User must restart manually; this is upstream.       |
 
 For architecture, see [`architecture.md`](./architecture.md). For macOS permissions wired into the bundle, see [`permissions.md`](./permissions.md).

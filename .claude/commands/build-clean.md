@@ -66,18 +66,6 @@ codesign -d --entitlements - "/Applications/bluemacaw.app" 2>&1 | grep 'com.appl
 
 If the grep finds nothing, `entitlements.plist` was not picked up — check `tauri.conf.json` `bundle.macOS.entitlements`.
 
-## Linux
-
-### Confirm with the user
-
-1. `rm -rf packages/desktop/src-tauri/target/release/bundle/`
-2. `cd packages/desktop && bun run tauri:build`
-3. `sudo dpkg -i src-tauri/target/release/bundle/deb/bluemacaw*.deb` (or `sudo rpm -i ...rpm` on Fedora)
-
-Wait for confirmation before running step 3 (sudo).
-
-Deb runtime dependencies are declared in `tauri.conf.json` under `bundle.linux.deb.depends`: `libwebkit2gtk-4.1-0`, `libayatana-appindicator3-1`.
-
 ## Windows
 
 ```powershell

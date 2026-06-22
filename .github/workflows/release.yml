@@ -76,27 +76,14 @@ jobs:
       fail-fast: false
       matrix:
         # `rust-toolchain` is per-platform because the constraints differ:
-        #   - macOS + Windows compile cleanly on stable; pinning would break
-        #     them with MSRV walls from `darling` and others.
-        #   - Linux trips a `glib v0.18.5` trait-solver bug on current stable
-        #     (~1.91), so it needs an older toolchain — but still >= 1.88 to
-        #     clear the `darling@0.23.0` MSRV and >= 1.85 for `edition2024`.
+        # macOS + Windows compile cleanly on stable; pinning would break
+        # them with MSRV walls from `darling` and others.
         platform:
           - name: macos-universal
             os: macos-14
             args: --target universal-apple-darwin
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
             rust-toolchain: stable
-          - name: linux-x86_64
-            os: ubuntu-22.04
-            args: ""
-            rust-targets: ""
-            rust-toolchain: "1.88.0"
-          - name: linux-aarch64
-            os: ubuntu-22.04-arm
-            args: ""
-            rust-targets: ""
-            rust-toolchain: "1.88.0"
           - name: windows-x86_64
             os: windows-latest
             args: ""
@@ -146,19 +133,6 @@ jobs:
           rm -rf packages/desktop/src-tauri/target/x86_64-apple-darwin/release/bundle
           rm -rf packages/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle
 
-      - name: Install Linux build deps
-        if: startsWith(matrix.platform.os, 'ubuntu')
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            libssl-dev \
-            libasound2-dev \
-            libxdo-dev \
-            pkg-config \
-            build-essential
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -188,11 +162,8 @@ jobs:
       # are set, and notarizes + staples the inner .app using the API key env
       # vars set above. The DMG wrapper is stapled in the next step.
       # TAURI_SIGNING_PRIVATE_KEY* are read by the bundler's updater step. When
-      # set, it emits the updater bundles (.app.tar.gz / .AppImage.tar.gz /
-      # .msi.zip) AND their minisign signatures (*.sig) alongside the regular
-      # installer artifacts. The .sig files are what gets embedded in
-      # update.json so the running app can verify the download before swapping
-      # binaries.
+      # set, it emits the updater bundles (.app.tar.gz / .msi.zip) AND their
+      # minisign signatures (*.sig) alongside the regular installer artifacts.
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -236,9 +207,6 @@ jobs:
           files=(
             # User-facing installers
             packages/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-            packages/desktop/src-tauri/target/release/bundle/deb/*.deb
-            packages/desktop/src-tauri/target/release/bundle/rpm/*.rpm
-            packages/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
             packages/desktop/src-tauri/target/release/bundle/msi/*.msi
             packages/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
             # Updater bundles + minisign signatures (consumed by tauri-plugin-updater
@@ -246,8 +214,6 @@ jobs:
             # smaller, pre-extracted, swapped in-place at runtime.
             packages/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
             packages/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
-            packages/desktop/src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz
-            packages/desktop/src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz.sig
             packages/desktop/src-tauri/target/release/bundle/msi/*.msi.zip
             packages/desktop/src-tauri/target/release/bundle/msi/*.msi.zip.sig
             packages/desktop/src-tauri/target/release/bundle/nsis/*-setup.nsis.zip
@@ -291,8 +257,6 @@ jobs:
           pick() { echo "$assets" | grep -E "$1" | head -n1 || true; }
           mac=$(pick '\.dmg$')
           win=$(pick '\.msi$|-setup\.exe$')
-          lin=$(pick '(amd64|x86_64)\.AppImage$')
-          lin_arm64=$(pick '(aarch64|arm64)\.AppImage$')
 
           # Emit a JSON value: either `null` or a JSON-quoted URL string.
           # `jq -n` (no -r) writes valid JSON, which feeds straight into
@@ -310,9 +274,7 @@ jobs:
             --arg version "${TAG#v}" \
             --argjson mac "$(url_for "$mac")" \
             --argjson win "$(url_for "$win")" \
-            --argjson linux "$(url_for "$lin")" \
-            --argjson linuxArm64 "$(url_for "$lin_arm64")" \
-            '{version: $version, mac: $mac, win: $win, linux: $linux, linuxArm64: $linuxArm64}' > latest.json
+            '{version: $version, mac: $mac, win: $win}' > latest.json
           cat latest.json
 
       - name: Attach manifest to GitHub release
@@ -375,8 +337,6 @@ jobs:
           pick() { echo "$assets" | grep -E "$1" | head -n1 || true; }
 
           mac_bundle=$(pick '\.app\.tar\.gz$')
-          linux_x64_bundle=$(pick '(amd64|x86_64)\.AppImage\.tar\.gz$')
-          linux_arm64_bundle=$(pick '(aarch64|arm64)\.AppImage\.tar\.gz$')
           # Prefer NSIS for the updater on Windows (Tauri 2 default); fall
           # back to MSI if NSIS wasn't produced.
           win_bundle=$(pick '-setup\.nsis\.zip$')
@@ -407,8 +367,6 @@ jobs:
           }
 
           mac_entry=$(platform_entry "$mac_bundle")
-          linux_x64_entry=$(platform_entry "$linux_x64_bundle")
-          linux_arm64_entry=$(platform_entry "$linux_arm64_bundle")
           win_entry=$(platform_entry "$win_bundle")
 
           # macOS bundle is a universal binary — list it under all darwin
@@ -419,8 +377,6 @@ jobs:
             --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg notes "See release notes at https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}" \
             --argjson mac "$mac_entry" \
-            --argjson linux "$linux_x64_entry" \
-            --argjson linux_arm64 "$linux_arm64_entry" \
             --argjson win "$win_entry" \
             '{
               version: $version,
@@ -430,8 +386,6 @@ jobs:
                 "darwin-aarch64": $mac,
                 "darwin-x86_64": $mac,
                 "darwin-universal": $mac,
-                "linux-x86_64": $linux,
-                "linux-aarch64": $linux_arm64,
                 "windows-x86_64": $win
               }
             }' > update.json
