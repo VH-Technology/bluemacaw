@@ -1,3 +1,4 @@
+import { Analytics } from '@/components/analytics';
 import { Demo } from '@/components/demo';
 import { Download } from '@/components/download';
 import { Features } from '@/components/features';
@@ -11,6 +12,7 @@ import { APP_VERSION } from '@/lib/version';
 export default function HomePage() {
     return (
         <>
+            <Analytics />
             <Header />
             <main>
                 <Hero />

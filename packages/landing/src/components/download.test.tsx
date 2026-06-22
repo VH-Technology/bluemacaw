@@ -1,6 +1,12 @@
+import { logDownloadEvent } from '@/lib/firebase';
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Download } from './download';
+
+vi.mock('@/lib/firebase', () => ({
+    logDownloadEvent: vi.fn(),
+    initFirebase: vi.fn(),
+}));
 
 const RELEASES_FALLBACK = 'https://github.com/VH-Technology/bluemacaw/releases/latest';
 
@@ -96,5 +102,40 @@ describe('Download', () => {
         expect(screen.getAllByRole('link', { name: /^read setup guide/i })).toHaveLength(2);
         // ...and zero download buttons.
         expect(screen.queryByRole('link', { name: /download bluemacaw for/i })).toBeNull();
+    });
+
+    it('calls logDownloadEvent when a download button is clicked', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(
+                async () =>
+                    new Response(
+                        JSON.stringify({
+                            tag_name: 'v0.2.0',
+                            assets: [
+                                {
+                                    name: 'bluemacaw_0.2.0_x64.msi',
+                                    browser_download_url: 'https://example.test/installer.msi',
+                                },
+                            ],
+                        }),
+                        { status: 200 },
+                    ),
+            ) as typeof fetch,
+        );
+
+        const { fireEvent } = await import('@testing-library/react');
+        render(<Download />);
+
+        const downloadButton = await screen.findByRole('link', {
+            name: 'Download bluemacaw for Windows',
+        });
+        fireEvent.click(downloadButton);
+
+        expect(logDownloadEvent).toHaveBeenCalledWith(
+            'Windows',
+            'https://example.test/installer.msi',
+            'Download',
+        );
     });
 });

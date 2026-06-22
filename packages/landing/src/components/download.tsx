@@ -2,6 +2,7 @@
 
 import { DownloadCount } from '@/components/download-count';
 import { MaskIcon } from '@/components/ui/mask-icon';
+import { logDownloadEvent } from '@/lib/firebase';
 import { type DownloadManifest, fetchManifest } from '@/lib/manifest';
 import { useEffect, useState } from 'react';
 
@@ -110,6 +111,7 @@ function PlatformCard({
                     <a
                         href={href}
                         aria-label={`Download bluemacaw for ${name}`}
+                        onClick={() => logDownloadEvent(name, href, 'Download')}
                         className="inline-flex items-center gap-1.5 rounded-pill bg-main px-4 py-2 text-sm font-bold text-main-foreground shadow-card transition-transform hover:-translate-y-0.5"
                     >
                         Download
@@ -120,6 +122,7 @@ function PlatformCard({
                     <a
                         href={altHref}
                         aria-label={`Download bluemacaw for ${name} on ${altLabel}`}
+                        onClick={() => logDownloadEvent(name, altHref, altLabel)}
                         className="inline-flex items-center gap-1 text-sm font-semibold text-main hover:underline"
                     >
                         {altLabel}
