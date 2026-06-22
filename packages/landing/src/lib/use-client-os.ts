@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-export type ClientOS = 'macos' | 'windows' | 'linux' | 'unknown';
+export type ClientOS = 'macos' | 'windows' | 'unknown';
 
 /**
  * Pure OS sniff from a user-agent (and optional legacy platform) string.
@@ -15,7 +15,6 @@ export function detectOS(userAgent: string, platform = ''): ClientOS {
     const s = `${userAgent} ${platform}`.toLowerCase();
     if (/mac|iphone|ipad|ipod/.test(s)) return 'macos';
     if (/win/.test(s)) return 'windows';
-    if (/linux|x11|cros|android/.test(s)) return 'linux';
     return 'unknown';
 }
 
@@ -40,26 +39,19 @@ export interface OSMeta {
     /** Record-hotkey rendered as discrete key tokens. */
     shortcut: readonly string[];
     /** Which `DownloadManifest` field this OS maps to. */
-    manifestKey: 'mac' | 'win' | 'linux';
+    manifestKey: 'mac' | 'win';
 }
 
-// macOS uses the ⌘/⇧ glyphs; Windows + Linux share Ctrl+Shift+Space.
 const MAC_META: OSMeta = { label: 'macOS', shortcut: ['⌘', '⇧', 'Space'], manifestKey: 'mac' };
 const WIN_META: OSMeta = {
     label: 'Windows',
     shortcut: ['Ctrl', '⇧', 'Space'],
     manifestKey: 'win',
 };
-const LINUX_META: OSMeta = {
-    label: 'Linux',
-    shortcut: ['Ctrl', '⇧', 'Space'],
-    manifestKey: 'linux',
-};
 
 const OS_META: Record<Exclude<ClientOS, 'unknown'>, OSMeta> = {
     macos: MAC_META,
     windows: WIN_META,
-    linux: LINUX_META,
 };
 
 /**

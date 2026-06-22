@@ -32,5 +32,4 @@ If either is missing, abort with: "Not in the bluemacaw repo root, or `packages/
 
 - **`tauri-plugin-*` build errors** — run `bun install --frozen-lockfile` from the repo root; the JS plugin packages may be out of sync.
 - **macOS: "command not found: tauri"** — the dev dependency `@tauri-apps/cli` lives in `packages/desktop/node_modules`; make sure you ran `bun install` and that you `cd packages/desktop` first.
-- **Linux: webkit2gtk errors** — install platform deps (see `docs/permissions.md` and the `linux.deb.depends` in `tauri.conf.json`).
 - **Microphone / Accessibility prompts don't appear** — this is dev mode; permissions are inherited from the parent terminal. See `docs/permissions.md`.

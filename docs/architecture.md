@@ -27,7 +27,7 @@ There is no Node runtime in the renderer. There is no preload script. Tauri's ca
 | `audio/mod.rs` | `AudioSource` trait, `PermissionState`, `AudioError`, `AudioDeviceInfo`, `CaptureSession`. |
 | `audio/microphone.rs` | `MicrophoneSource` — the cpal-backed production impl. Owns session bookkeeping and peak-level metering. |
 | `audio/permissions/mod.rs` | `SettingsPanel` enum + per-OS dispatch. |
-| `audio/permissions/{macos,windows,linux}.rs` | Per-platform mic, accessibility, and input-monitoring permission flows. macOS calls `AVCaptureDevice.requestAccess` via `objc2-av-foundation`. |
+| `audio/permissions/{macos,windows}.rs` | Per-platform mic, accessibility, and input-monitoring permission flows. macOS calls `AVCaptureDevice.requestAccess` via `objc2-av-foundation`. |
 | `secrets/mod.rs` | `Vault` trait (3 methods: `get` / `set` / `delete`), `SecretKey` newtype with redacted `Debug`, `SecretsError`, `SERVICE_NAME = "bluemacaw"`. |
 | `secrets/keyring_vault.rs` | Production impl over the `keyring` crate (Apple Keychain / Windows Credential Manager / libsecret). |
 | `secrets/mock.rs` | `InMemoryVault` for tests. |
@@ -98,7 +98,7 @@ Every webview-callable Rust function lives in `commands.rs` and is mirrored on `
 | `unregister_cancel_hotkey` | — | `()` | |
 | `get_fn_usage_type` | — | `number \| null` | macOS only. Reads `AppleFnUsageType`. |
 | `set_fn_usage_type` | `value: number` | `()` | macOS only. Writes `AppleFnUsageType` and restarts cfprefsd. |
-| `get_platform_info` | — | `PlatformInfo` | `{ os: "macos"\|"windows"\|"linux", isWayland }`. Drives onboarding's per-platform permission rows. |
+| `get_platform_info` | — | `PlatformInfo` | `{ os: "macos"\|"windows", isWayland }`. Drives onboarding's per-platform permission rows. |
 | `restart_app` | — | `()` | Used after macOS Accessibility / Input Monitoring grants, since TCC doesn't propagate into a running process. |
 
 ## Events (Rust → webview)
@@ -143,7 +143,7 @@ sequenceDiagram
     Overlay->>Overlay: db.saveTranscription(...)
 ```
 
-If paste fails (e.g. macOS Accessibility revoked, or Wayland blocks synthetic keystrokes), the text still lands on the clipboard and the history row is still saved. The error marker is translated into a UI-friendly message in `recording-controller.ts`.
+If paste fails (e.g. macOS Accessibility revoked, or Windows synthetic keystrokes fail), the text still lands on the clipboard and the history row is still saved. The error marker is translated into a UI-friendly message in `recording-controller.ts`.
 
 For *why* each privileged step is gated, see [`permissions.md`](./permissions.md). For how the key reaches `experimental_transcribe`, see [`secrets.md`](./secrets.md). For adding a tenth provider, see [`providers.md`](./providers.md).
 

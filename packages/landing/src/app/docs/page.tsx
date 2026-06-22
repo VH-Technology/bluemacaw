@@ -6,7 +6,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
     title: 'Docs — bluemacaw',
     description:
-        'Install bluemacaw on macOS, Windows, or Linux. Configure an STT provider, pick a hotkey, and start dictating anywhere.',
+        'Install bluemacaw on macOS or Windows. Configure an STT provider, pick a hotkey, and start dictating anywhere.',
 };
 
 export default function DocsPage() {
@@ -37,7 +37,6 @@ export default function DocsPage() {
                         <QuickStart />
                         <InstallMacOS />
                         <InstallWindows />
-                        <InstallLinux />
                         <Configure />
                         <Hotkeys />
                         <Privacy />
@@ -54,7 +53,6 @@ const TOC: ReadonlyArray<{ id: string; label: string }> = [
     { id: 'quick-start', label: 'Quick start' },
     { id: 'install-macos', label: 'Install — macOS' },
     { id: 'install-windows', label: 'Install — Windows' },
-    { id: 'install-linux', label: 'Install — Linux' },
     { id: 'configure', label: 'Configure a provider' },
     { id: 'hotkeys', label: 'Hotkeys' },
     { id: 'privacy', label: 'Privacy & security' },
@@ -90,7 +88,7 @@ function QuickStart() {
             <ol>
                 <li>
                     <a href="#download">Download</a> the installer for your OS — macOS DMG, Windows
-                    NSIS, or one of the Linux bundles.
+                    NSIS.
                 </li>
                 <li>Open the app and grant microphone access (and on macOS, Accessibility).</li>
                 <li>
@@ -99,7 +97,7 @@ function QuickStart() {
                 </li>
                 <li>
                     Pick a hotkey — default <code>⌘⇧Space</code> on macOS, <code>Ctrl+⇧Space</code>{' '}
-                    on Windows/Linux.
+                    on Windows.
                 </li>
                 <li>
                     Hold the hotkey, dictate, release — your transcription pastes into the focused
@@ -203,60 +201,6 @@ function InstallWindows() {
     );
 }
 
-function InstallLinux() {
-    return (
-        <section id="install-linux" className="space-y-3">
-            <h2>Install — Linux</h2>
-            <p>
-                <strong>Requirements:</strong> a glibc 2.31+ distro (Ubuntu 20.04+, Fedora 36+,
-                Debian 11+, Arch). WebKitGTK 2.40+ for the webview.
-            </p>
-            <h3>AppImage (any distro)</h3>
-            <pre>
-                <code>
-                    chmod +x bluemacaw_x.y.z_amd64.AppImage{'\n'}
-                    ./bluemacaw_x.y.z_amd64.AppImage
-                </code>
-            </pre>
-            <h3>Debian / Ubuntu (.deb)</h3>
-            <pre>
-                <code>sudo apt install ./bluemacaw_x.y.z_amd64.deb</code>
-            </pre>
-            <h3>Fedora / RHEL (.rpm)</h3>
-            <pre>
-                <code>sudo dnf install ./bluemacaw-x.y.z-1.x86_64.rpm</code>
-            </pre>
-            <h3>System dependencies</h3>
-            <p>
-                Most distros already have these, but if the app fails to launch with a missing
-                library error, install:
-            </p>
-            <pre>
-                <code>
-                    # Ubuntu / Debian{'\n'}
-                    sudo apt install libwebkit2gtk-4.1-0 libayatana-appindicator3-1 libxdo3{'\n'}
-                    {'\n'}# Fedora{'\n'}
-                    sudo dnf install webkit2gtk4.1 libayatana-appindicator-gtk3 xdotool
-                </code>
-            </pre>
-            <h3>Wayland note</h3>
-            <p>
-                Wayland blocks synthetic keystrokes from third-party apps for security reasons. On a
-                Wayland session bluemacaw will <em>copy</em> the transcript to your clipboard and
-                surface a banner asking you to press <code>Ctrl+V</code>. Under X11 (or an Xorg
-                session) it pastes directly via <code>xdotool</code>.
-            </p>
-            <h3>Secret storage</h3>
-            <p>
-                API keys are stored via the freedesktop Secret Service API — you need{' '}
-                <code>gnome-keyring</code> or <code>kwallet</code> running. On a minimal window
-                manager install <code>gnome-keyring</code> and start it via your session's
-                autostart.
-            </p>
-        </section>
-    );
-}
-
 function Configure() {
     return (
         <section id="configure" className="space-y-3">
@@ -318,7 +262,7 @@ function Hotkeys() {
                     cancel.
                 </li>
                 <li>
-                    <strong>Windows / Linux:</strong> <code>Ctrl+⇧Space</code> to record,{' '}
+                    <strong>Windows:</strong> <code>Ctrl+⇧Space</code> to record,{' '}
                     <code>Ctrl+Esc</code> to cancel.
                 </li>
             </ul>
@@ -370,10 +314,6 @@ function Troubleshooting() {
             </ul>
             <h3>Paste doesn't insert text</h3>
             <ul>
-                <li>
-                    Linux Wayland: synthetic keystrokes are blocked — press <code>Ctrl+V</code>{' '}
-                    manually. Switch to an Xorg session for direct paste.
-                </li>
                 <li>macOS: Accessibility permission required.</li>
             </ul>
             <h3>Microphone doesn't appear</h3>

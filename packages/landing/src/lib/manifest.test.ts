@@ -28,10 +28,9 @@ describe('fetchManifest', () => {
         expect(manifest?.version).toBe('0.1.0');
         expect(manifest?.mac).toContain('.dmg');
         expect(manifest?.win).toBeNull();
-        expect(manifest?.linux).toBeNull();
     });
 
-    it('returns URLs for windows (.msi) and linux (.AppImage) when present', async () => {
+    it('returns URLs for windows (.msi) when present', async () => {
         vi.stubGlobal(
             'fetch',
             vi.fn(async () =>
@@ -40,43 +39,12 @@ describe('fetchManifest', () => {
                         name: 'Vox.Era_0.2.0_x64.msi',
                         browser_download_url: 'https://example.test/v0.2.0/Vox.Era_0.2.0_x64.msi',
                     },
-                    {
-                        name: 'bluemacaw_0.2.0_amd64.AppImage',
-                        browser_download_url:
-                            'https://example.test/v0.2.0/bluemacaw_0.2.0_amd64.AppImage',
-                    },
                 ]),
             ) as typeof fetch,
         );
         const manifest = await fetchManifest();
         expect(manifest?.win).toContain('.msi');
-        expect(manifest?.linux).toContain('amd64.AppImage');
-        expect(manifest?.linuxArm64).toBeNull();
         expect(manifest?.mac).toBeNull();
-    });
-
-    it('maps the amd64 and aarch64 AppImages to separate linux fields', async () => {
-        vi.stubGlobal(
-            'fetch',
-            vi.fn(async () =>
-                apiResponse([
-                    {
-                        name: 'bluemacaw_0.2.0_aarch64.AppImage',
-                        browser_download_url:
-                            'https://example.test/v0.2.0/bluemacaw_0.2.0_aarch64.AppImage',
-                    },
-                    {
-                        name: 'bluemacaw_0.2.0_amd64.AppImage',
-                        browser_download_url:
-                            'https://example.test/v0.2.0/bluemacaw_0.2.0_amd64.AppImage',
-                    },
-                ]),
-            ) as typeof fetch,
-        );
-        const manifest = await fetchManifest();
-        expect(manifest?.linux).toContain('amd64.AppImage');
-        expect(manifest?.linux).not.toContain('aarch64');
-        expect(manifest?.linuxArm64).toContain('aarch64.AppImage');
     });
 
     it('returns null when the response is not OK', async () => {

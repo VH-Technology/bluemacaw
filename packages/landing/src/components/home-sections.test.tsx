@@ -70,9 +70,8 @@ describe('home sections', () => {
             ).toHaveAttribute('href', 'https://example.test/Vox-Era.dmg');
         });
         expect(screen.queryByRole('link', { name: /download bluemacaw for windows/i })).toBeNull();
-        expect(screen.queryByRole('link', { name: /download bluemacaw for linux/i })).toBeNull();
-        expect(screen.getAllByText(/coming soon/i)).toHaveLength(2);
-        // 4 setup-guide links total: the section-header "Full setup guide" + one per card.
-        expect(screen.getAllByRole('link', { name: /setup guide/i })).toHaveLength(4);
+        expect(screen.getAllByText(/coming soon/i)).toHaveLength(1);
+        // 3 setup-guide links total: the section-header "Full setup guide" + one per card.
+        expect(screen.getAllByRole('link', { name: /setup guide/i })).toHaveLength(3);
     });
 });

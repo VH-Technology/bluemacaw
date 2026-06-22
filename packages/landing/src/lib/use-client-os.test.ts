@@ -21,15 +21,6 @@ const UAS: Record<string, { ua: string; platform?: string; expected: ClientOS }>
         platform: 'Win32',
         expected: 'windows',
     },
-    linux: {
-        ua: 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0',
-        platform: 'Linux x86_64',
-        expected: 'linux',
-    },
-    chromeos: {
-        ua: 'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36',
-        expected: 'linux',
-    },
     garbage: { ua: 'some-random-bot/1.0', expected: 'unknown' },
 };
 
@@ -48,11 +39,9 @@ describe('osMeta', () => {
         expect(osMeta('macos').manifestKey).toBe('mac');
     });
 
-    it('returns Ctrl for Windows + Linux', () => {
+    it('returns Ctrl for Windows', () => {
         expect(osMeta('windows').shortcut).toEqual(['Ctrl', '⇧', 'Space']);
-        expect(osMeta('linux').shortcut).toEqual(['Ctrl', '⇧', 'Space']);
         expect(osMeta('windows').manifestKey).toBe('win');
-        expect(osMeta('linux').manifestKey).toBe('linux');
     });
 
     it('falls back to macOS glyphs for unknown', () => {

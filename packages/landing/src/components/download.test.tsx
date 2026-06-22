@@ -8,17 +8,12 @@ describe('Download', () => {
     it('renders fallback download buttons before the manifest resolves', () => {
         vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})) as unknown as typeof fetch);
         render(<Download />);
-        for (const name of [
-            'Download bluemacaw for macOS',
-            'Download bluemacaw for Windows',
-            'Download bluemacaw for Linux',
-            'Download bluemacaw for Linux on ARM64',
-        ]) {
+        for (const name of ['Download bluemacaw for macOS', 'Download bluemacaw for Windows']) {
             expect(screen.getByRole('link', { name })).toHaveAttribute('href', RELEASES_FALLBACK);
         }
     });
 
-    it('surfaces a separate ARM64 download when the manifest exposes an aarch64 build', async () => {
+    it('surfaces a single download link for each resolved platform', async () => {
         vi.stubGlobal(
             'fetch',
             vi.fn(
@@ -28,12 +23,8 @@ describe('Download', () => {
                             tag_name: 'v0.2.0',
                             assets: [
                                 {
-                                    name: 'bluemacaw_0.2.0_amd64.AppImage',
-                                    browser_download_url: 'https://example.test/amd64.AppImage',
-                                },
-                                {
-                                    name: 'bluemacaw_0.2.0_aarch64.AppImage',
-                                    browser_download_url: 'https://example.test/aarch64.AppImage',
+                                    name: 'bluemacaw_0.2.0_x64.msi',
+                                    browser_download_url: 'https://example.test/installer.msi',
                                 },
                             ],
                         }),
@@ -44,12 +35,9 @@ describe('Download', () => {
         render(<Download />);
         await waitFor(() => {
             expect(
-                screen.getByRole('link', { name: 'Download bluemacaw for Linux' }),
-            ).toHaveAttribute('href', 'https://example.test/amd64.AppImage');
+                screen.getByRole('link', { name: 'Download bluemacaw for Windows' }),
+            ).toHaveAttribute('href', 'https://example.test/installer.msi');
         });
-        expect(
-            screen.getByRole('link', { name: 'Download bluemacaw for Linux on ARM64' }),
-        ).toHaveAttribute('href', 'https://example.test/aarch64.AppImage');
         expect(screen.queryByText(/amd64 only/i)).toBeNull();
     });
 
@@ -59,11 +47,7 @@ describe('Download', () => {
         const guides = screen.getAllByRole('link', { name: /setup guide/i });
         const hrefs = guides.map((g) => g.getAttribute('href'));
         expect(hrefs).toEqual(
-            expect.arrayContaining([
-                '/docs/#install-macos',
-                '/docs/#install-windows',
-                '/docs/#install-linux',
-            ]),
+            expect.arrayContaining(['/docs/#install-macos', '/docs/#install-windows']),
         );
     });
 
@@ -93,8 +77,7 @@ describe('Download', () => {
             ).toHaveAttribute('href', 'https://example.test/Vox-Era.dmg');
         });
         expect(screen.queryByRole('link', { name: /download bluemacaw for windows/i })).toBeNull();
-        expect(screen.queryByRole('link', { name: /download bluemacaw for linux/i })).toBeNull();
-        expect(screen.getAllByText(/coming soon/i)).toHaveLength(2);
+        expect(screen.getAllByText(/coming soon/i)).toHaveLength(1);
         // Version is intentionally not shown on the download cards.
         expect(screen.queryByText(/v0\.1\.0/)).toBeNull();
     });
@@ -106,11 +89,11 @@ describe('Download', () => {
         );
         render(<Download />);
         await waitFor(() => {
-            expect(screen.getAllByText(/coming soon/i)).toHaveLength(3);
+            expect(screen.getAllByText(/coming soon/i)).toHaveLength(2);
         });
-        // 4 setup-guide links total: the section-header "Full setup guide" + one per card.
-        expect(screen.getAllByRole('link', { name: /setup guide/i })).toHaveLength(4);
-        expect(screen.getAllByRole('link', { name: /^read setup guide/i })).toHaveLength(3);
+        // 3 setup-guide links total: the section-header "Full setup guide" + one per card.
+        expect(screen.getAllByRole('link', { name: /setup guide/i })).toHaveLength(3);
+        expect(screen.getAllByRole('link', { name: /^read setup guide/i })).toHaveLength(2);
         // ...and zero download buttons.
         expect(screen.queryByRole('link', { name: /download bluemacaw for/i })).toBeNull();
     });

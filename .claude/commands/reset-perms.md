@@ -4,7 +4,7 @@ description: Reset macOS Microphone, Accessibility, Input Monitoring, and Apple 
 
 Reset the macOS TCC entries for bluemacaw so that Microphone, Accessibility, Input Monitoring, and Apple Events prompts fire again on next launch.
 
-No-op on Linux and Windows: those platforms either don't gate microphone access at all (Linux desktop) or surface a single OS-level prompt at first use (Windows). If invoked on a non-macOS host, print `"Skipping — TCC reset is macOS-only."` and exit.
+No-op on Windows: that platform surfaces a single OS-level prompt at first use. If invoked on a non-macOS host, print `"Skipping — TCC reset is macOS-only."` and exit.
 
 On macOS, run these four commands sequentially:
 
