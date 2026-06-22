@@ -1,4 +1,4 @@
-import { logEvent as fbLogEvent, getAnalytics } from 'firebase/analytics';
+import { type Analytics, logEvent as fbLogEvent, getAnalytics } from 'firebase/analytics';
 import { getApps, initializeApp } from 'firebase/app';
 
 const firebaseConfig = {
@@ -11,7 +11,7 @@ const firebaseConfig = {
     measurementId: 'G-LK83FBJKBJ',
 };
 
-let analytics: any = null;
+let analytics: Analytics | null = null;
 
 export function initFirebase() {
     if (typeof window === 'undefined') return null;
