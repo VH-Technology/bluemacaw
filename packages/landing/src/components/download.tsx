@@ -25,8 +25,6 @@ export function Download() {
 
     const macHref = manifest?.mac ?? (resolved ? null : RELEASES_FALLBACK);
     const winHref = manifest?.win ?? (resolved ? null : RELEASES_FALLBACK);
-    const linuxHref = manifest?.linux ?? (resolved ? null : RELEASES_FALLBACK);
-    const linuxArm64Href = manifest?.linuxArm64 ?? (resolved ? null : RELEASES_FALLBACK);
 
     return (
         <section id="download" className="mx-auto max-w-6xl px-6 py-20">
@@ -42,7 +40,7 @@ export function Download() {
                 </p>
                 <DownloadCount />
             </div>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <PlatformCard
                     name="macOS"
                     detail="Signed + notarized DMG"
@@ -56,16 +54,6 @@ export function Download() {
                     href={winHref}
                     docsHref="/docs/#install-windows"
                     icon={<MaskIcon src="/icons/windows.svg" className="h-7 w-7" />}
-                />
-                <PlatformCard
-                    name="Linux"
-                    detail="AppImage, .deb, .rpm — amd64 + arm64"
-                    href={linuxHref}
-                    altHref={linuxArm64Href}
-                    altLabel="ARM64"
-                    docsHref="/docs/#install-linux"
-                    icon={<MaskIcon src="/icons/linux.svg" className="h-7 w-7" />}
-                    tags={['Beta']}
                 />
             </div>
         </section>

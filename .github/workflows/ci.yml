@@ -40,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-22.04-arm, macos-latest, windows-latest]
+        os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -64,19 +64,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-cargo-
             ${{ runner.os }}-cargo-
-
-      - name: Install Linux build deps
-        if: startsWith(matrix.os, 'ubuntu')
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            libssl-dev \
-            libasound2-dev \
-            libxdo-dev \
-            pkg-config \
-            build-essential
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -130,7 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-22.04-arm, macos-latest, windows-latest]
+        os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -156,19 +143,6 @@ jobs:
             ${{ runner.os }}-${{ runner.arch }}-cargo-
             ${{ runner.os }}-cargo-build-
             ${{ runner.os }}-cargo-
-
-      - name: Install Linux build deps
-        if: startsWith(matrix.os, 'ubuntu')
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            libssl-dev \
-            libasound2-dev \
-            libxdo-dev \
-            pkg-config \
-            build-essential
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

@@ -22,7 +22,7 @@ Examples:
 - `feat(desktop): add Groq provider adapter`
 - `fix(landing): resolve hydration mismatch in changelog page`
 - `docs: update permissions doc for new Accessibility flow`
-- `ci: add Linux deb signing job`
+- `ci: add Windows code-signing job`
 
 ## Hooks
 

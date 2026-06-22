@@ -13,13 +13,12 @@ Cross-platform speech-to-text desktop app. Press a global shortcut, dictate, get
 
 - **macOS:** [Download DMG](https://bluemacaw.com) (signed + notarized)
 - **Windows:** [Download installer](https://bluemacaw.com) (unsigned at v1; SmartScreen warning expected)
-- **Linux:** AppImage, deb, or rpm — see `docs/install-linux.md`
 
 ## Why bluemacaw
 
 - **Bring your own key.** Your API keys live in your OS keychain. Audio goes only to the provider you chose. No bluemacaw backend.
 - **Multi-provider.** Pick the model that fits: OpenAI Whisper, Groq's distil-whisper, Deepgram Nova, AssemblyAI, ElevenLabs Scribe, and more.
-- **Cross-platform.** macOS, Windows, Linux. Same shortcut. Same UX.
+- **Cross-platform.** macOS, Windows. Same shortcut. Same UX.
 - **Open source (Apache 2.0).** Read the code. Verify the privacy story.
 
 ## Project layout

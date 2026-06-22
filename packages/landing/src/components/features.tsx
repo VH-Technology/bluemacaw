@@ -9,7 +9,7 @@ const FEATURES = [
     },
     {
         title: 'Cross-platform',
-        body: 'macOS, Windows, Linux. Same shortcut. Same UX.',
+        body: 'macOS, Windows. Same shortcut. Same UX.',
     },
     {
         title: 'Open source',
