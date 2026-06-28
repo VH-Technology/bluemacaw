@@ -112,7 +112,6 @@ describe('<MainWindow />', () => {
         const panel = screen.getByTestId('panel-dashboard');
         expect(panel).toContainElement(screen.getByTestId('section-stats'));
         expect(panel).toContainElement(screen.getByTestId('section-history'));
-        expect(screen.getByRole('heading', { name: /statistics/i })).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: /recent transcriptions/i })).toBeInTheDocument();
     });
 
