@@ -23,6 +23,8 @@ export interface HistoryProps {
     onExportFiltered?: (rows: readonly HistoryEntry[]) => void;
 }
 
+const COLLAPSE_TEXT_AT = 280;
+
 function toTranscriptionRow(e: HistoryEntry): TranscriptionRow {
     return {
         id: Number(e.id),
@@ -61,8 +63,21 @@ export function History({ entries, pageSize = 25, onDelete, onExportFiltered }: 
     const [search, setSearch] = useState('');
     const [providerFilter, setProviderFilter] = useState('all');
     const [page, setPage] = useState(0);
+    const [expandedRows, setExpandedRows] = useState<ReadonlySet<string>>(() => new Set());
     const searchId = useId();
     const providerSelectId = useId();
+
+    function toggleExpanded(id: string) {
+        setExpandedRows((current) => {
+            const next = new Set(current);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    }
 
     const providers = useMemo(() => {
         const set = new Set(entries.map((e) => e.provider));
@@ -140,51 +155,80 @@ export function History({ entries, pageSize = 25, onDelete, onExportFiltered }: 
                 </Card>
             ) : (
                 <ul className="flex flex-col gap-2">
-                    {visible.map((entry) => (
-                        <li key={entry.id} data-testid="history-row">
-                            <Card>
-                                <CardContent className="flex flex-col gap-2 text-sm font-medium normal-case">
-                                    <p className="text-base">{entry.text}</p>
-                                    <p className="text-xs uppercase tracking-wider opacity-70">
-                                        {entry.provider} · {entry.model} ·{' '}
-                                        {formatTimestamp(entry.createdAt)}
-                                    </p>
-                                    <div className="flex flex-wrap gap-2">
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() =>
-                                                void navigator.clipboard.writeText(entry.text)
-                                            }
-                                        >
-                                            Copy
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => exportRow(entry, 'txt')}
-                                        >
-                                            Export .txt
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => exportRow(entry, 'md')}
-                                        >
-                                            Export .md
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="destructive"
-                                            onClick={() => onDelete?.(entry.id)}
-                                        >
-                                            Delete
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </li>
-                    ))}
+                    {visible.map((entry) => {
+                        const shouldCollapse = entry.text.length > COLLAPSE_TEXT_AT;
+                        const expanded = expandedRows.has(entry.id);
+                        const visibleText =
+                            shouldCollapse && !expanded
+                                ? `${entry.text.slice(0, COLLAPSE_TEXT_AT).trimEnd()}…`
+                                : entry.text;
+                        return (
+                            <li key={entry.id} data-testid="history-row">
+                                <Card>
+                                    <CardContent className="flex flex-col gap-3 text-sm font-medium normal-case">
+                                        {shouldCollapse ? (
+                                            <button
+                                                type="button"
+                                                aria-expanded={expanded}
+                                                aria-label={
+                                                    expanded
+                                                        ? 'Collapse transcription'
+                                                        : 'Expand transcription'
+                                                }
+                                                data-testid={`history-text-toggle-${entry.id}`}
+                                                onClick={() => toggleExpanded(entry.id)}
+                                                className="rounded-2xl px-2 py-1 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40"
+                                            >
+                                                <span className="block whitespace-pre-wrap text-base leading-relaxed">
+                                                    {visibleText}
+                                                </span>
+                                            </button>
+                                        ) : (
+                                            <p className="whitespace-pre-wrap text-base leading-relaxed">
+                                                {entry.text}
+                                            </p>
+                                        )}
+                                        <p className="text-xs uppercase tracking-wider opacity-70">
+                                            {entry.provider} · {entry.model} ·{' '}
+                                            {formatTimestamp(entry.createdAt)}
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() =>
+                                                    void navigator.clipboard.writeText(entry.text)
+                                                }
+                                            >
+                                                Copy
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => exportRow(entry, 'txt')}
+                                            >
+                                                Export .txt
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => exportRow(entry, 'md')}
+                                            >
+                                                Export .md
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="destructive"
+                                                onClick={() => onDelete?.(entry.id)}
+                                            >
+                                                Delete
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </li>
+                        );
+                    })}
                 </ul>
             )}
 

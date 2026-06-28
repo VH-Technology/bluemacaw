@@ -21,11 +21,15 @@ function formatMonthlyCost(usd: number | null): string {
 
 function Stat({ label, value }: { label: string; value: string }) {
     return (
-        <Card>
-            <CardHeader className="pb-1">
-                <CardTitle className="text-xs uppercase tracking-widest">{label}</CardTitle>
+        <Card className="border border-border/70 bg-surface/95 shadow-card transition-shadow hover:shadow-card-lg">
+            <CardHeader className="mb-1 pb-0">
+                <CardTitle className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
+                    {label}
+                </CardTitle>
             </CardHeader>
-            <CardContent className="text-2xl font-extrabold">{value}</CardContent>
+            <CardContent className="text-3xl font-black leading-none tracking-tight text-brand-navy dark:text-fg">
+                {value}
+            </CardContent>
         </Card>
     );
 }
@@ -45,7 +49,7 @@ export function Dashboard({ refreshKey = 0 }: DashboardProps) {
         };
     }, [refreshKey]);
 
-    const totalWords = stats ? stats.totalWords.toLocaleString() : '—';
+    const totalWords = stats ? stats.totalWords.toLocaleString('en-US') : '—';
     const streakDays = stats ? String(stats.streakDays) : '—';
     const avgWPM = stats?.avgWPM != null ? stats.avgWPM.toFixed(1) : '—';
     const timeSaved = stats ? `${stats.timeSavedMinutes.toFixed(1)} min` : '—';
@@ -53,7 +57,7 @@ export function Dashboard({ refreshKey = 0 }: DashboardProps) {
     const projectedCost = stats ? formatMonthlyCost(stats.projectedMonthlyUSD) : '—';
 
     return (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
             <Stat label="Total words" value={totalWords} />
             <Stat label="Streak (days)" value={streakDays} />
             <Stat label="Avg WPM" value={avgWPM} />

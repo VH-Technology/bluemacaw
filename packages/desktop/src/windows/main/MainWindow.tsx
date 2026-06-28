@@ -182,18 +182,29 @@ export function MainWindowInner() {
                 <TabsContent
                     value="dashboard"
                     data-testid="panel-dashboard"
-                    className="flex flex-col gap-6"
+                    className="flex flex-col gap-10"
                 >
-                    <section className="flex flex-col gap-3" data-testid="section-stats">
-                        <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                            Statistics
-                        </h2>
+                    <section className="flex flex-col gap-4" data-testid="section-stats">
+                        <div className="flex flex-col gap-1">
+                            <h2 className="text-2xl font-black tracking-tight text-brand-navy dark:text-fg">
+                                Statistics
+                            </h2>
+                            <p className="text-sm font-medium text-muted-foreground">
+                                A quick read on volume, pace, provider mix, and projected spend.
+                            </p>
+                        </div>
                         <Dashboard refreshKey={refreshKey} />
                     </section>
-                    <section className="flex flex-col gap-3" data-testid="section-history">
-                        <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                            Recent transcriptions
-                        </h2>
+                    <section className="flex flex-col gap-4" data-testid="section-history">
+                        <div className="flex flex-col gap-1">
+                            <h2 className="text-2xl font-black tracking-tight text-brand-navy dark:text-fg">
+                                Recent transcriptions
+                            </h2>
+                            <p className="text-sm font-medium text-muted-foreground">
+                                Search, export, or expand longer transcripts without losing your
+                                place.
+                            </p>
+                        </div>
                         <History
                             entries={historyEntries}
                             onDelete={handleDelete}

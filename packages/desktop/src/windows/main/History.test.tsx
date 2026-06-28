@@ -69,6 +69,25 @@ describe('<History />', () => {
         await user.click(screen.getByRole('button', { name: /next/i }));
         expect(screen.getAllByTestId('history-row')).toHaveLength(1);
     });
+
+    it('collapses long transcription text by default', () => {
+        const longText = `${'Long transcription text. '.repeat(20)}Final sentence.`;
+        render(<History entries={[makeEntry({ text: longText })]} pageSize={10} />);
+        const toggle = screen.getByTestId('history-text-toggle-1');
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(toggle.textContent?.trim().endsWith('…')).toBe(true);
+        expect(toggle).not.toHaveTextContent('Final sentence.');
+    });
+
+    it('expands long transcription text when clicked', async () => {
+        const user = userEvent.setup();
+        const longText = `${'Long transcription text. '.repeat(20)}Final sentence.`;
+        render(<History entries={[makeEntry({ text: longText })]} pageSize={10} />);
+        const toggle = screen.getByTestId('history-text-toggle-1');
+        await user.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(toggle).toHaveTextContent('Final sentence.');
+    });
 });
 
 function makeEntry(over: Partial<HistoryEntry> = {}): HistoryEntry {
