@@ -201,7 +201,7 @@ export function MainWindowInner() {
                 <TabsContent
                     value="dashboard"
                     data-testid="panel-dashboard"
-                    className="flex flex-col gap-10"
+                    className="mt-8 flex flex-col gap-10"
                 >
                     <section className="flex flex-col gap-4" data-testid="section-stats">
                         <Dashboard refreshKey={refreshKey} />

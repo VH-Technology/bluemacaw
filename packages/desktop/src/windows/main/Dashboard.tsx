@@ -1,6 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { type HistoryStats, getHistoryStats } from '@/lib/db';
-import { useEffect, useState } from 'react';
+import { PROVIDERS } from '@/providers';
+import { type ReactNode, useEffect, useState } from 'react';
+import { ProviderLogo } from './ProviderPicker';
 
 export interface DashboardProps {
     /** When recordingState transitions to idle, the parent can bump this prop
@@ -19,15 +21,15 @@ function formatMonthlyCost(usd: number | null): string {
     return `$${usd.toFixed(2)}`;
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value }: { label: string; value: ReactNode }) {
     return (
-        <Card className="border border-border/70 bg-surface/95 shadow-card transition-shadow hover:shadow-card-lg">
-            <CardHeader className="mb-1 pb-0">
-                <CardTitle className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
+        <Card className="group flex min-h-40 flex-col border border-border/70 bg-surface/95 shadow-card transition-all duration-200 hover:-translate-y-1 hover:border-main/40 hover:bg-main/[0.04] hover:shadow-card-lg active:translate-y-0 active:scale-[0.99] dark:hover:bg-main/10">
+            <CardHeader className="mb-0 w-full items-start pb-0 text-left">
+                <CardTitle className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground transition-colors group-hover:text-main">
                     {label}
                 </CardTitle>
             </CardHeader>
-            <CardContent className="text-3xl font-black leading-none tracking-tight text-brand-navy dark:text-fg">
+            <CardContent className="flex min-h-0 flex-1 items-center justify-center text-center text-4xl font-black leading-none tracking-tight text-brand-navy transition-colors group-hover:text-main dark:text-fg dark:group-hover:text-main">
                 {value}
             </CardContent>
         </Card>
@@ -53,17 +55,33 @@ export function Dashboard({ refreshKey = 0 }: DashboardProps) {
     const streakDays = stats ? String(stats.streakDays) : '—';
     const avgWPM = stats?.avgWPM != null ? stats.avgWPM.toFixed(1) : '—';
     const timeSaved = stats ? `${stats.timeSavedMinutes.toFixed(1)} min` : '—';
-    const topProvider = stats?.topProvider ?? '—';
+    const topProvider = stats?.topProvider
+        ? PROVIDERS.find((provider) => provider.id === stats.topProvider)
+        : null;
+    const topProviderValue = stats?.topProvider ? (
+        topProvider ? (
+            <span className="flex min-w-0 flex-col items-center gap-2">
+                <ProviderLogo provider={topProvider} testIdPrefix="top-provider-logo" />
+                <span className="max-w-full truncate text-sm font-extrabold leading-tight">
+                    {topProvider.name}
+                </span>
+            </span>
+        ) : (
+            stats.topProvider
+        )
+    ) : (
+        '—'
+    );
     const projectedCost = stats ? formatMonthlyCost(stats.projectedMonthlyUSD) : '—';
 
     return (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+        <section aria-label="Statistics" className="grid grid-cols-2 gap-4 md:grid-cols-3">
             <Stat label="Total words" value={totalWords} />
             <Stat label="Streak (days)" value={streakDays} />
             <Stat label="Avg WPM" value={avgWPM} />
             <Stat label="Time saved" value={timeSaved} />
-            <Stat label="Top provider" value={topProvider} />
+            <Stat label="Top provider" value={topProviderValue} />
             <Stat label="Est. cost / mo" value={projectedCost} />
-        </div>
+        </section>
     );
 }

@@ -7,6 +7,44 @@ interface ProviderPickerProps {
     onSelect: (providerId: string) => void;
 }
 
+interface ProviderLogoProps {
+    provider: Pick<ProviderConfig, 'id' | 'name' | 'logoSrc'>;
+    selected?: boolean;
+    testIdPrefix?: string;
+}
+
+export function ProviderLogo({
+    provider,
+    selected = false,
+    testIdPrefix = 'provider-logo',
+}: ProviderLogoProps) {
+    if (provider.logoSrc) {
+        return (
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted p-2">
+                <img
+                    src={provider.logoSrc}
+                    alt=""
+                    aria-hidden="true"
+                    data-testid={`${testIdPrefix}-${provider.id}`}
+                    className="h-full w-full object-contain opacity-90 dark:invert"
+                />
+            </span>
+        );
+    }
+
+    return (
+        <span
+            aria-hidden="true"
+            className={cn(
+                'flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-extrabold uppercase',
+                selected ? 'bg-main text-main-foreground' : 'bg-muted text-fg',
+            )}
+        >
+            {provider.name.slice(0, 2)}
+        </span>
+    );
+}
+
 export function ProviderPicker({ providers, selectedProviderId, onSelect }: ProviderPickerProps) {
     return (
         <div
@@ -32,27 +70,7 @@ export function ProviderPicker({ providers, selectedProviderId, onSelect }: Prov
                                 : 'border-border bg-surface hover:-translate-y-0.5 hover:border-main/40 hover:shadow-card',
                         )}
                     >
-                        {provider.logoSrc ? (
-                            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted p-2">
-                                <img
-                                    src={provider.logoSrc}
-                                    alt=""
-                                    aria-hidden="true"
-                                    data-testid={`provider-logo-${provider.id}`}
-                                    className="h-full w-full object-contain opacity-90 dark:invert"
-                                />
-                            </span>
-                        ) : (
-                            <span
-                                aria-hidden="true"
-                                className={cn(
-                                    'flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-extrabold uppercase',
-                                    selected ? 'bg-main text-main-foreground' : 'bg-muted text-fg',
-                                )}
-                            >
-                                {provider.name.slice(0, 2)}
-                            </span>
-                        )}
+                        <ProviderLogo provider={provider} selected={selected} />
                         <span className="flex min-w-0 flex-col items-center gap-1">
                             <span className="text-sm font-extrabold leading-tight">
                                 {provider.name}
