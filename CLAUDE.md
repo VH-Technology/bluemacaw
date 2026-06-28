@@ -94,6 +94,7 @@ bluemacaw references the [Anthropic superpowers skills](https://github.com/anthr
 - `pulumi-cloud-iac` — Pulumi Cloud state + secrets, AWS profile, Cloudflare provider
 - `tauri-release-and-distribution` — Apple notarization, minisign updater, GPG-signed apt/dnf repos
 - `ai-sdk-transcribe` — `experimental_transcribe`, provider factory pattern, MSW v2 mocking
+- `reset-onboarding` — reset local onboarding state for manual first-run wizard UI testing
 
 ## Documentation index
 

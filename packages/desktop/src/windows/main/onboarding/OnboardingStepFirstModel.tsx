@@ -2,7 +2,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { addModelConfig } from '@/lib/db';
 import { PROVIDERS } from '@/providers';
-import { useId, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { ModelPicker } from '../ModelPicker';
 
 interface OnboardingStepFirstModelProps {
     /** Hidden when omitted — the shell only passes this prop when there's a
@@ -23,7 +24,6 @@ export function OnboardingStepFirstModel({
     apiKeyId,
     providerId,
 }: OnboardingStepFirstModelProps) {
-    const modelId = useId();
     const provider = useMemo(() => PROVIDERS.find((p) => p.id === providerId), [providerId]);
     const models = provider?.defaultModels ?? [];
     const [selectedModel, setSelectedModel] = useState<string>(models[0]?.id ?? '');
@@ -59,31 +59,15 @@ export function OnboardingStepFirstModel({
             </div>
 
             <div className="flex flex-col gap-3 text-sm font-medium normal-case">
-                <div className="flex flex-col gap-1">
-                    <Label htmlFor={modelId}>Model</Label>
-                    <select
-                        id={modelId}
-                        data-testid="onboarding-model-select"
-                        className="h-10 rounded-xl border border-border bg-surface px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40 focus-visible:border-main"
-                        value={selectedModel}
-                        onChange={(e) => setSelectedModel(e.target.value)}
+                <div className="flex flex-col gap-2">
+                    <Label>Model</Label>
+                    <ModelPicker
+                        models={models}
+                        selectedModelId={selectedModel}
+                        onSelect={setSelectedModel}
+                        providerId={provider?.id}
                         disabled={models.length === 0}
-                    >
-                        {models.length === 0 ? (
-                            <option value="">No models available</option>
-                        ) : (
-                            models.map((m) => (
-                                <option key={m.id} value={m.id}>
-                                    {m.displayName}
-                                </option>
-                            ))
-                        )}
-                    </select>
-                    {selectedModel && models.find((m) => m.id === selectedModel)?.description && (
-                        <p className="text-xs text-muted-foreground">
-                            {models.find((m) => m.id === selectedModel)?.description}
-                        </p>
-                    )}
+                    />
                 </div>
                 {error && (
                     <p

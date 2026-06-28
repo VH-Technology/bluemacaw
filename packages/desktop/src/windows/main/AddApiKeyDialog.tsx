@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { addApiKey } from '@/lib/db';
 import { PROVIDERS, type ProviderConfig } from '@/providers';
 import { useId, useState } from 'react';
+import { ProviderPicker } from './ProviderPicker';
 
 interface AddApiKeyDialogProps {
     open: boolean;
@@ -43,7 +44,6 @@ async function validateAgainstProvider(
 }
 
 export function AddApiKeyDialog({ open, onClose, onAdded }: AddApiKeyDialogProps) {
-    const providerId = useId();
     const nicknameId = useId();
     const keyId = useId();
     const defaultProvider = PROVIDERS[0]?.id ?? '';
@@ -106,7 +106,7 @@ export function AddApiKeyDialog({ open, onClose, onAdded }: AddApiKeyDialogProps
                 }
             }}
         >
-            <DialogContent data-testid="add-api-key-dialog">
+            <DialogContent className="max-w-5xl" data-testid="add-api-key-dialog">
                 <DialogHeader>
                     <DialogTitle>Add API Key</DialogTitle>
                     <DialogDescription>
@@ -114,21 +114,13 @@ export function AddApiKeyDialog({ open, onClose, onAdded }: AddApiKeyDialogProps
                     </DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-col gap-3 text-sm font-medium normal-case">
-                    <div className="flex flex-col gap-1">
-                        <Label htmlFor={providerId}>Provider</Label>
-                        <select
-                            id={providerId}
-                            data-testid="provider-select"
-                            className="h-10 rounded-xl border border-border bg-surface px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40 focus-visible:border-main"
-                            value={provider}
-                            onChange={(e) => setProvider(e.target.value)}
-                        >
-                            {PROVIDERS.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                    {p.name}
-                                </option>
-                            ))}
-                        </select>
+                    <div className="flex flex-col gap-2">
+                        <Label>Provider</Label>
+                        <ProviderPicker
+                            providers={PROVIDERS}
+                            selectedProviderId={provider}
+                            onSelect={setProvider}
+                        />
                     </div>
                     <div className="flex flex-col gap-1">
                         <Label htmlFor={nicknameId}>Nickname</Label>
