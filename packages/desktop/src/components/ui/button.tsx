@@ -14,7 +14,7 @@ const buttonVariants = cva(
                     'border border-border bg-surface text-fg hover:bg-muted active:translate-y-px',
                 ghost: 'text-fg hover:bg-muted',
                 destructive:
-                    'bg-brand-coral text-white shadow-card hover:shadow-card-lg active:translate-y-px',
+                    'bg-red-600 text-white shadow-card hover:bg-red-700 hover:shadow-card-lg active:translate-y-px',
             },
             size: {
                 default: 'h-10 px-5 py-2 text-sm',

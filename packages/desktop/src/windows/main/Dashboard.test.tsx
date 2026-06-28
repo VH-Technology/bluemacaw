@@ -6,6 +6,17 @@ vi.mock('@/lib/db', () => ({
     getHistoryStats: vi.fn(),
 }));
 
+vi.mock('@/providers', () => ({
+    PROVIDERS: [
+        {
+            id: 'openai',
+            name: 'OpenAI',
+            logoSrc: '/logos/openai.svg',
+            defaultModels: [{ id: 'whisper-1', displayName: 'Whisper 1', mode: 'batch' }],
+        },
+    ],
+}));
+
 import { getHistoryStats } from '@/lib/db';
 
 beforeEach(() => {
@@ -27,7 +38,11 @@ describe('Dashboard', () => {
         expect(screen.getByText('5')).toBeInTheDocument();
         expect(screen.getByText(/42\.5/)).toBeInTheDocument();
         expect(screen.getByText(/12\.3/)).toBeInTheDocument();
-        expect(screen.getByText('openai')).toBeInTheDocument();
+        expect(screen.getByText('OpenAI')).toBeInTheDocument();
+        expect(screen.getByTestId('top-provider-logo-openai')).toHaveAttribute(
+            'src',
+            '/logos/openai.svg',
+        );
         // Projected monthly spend, formatted as currency.
         expect(screen.getByText('$3.50')).toBeInTheDocument();
     });

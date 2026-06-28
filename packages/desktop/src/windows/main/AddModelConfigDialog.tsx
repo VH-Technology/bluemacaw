@@ -10,9 +10,11 @@ import {
 import { Label } from '@/components/ui/label';
 import { type ApiKeyRow, addModelConfig, listApiKeys } from '@/lib/db';
 import { vox } from '@/lib/invoke';
+import { cn } from '@/lib/utils';
 import { type Model, PROVIDERS } from '@/providers';
-import { modelPriceLabel, providerName } from '@/providers/util';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { providerName } from '@/providers/util';
+import { useEffect, useMemo, useState } from 'react';
+import { ModelPicker } from './ModelPicker';
 
 interface AddModelConfigDialogProps {
     open: boolean;
@@ -21,8 +23,6 @@ interface AddModelConfigDialogProps {
 }
 
 export function AddModelConfigDialog({ open, onClose, onAdded }: AddModelConfigDialogProps) {
-    const apiKeyId = useId();
-    const modelId = useId();
     const [keys, setKeys] = useState<ApiKeyRow[]>([]);
     const [selectedKey, setSelectedKey] = useState<string>('');
     const [models, setModels] = useState<Model[]>([]);
@@ -124,45 +124,47 @@ export function AddModelConfigDialog({ open, onClose, onAdded }: AddModelConfigD
                         </p>
                     ) : (
                         <>
-                            <div className="flex flex-col gap-1">
-                                <Label htmlFor={apiKeyId}>API key</Label>
-                                <select
-                                    id={apiKeyId}
-                                    data-testid="api-key-select"
-                                    className="h-10 rounded-xl border border-border bg-surface px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40 focus-visible:border-main"
-                                    value={selectedKey}
-                                    onChange={(e) => setSelectedKey(e.target.value)}
+                            <div className="flex flex-col gap-2">
+                                <Label>API key</Label>
+                                <div
+                                    className="grid gap-2 sm:grid-cols-2"
+                                    data-testid="api-key-picker"
                                 >
-                                    {keys.map((k) => (
-                                        <option key={k.id} value={k.id}>
-                                            {k.nickname} ({providerName(k.providerId)})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <Label htmlFor={modelId}>Model</Label>
-                                <select
-                                    id={modelId}
-                                    data-testid="model-select"
-                                    className="h-10 rounded-xl border border-border bg-surface px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40 focus-visible:border-main"
-                                    value={selectedModel}
-                                    onChange={(e) => setSelectedModel(e.target.value)}
-                                >
-                                    {models.map((m) => {
-                                        const price = modelPriceLabel(
-                                            selectedProvider?.id ?? '',
-                                            m.id,
-                                        );
+                                    {keys.map((k) => {
+                                        const selected = k.id === selectedKey;
                                         return (
-                                            <option key={m.id} value={m.id}>
-                                                {price
-                                                    ? `${m.displayName} · ${price}`
-                                                    : m.displayName}
-                                            </option>
+                                            <button
+                                                key={k.id}
+                                                type="button"
+                                                aria-pressed={selected}
+                                                onClick={() => setSelectedKey(k.id)}
+                                                data-testid={`api-key-card-${k.id}`}
+                                                className={cn(
+                                                    'rounded-2xl border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40',
+                                                    selected
+                                                        ? 'border-main bg-main/10 shadow-card'
+                                                        : 'border-border bg-surface hover:-translate-y-0.5 hover:border-main/40 hover:shadow-card',
+                                                )}
+                                            >
+                                                <span className="block text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                                                    {providerName(k.providerId)}
+                                                </span>
+                                                <span className="block text-sm font-extrabold">
+                                                    {k.nickname}
+                                                </span>
+                                            </button>
                                         );
                                     })}
-                                </select>
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <Label>Model</Label>
+                                <ModelPicker
+                                    models={models}
+                                    selectedModelId={selectedModel}
+                                    onSelect={setSelectedModel}
+                                    providerId={selectedProvider?.id}
+                                />
                             </div>
                         </>
                     )}

@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { TranscriptionRow } from '@/lib/db';
 import { downloadBlob, formatBulkAsMd, formatRowAsMd, formatRowAsTxt } from '@/lib/export';
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 export interface HistoryEntry {
     id: string;
@@ -22,6 +22,8 @@ export interface HistoryProps {
     onDelete?: (id: string) => void;
     onExportFiltered?: (rows: readonly HistoryEntry[]) => void;
 }
+
+const COLLAPSE_TEXT_AT = 280;
 
 function toTranscriptionRow(e: HistoryEntry): TranscriptionRow {
     return {
@@ -61,8 +63,54 @@ export function History({ entries, pageSize = 25, onDelete, onExportFiltered }: 
     const [search, setSearch] = useState('');
     const [providerFilter, setProviderFilter] = useState('all');
     const [page, setPage] = useState(0);
+    const [expandedRows, setExpandedRows] = useState<ReadonlySet<string>>(() => new Set());
+    const [menuOpen, setMenuOpen] = useState<string | null>(null);
+    const [copiedId, setCopiedId] = useState<string | null>(null);
+    const menuRef = useRef<HTMLDivElement | null>(null);
+    const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const searchId = useId();
     const providerSelectId = useId();
+
+    useEffect(() => {
+        if (!menuOpen) return;
+        function handleClick(e: MouseEvent) {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setMenuOpen(null);
+            }
+        }
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, [menuOpen]);
+
+    function closeMenu() {
+        setMenuOpen(null);
+    }
+
+    function handleCopy(entryId: string, text: string) {
+        void navigator.clipboard.writeText(text);
+        if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+        setCopiedId(entryId);
+        copiedTimerRef.current = setTimeout(() => setCopiedId(null), 1000);
+    }
+
+    // Clean up the copied timer on unmount.
+    useEffect(() => {
+        return () => {
+            if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+        };
+    }, []);
+
+    function toggleExpanded(id: string) {
+        setExpandedRows((current) => {
+            const next = new Set(current);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    }
 
     const providers = useMemo(() => {
         const set = new Set(entries.map((e) => e.provider));
@@ -140,51 +188,142 @@ export function History({ entries, pageSize = 25, onDelete, onExportFiltered }: 
                 </Card>
             ) : (
                 <ul className="flex flex-col gap-2">
-                    {visible.map((entry) => (
-                        <li key={entry.id} data-testid="history-row">
-                            <Card>
-                                <CardContent className="flex flex-col gap-2 text-sm font-medium normal-case">
-                                    <p className="text-base">{entry.text}</p>
-                                    <p className="text-xs uppercase tracking-wider opacity-70">
-                                        {entry.provider} · {entry.model} ·{' '}
-                                        {formatTimestamp(entry.createdAt)}
-                                    </p>
-                                    <div className="flex flex-wrap gap-2">
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() =>
-                                                void navigator.clipboard.writeText(entry.text)
-                                            }
-                                        >
-                                            Copy
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => exportRow(entry, 'txt')}
-                                        >
-                                            Export .txt
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => exportRow(entry, 'md')}
-                                        >
-                                            Export .md
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="destructive"
-                                            onClick={() => onDelete?.(entry.id)}
-                                        >
-                                            Delete
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </li>
-                    ))}
+                    {visible.map((entry) => {
+                        const shouldCollapse = entry.text.length > COLLAPSE_TEXT_AT;
+                        const expanded = expandedRows.has(entry.id);
+                        const visibleText =
+                            shouldCollapse && !expanded
+                                ? `${entry.text.slice(0, COLLAPSE_TEXT_AT).trimEnd()}…`
+                                : entry.text;
+                        const isMenuOpen = menuOpen === entry.id;
+                        return (
+                            <li key={entry.id} data-testid="history-row">
+                                <Card className="relative">
+                                    <CardContent className="flex flex-col gap-3 pr-14 text-sm font-medium normal-case">
+                                        <div className="absolute top-3 right-3 flex items-center gap-1">
+                                            {copiedId === entry.id ? (
+                                                <span className="flex h-7 items-center text-[11px] font-extrabold uppercase tracking-widest text-muted-foreground">
+                                                    Copied!
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    aria-label="Copy transcription"
+                                                    onClick={() => handleCopy(entry.id, entry.text)}
+                                                    className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40"
+                                                >
+                                                    <svg
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        strokeWidth="2"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        className="h-4 w-4"
+                                                        aria-hidden="true"
+                                                    >
+                                                        <rect
+                                                            x="9"
+                                                            y="9"
+                                                            width="13"
+                                                            height="13"
+                                                            rx="2"
+                                                        />
+                                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                                    </svg>
+                                                </button>
+                                            )}
+                                            <div
+                                                className="relative"
+                                                ref={isMenuOpen ? menuRef : null}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    aria-label="More actions"
+                                                    aria-expanded={isMenuOpen}
+                                                    onClick={() =>
+                                                        setMenuOpen(isMenuOpen ? null : entry.id)
+                                                    }
+                                                    className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40"
+                                                >
+                                                    <svg
+                                                        viewBox="0 0 24 24"
+                                                        fill="currentColor"
+                                                        className="h-4 w-4"
+                                                        aria-hidden="true"
+                                                    >
+                                                        <circle cx="12" cy="5" r="2" />
+                                                        <circle cx="12" cy="12" r="2" />
+                                                        <circle cx="12" cy="19" r="2" />
+                                                    </svg>
+                                                </button>
+                                                {isMenuOpen && (
+                                                    <div className="absolute right-0 top-full mt-1 z-10 min-w-[140px] rounded-2xl border border-border bg-surface p-1 shadow-pop">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                closeMenu();
+                                                                exportRow(entry, 'txt');
+                                                            }}
+                                                            className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40"
+                                                        >
+                                                            Export .txt
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                closeMenu();
+                                                                exportRow(entry, 'md');
+                                                            }}
+                                                            className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40"
+                                                        >
+                                                            Export .md
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                closeMenu();
+                                                                onDelete?.(entry.id);
+                                                            }}
+                                                            className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-medium text-red-600 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {shouldCollapse ? (
+                                            <button
+                                                type="button"
+                                                aria-expanded={expanded}
+                                                aria-label={
+                                                    expanded
+                                                        ? 'Collapse transcription'
+                                                        : 'Expand transcription'
+                                                }
+                                                data-testid={`history-text-toggle-${entry.id}`}
+                                                onClick={() => toggleExpanded(entry.id)}
+                                                className="rounded-2xl px-2 py-1 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40"
+                                            >
+                                                <span className="block whitespace-pre-wrap text-sm leading-relaxed">
+                                                    {visibleText}
+                                                </span>
+                                            </button>
+                                        ) : (
+                                            <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                                                {entry.text}
+                                            </p>
+                                        )}
+                                        <p className="text-[11px] font-medium normal-case tracking-normal text-muted-foreground">
+                                            {entry.provider} · {entry.model} ·{' '}
+                                            {formatTimestamp(entry.createdAt)}
+                                        </p>
+                                    </CardContent>
+                                </Card>
+                            </li>
+                        );
+                    })}
                 </ul>
             )}
 

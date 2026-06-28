@@ -69,6 +69,25 @@ describe('<History />', () => {
         await user.click(screen.getByRole('button', { name: /next/i }));
         expect(screen.getAllByTestId('history-row')).toHaveLength(1);
     });
+
+    it('collapses long transcription text by default', () => {
+        const longText = `${'Long transcription text. '.repeat(20)}Final sentence.`;
+        render(<History entries={[makeEntry({ text: longText })]} pageSize={10} />);
+        const toggle = screen.getByTestId('history-text-toggle-1');
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(toggle.textContent?.trim().endsWith('…')).toBe(true);
+        expect(toggle).not.toHaveTextContent('Final sentence.');
+    });
+
+    it('expands long transcription text when clicked', async () => {
+        const user = userEvent.setup();
+        const longText = `${'Long transcription text. '.repeat(20)}Final sentence.`;
+        render(<History entries={[makeEntry({ text: longText })]} pageSize={10} />);
+        const toggle = screen.getByTestId('history-text-toggle-1');
+        await user.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(toggle).toHaveTextContent('Final sentence.');
+    });
 });
 
 function makeEntry(over: Partial<HistoryEntry> = {}): HistoryEntry {
@@ -85,17 +104,18 @@ function makeEntry(over: Partial<HistoryEntry> = {}): HistoryEntry {
 }
 
 describe('History row actions', () => {
-    it('renders Copy, Export, Delete buttons per row', () => {
+    it('renders a copy icon button and a kebab menu button per row', () => {
         render(<History entries={[makeEntry()]} onDelete={vi.fn()} />);
-        expect(screen.getByRole('button', { name: /copy/i })).toBeInTheDocument();
-        expect(screen.getAllByRole('button', { name: /export/i }).length).toBeGreaterThan(0);
-        expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /copy transcription/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /more actions/i })).toBeInTheDocument();
     });
 
-    it('Delete fires onDelete with the row id', () => {
+    it('opens the kebab menu and Delete fires onDelete with the row id', async () => {
+        const user = userEvent.setup();
         const onDelete = vi.fn();
         render(<History entries={[makeEntry()]} onDelete={onDelete} />);
-        fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+        await user.click(screen.getByRole('button', { name: /more actions/i }));
+        await user.click(screen.getByRole('button', { name: /delete/i }));
         expect(onDelete).toHaveBeenCalledWith('1');
     });
 
@@ -106,7 +126,7 @@ describe('History row actions', () => {
             configurable: true,
         });
         render(<History entries={[makeEntry()]} onDelete={vi.fn()} />);
-        fireEvent.click(screen.getByRole('button', { name: /copy/i }));
+        fireEvent.click(screen.getByRole('button', { name: /copy transcription/i }));
         await waitFor(() => expect(writeText).toHaveBeenCalledWith('Hello world.'));
     });
 });

@@ -13,7 +13,7 @@ vi.mock('@/providers', () => ({
         {
             id: 'openai',
             name: 'OpenAI',
-            logoSrc: '',
+            logoSrc: '/logos/openai.svg',
             docsUrl: '',
             apiKeyHelpUrl: '',
             pricingDocsUrl: '',
@@ -53,12 +53,17 @@ describe('<AddApiKeyDialog />', () => {
         return { ...result, onClose, onAdded };
     }
 
-    it('lists providers in the select', () => {
+    it('lists providers as selectable cards', () => {
         renderOpen();
-        const select = screen.getByTestId('provider-select') as HTMLSelectElement;
-        const ids = Array.from(select.options).map((o) => o.value);
-        expect(ids).toContain('openai');
-        expect(ids).toContain('no-validate');
+        expect(screen.getByTestId('provider-card-openai')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('provider-logo-openai')).toHaveAttribute(
+            'src',
+            '/logos/openai.svg',
+        );
+        expect(screen.getByTestId('provider-card-no-validate')).toHaveAttribute(
+            'aria-pressed',
+            'false',
+        );
     });
 
     it('rejects empty nickname or key', async () => {
@@ -103,8 +108,7 @@ describe('<AddApiKeyDialog />', () => {
     it('skips validation when listModels and validateKey are both absent', async () => {
         const user = userEvent.setup();
         const { onAdded } = renderOpen();
-        const select = screen.getByTestId('provider-select') as HTMLSelectElement;
-        await user.selectOptions(select, 'no-validate');
+        await user.click(screen.getByTestId('provider-card-no-validate'));
         await user.type(screen.getByTestId('nickname-input'), 'X');
         await user.type(screen.getByTestId('key-input'), 'k');
         await user.click(screen.getByTestId('save-api-key'));

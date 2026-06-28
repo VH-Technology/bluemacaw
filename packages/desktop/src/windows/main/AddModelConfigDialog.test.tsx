@@ -29,9 +29,14 @@ vi.mock('@/providers', () => ({
             listModels: listModelsSpy,
             defaultModels: [
                 { id: 'whisper-1', displayName: 'Whisper 1', mode: 'batch' },
-                { id: 'gpt-4o-transcribe', displayName: 'GPT-4o Transcribe', mode: 'batch' },
+                {
+                    id: 'gpt-realtime',
+                    displayName: 'GPT Realtime',
+                    description: 'Low-latency streaming transcription',
+                    mode: 'realtime',
+                },
             ],
-            pricing: {},
+            pricing: { 'gpt-realtime': { perMinuteUSD: 0.01, lastUpdated: '2026-06-28' } },
         },
         {
             id: 'fal',
@@ -64,7 +69,7 @@ describe('<AddModelConfigDialog />', () => {
         expect(await screen.findByTestId('no-keys-message')).toBeInTheDocument();
     });
 
-    it('lists api keys and shows that providers default models', async () => {
+    it('lists api keys as cards and shows that providers default models', async () => {
         vi.mocked(db.listApiKeys).mockResolvedValueOnce([
             {
                 id: 'key-1',
@@ -75,10 +80,13 @@ describe('<AddModelConfigDialog />', () => {
         ]);
         listModelsSpy.mockResolvedValueOnce([]);
         render(<AddModelConfigDialog open onClose={vi.fn()} onAdded={vi.fn()} />);
-        const modelSelect = (await screen.findByTestId('model-select')) as HTMLSelectElement;
-        const ids = Array.from(modelSelect.options).map((o) => o.value);
-        expect(ids).toContain('whisper-1');
-        expect(ids).toContain('gpt-4o-transcribe');
+        expect(await screen.findByTestId('api-key-card-key-1')).toHaveAttribute(
+            'aria-pressed',
+            'true',
+        );
+        expect(screen.getByTestId('model-card-whisper-1')).toBeInTheDocument();
+        expect(screen.getByTestId('model-card-gpt-realtime')).toHaveTextContent('Realtime');
+        expect(screen.getByTestId('model-card-gpt-realtime')).toHaveTextContent('$0.0100/min');
     });
 
     it('replaces the model list with dynamic results when listModels succeeds', async () => {
@@ -95,9 +103,8 @@ describe('<AddModelConfigDialog />', () => {
         ]);
         render(<AddModelConfigDialog open onClose={vi.fn()} onAdded={vi.fn()} />);
         await waitFor(() => {
-            const modelSelect = screen.getByTestId('model-select') as HTMLSelectElement;
-            const ids = Array.from(modelSelect.options).map((o) => o.value);
-            expect(ids).toEqual(['gpt-4o-mini-transcribe']);
+            expect(screen.getByTestId('model-card-gpt-4o-mini-transcribe')).toBeInTheDocument();
+            expect(screen.queryByTestId('model-card-whisper-1')).toBeNull();
         });
     });
 
@@ -106,9 +113,8 @@ describe('<AddModelConfigDialog />', () => {
             { id: 'key-1', providerId: 'fal', nickname: 'F', createdAt: '2026-05-09' },
         ]);
         render(<AddModelConfigDialog open onClose={vi.fn()} onAdded={vi.fn()} />);
-        const modelSelect = (await screen.findByTestId('model-select')) as HTMLSelectElement;
-        const ids = Array.from(modelSelect.options).map((o) => o.value);
-        expect(ids).toEqual(['fal-fast']);
+        expect(await screen.findByTestId('model-card-fal-fast')).toBeInTheDocument();
+        expect(screen.queryByTestId('model-card-whisper-1')).toBeNull();
         expect(listModelsSpy).not.toHaveBeenCalled();
     });
 

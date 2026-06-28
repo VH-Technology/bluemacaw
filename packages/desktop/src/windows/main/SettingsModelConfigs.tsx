@@ -8,9 +8,11 @@ import {
     setActiveModelConfigId,
 } from '@/lib/db';
 import { cn } from '@/lib/utils';
+import { PROVIDERS } from '@/providers';
 import { modelPriceLabel, providerName } from '@/providers/util';
 import { useCallback, useEffect, useState } from 'react';
 import { AddModelConfigDialog } from './AddModelConfigDialog';
+import { ModelModeBadge } from './ModelPicker';
 
 export function SettingsModelConfigs() {
     const [configs, setConfigs] = useState<ModelConfigWithApiKey[]>([]);
@@ -53,6 +55,9 @@ export function SettingsModelConfigs() {
                 ) : (
                     configs.map((c) => {
                         const active = c.id === activeId;
+                        const provider = PROVIDERS.find((p) => p.id === c.providerId);
+                        const model = provider?.defaultModels.find((m) => m.id === c.modelId);
+                        const price = modelPriceLabel(c.providerId, c.modelId);
                         return (
                             <div
                                 key={c.id}
@@ -75,18 +80,20 @@ export function SettingsModelConfigs() {
                                         <span className="block text-xs font-bold uppercase tracking-widest">
                                             {providerName(c.providerId)} · {c.apiKeyNickname}
                                         </span>
-                                        <span className="block text-sm">
-                                            {c.modelId}
-                                            {(() => {
-                                                const price = modelPriceLabel(
-                                                    c.providerId,
-                                                    c.modelId,
-                                                );
-                                                return price ? (
-                                                    <span className="opacity-70"> · {price}</span>
-                                                ) : null;
-                                            })()}
+                                        <span className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                                            <span>{model?.displayName ?? c.modelId}</span>
+                                            {model && <ModelModeBadge mode={model.mode} />}
+                                            {price && (
+                                                <span className="rounded-pill bg-muted px-2 py-0.5 text-[11px] font-extrabold text-fg/70">
+                                                    {price}
+                                                </span>
+                                            )}
                                         </span>
+                                        {model?.displayName && model.id !== model.displayName && (
+                                            <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
+                                                {model.id}
+                                            </span>
+                                        )}
                                     </span>
                                 </button>
                                 <div className="flex items-center pr-2">

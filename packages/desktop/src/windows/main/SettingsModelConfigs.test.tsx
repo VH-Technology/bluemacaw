@@ -46,6 +46,21 @@ describe('<SettingsModelConfigs />', () => {
         expect(row).toHaveTextContent('whisper-1');
     });
 
+    it('shows a realtime tag for saved realtime model configs', async () => {
+        vi.mocked(db.listModelConfigs).mockResolvedValueOnce([
+            {
+                ...config,
+                id: 'mc-realtime',
+                modelId: 'scribe_v2_realtime',
+                providerId: 'elevenlabs',
+            },
+        ]);
+        vi.mocked(db.getActiveModelConfigId).mockResolvedValueOnce(null);
+        render(<SettingsModelConfigs />);
+        const row = await screen.findByTestId('model-config-row-mc-realtime');
+        expect(row).toHaveTextContent('Realtime');
+    });
+
     it('clicking a non-active row sets it active and re-marks', async () => {
         vi.mocked(db.listModelConfigs).mockResolvedValueOnce([config]);
         vi.mocked(db.getActiveModelConfigId).mockResolvedValueOnce(null);

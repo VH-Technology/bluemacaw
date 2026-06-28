@@ -5,6 +5,7 @@ import { type ApiKeyRow, addApiKey } from '@/lib/db';
 import { PROVIDERS, type ProviderConfig } from '@/providers';
 import { providerName } from '@/providers/util';
 import { useId, useState } from 'react';
+import { ProviderPicker } from '../ProviderPicker';
 
 interface OnboardingStepFirstApiKeyProps {
     /** Hidden when omitted — the shell only passes this prop when there's a
@@ -57,7 +58,6 @@ export function OnboardingStepFirstApiKey({
     onContinueExisting,
     onSkipFinish,
 }: OnboardingStepFirstApiKeyProps) {
-    const providerId = useId();
     const nicknameId = useId();
     const keyId = useId();
     const defaultProvider = PROVIDERS[0]?.id ?? '';
@@ -156,21 +156,13 @@ export function OnboardingStepFirstApiKey({
                         Add another
                     </p>
                 )}
-                <div className="flex flex-col gap-1">
-                    <Label htmlFor={providerId}>Provider</Label>
-                    <select
-                        id={providerId}
-                        data-testid="onboarding-provider-select"
-                        className="h-10 rounded-xl border border-border bg-surface px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40 focus-visible:border-main"
-                        value={provider}
-                        onChange={(e) => setProvider(e.target.value)}
-                    >
-                        {PROVIDERS.map((p) => (
-                            <option key={p.id} value={p.id}>
-                                {p.name}
-                            </option>
-                        ))}
-                    </select>
+                <div className="flex flex-col gap-2">
+                    <Label>Provider</Label>
+                    <ProviderPicker
+                        providers={PROVIDERS}
+                        selectedProviderId={provider}
+                        onSelect={setProvider}
+                    />
                 </div>
                 <div className="flex flex-col gap-1">
                     <Label htmlFor={nicknameId}>Nickname</Label>
