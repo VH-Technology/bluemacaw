@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import type { TranscriptionRow } from '@/lib/db';
 import { downloadBlob, formatBulkAsMd, formatRowAsMd, formatRowAsTxt } from '@/lib/export';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -186,37 +187,22 @@ export function History({ entries, pageSize = 10, onDelete, onExportFiltered }: 
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                     <div className="sm:w-44">
-                        <div className="relative">
-                            <select
-                                id={providerSelectId}
-                                aria-label="Provider"
-                                className="h-10 w-full appearance-none rounded-xl border border-border bg-surface py-2 pl-4 pr-9 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40 focus-visible:border-main"
-                                value={providerFilter}
-                                onChange={(e) => {
-                                    setProviderFilter(e.target.value);
-                                    setPage(0);
-                                }}
-                            >
-                                <option value="all">All Providers</option>
-                                {providers.map((p) => (
-                                    <option key={p} value={p}>
-                                        {p}
-                                    </option>
-                                ))}
-                            </select>
-                            <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg"
-                                aria-hidden="true"
-                            >
-                                <path d="m6 9 6 6 6-6" />
-                            </svg>
-                        </div>
+                        <Select
+                            id={providerSelectId}
+                            aria-label="Provider"
+                            value={providerFilter}
+                            onChange={(e) => {
+                                setProviderFilter(e.target.value);
+                                setPage(0);
+                            }}
+                        >
+                            <option value="all">All Providers</option>
+                            {providers.map((p) => (
+                                <option key={p} value={p}>
+                                    {p}
+                                </option>
+                            ))}
+                        </Select>
                     </div>
                     <Button
                         variant="outline"

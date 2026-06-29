@@ -15,14 +15,6 @@ vi.mock('@/lib/invoke', () => ({
         getPlatformInfo: vi.fn(async () => ({ os: 'macos', isWayland: false })),
     },
 }));
-vi.mock('@/lib/autostart', () => ({
-    autostart: {
-        isEnabled: vi.fn(async () => false),
-        enable: vi.fn(async () => undefined),
-        disable: vi.fn(async () => undefined),
-        set: vi.fn(async () => undefined),
-    },
-}));
 vi.mock('@/lib/db', () => ({
     getSelectedMicDeviceId: vi.fn(),
     setSelectedMicDeviceId: vi.fn(),
@@ -32,7 +24,6 @@ vi.mock('@/lib/db', () => ({
     setCancelHotkeyCombo: vi.fn(),
 }));
 
-import { autostart } from '@/lib/autostart';
 import {
     getCancelHotkeyCombo,
     getHotkeyCombo,
@@ -164,30 +155,6 @@ describe('SettingsRecording', () => {
         await waitFor(() => {
             expect(setCancelHotkeyComboMock).toHaveBeenCalledWith('Escape');
             expect(voxMock.validateCancelHotkey).toHaveBeenCalledWith('Escape');
-        });
-    });
-
-    it('reflects the current autostart state on mount', async () => {
-        vi.mocked(autostart.isEnabled).mockResolvedValueOnce(true);
-        render(<SettingsRecording />);
-        await waitFor(() => {
-            const toggle = screen.getByTestId('settings-autostart-toggle');
-            expect(toggle).toHaveAttribute('data-state', 'checked');
-        });
-    });
-
-    it('flips autostart through the plugin when the user toggles the switch', async () => {
-        vi.mocked(autostart.isEnabled).mockResolvedValueOnce(false);
-        render(<SettingsRecording />);
-        await waitFor(() => {
-            const toggle = screen.getByTestId('settings-autostart-toggle');
-            expect(toggle).toHaveAttribute('data-state', 'unchecked');
-        });
-        const toggle = screen.getByTestId('settings-autostart-toggle');
-        fireEvent.click(toggle);
-        await waitFor(() => {
-            expect(autostart.set).toHaveBeenCalledWith(true);
-            expect(toggle).toHaveAttribute('data-state', 'checked');
         });
     });
 });

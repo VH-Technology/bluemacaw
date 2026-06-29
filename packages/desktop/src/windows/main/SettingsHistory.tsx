@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import { WarningBanner } from '@/components/ui/warning-banner';
 import {
     clearAllTranscriptions,
@@ -54,23 +55,26 @@ export function SettingsHistory({ onHistoryChanged }: SettingsHistoryProps = {})
                 <CardTitle>History</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm font-medium normal-case">
-                <div className="flex flex-col gap-1">
-                    <Label htmlFor={retainId}>Retain transcriptions for</Label>
-                    <select
-                        id={retainId}
-                        className="h-10 rounded-xl border border-border bg-surface px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40 focus-visible:border-main"
-                        value={String(retainDays)}
-                        onChange={(e) => void handleChange(Number(e.target.value))}
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    <div className="flex flex-col gap-1">
+                        <Label htmlFor={retainId}>Retain transcriptions for</Label>
+                        <Select
+                            id={retainId}
+                            value={String(retainDays)}
+                            onChange={(e) => void handleChange(Number(e.target.value))}
+                        >
+                            {OPTIONS.map((o) => (
+                                <option key={o.value} value={String(o.value)}>
+                                    {o.label}
+                                </option>
+                            ))}
+                        </Select>
+                    </div>
+                    <Button
+                        variant="outline"
+                        className="border-red-500/30 text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/30"
+                        onClick={() => setConfirming(true)}
                     >
-                        {OPTIONS.map((o) => (
-                            <option key={o.value} value={String(o.value)}>
-                                {o.label}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                <div className="flex justify-end">
-                    <Button variant="destructive" onClick={() => setConfirming(true)}>
                         Clear all
                     </Button>
                 </div>

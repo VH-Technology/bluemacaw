@@ -39,6 +39,7 @@ describe('<SettingsApiKeys />', () => {
         const row = await screen.findByTestId('api-key-row-key-1');
         expect(row).toHaveTextContent('Personal');
         expect(row).toHaveTextContent('OpenAI');
+        expect(screen.getByTestId('provider-logo-openai')).toBeInTheDocument();
     });
 
     it('opens the add dialog when Add API Key is clicked', async () => {
