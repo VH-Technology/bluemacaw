@@ -5,6 +5,7 @@ import { Download } from './download';
 import { Features } from './features';
 import { PrivacyTeaser } from './privacy-teaser';
 import { ProvidersGrid } from './providers-grid';
+import { SEO_FAQS, SeoFaq } from './seo-faq';
 
 describe('home sections', () => {
     it('Demo renders an accessible recording-demo region', () => {
@@ -42,6 +43,12 @@ describe('home sections', () => {
             'href',
             '/privacy/',
         );
+    });
+
+    it('SeoFaq renders the SEO FAQ answers', () => {
+        render(<SeoFaq />);
+        expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(SEO_FAQS.length);
+        expect(screen.getByText(/free software licensed under Apache 2\.0/i)).toBeInTheDocument();
     });
 
     it('Download resolves manifest and renders a mac download with coming-soon for null platforms', async () => {

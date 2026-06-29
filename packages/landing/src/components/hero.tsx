@@ -29,11 +29,12 @@ export function Hero() {
                         className="mb-6 h-20 w-20 sm:h-24 sm:w-24"
                     />
                     <h1 className="max-w-3xl text-5xl font-black leading-[1.05] tracking-tight text-fg sm:text-6xl md:text-7xl">
-                        Talk. Get text. Anywhere your cursor is.
+                        Your free, open source voice dictation app.
                     </h1>
                     <p className="mt-6 max-w-2xl text-lg text-muted-foreground sm:text-xl">
-                        bluemacaw is a cross-platform dictation app you actually own. Bring your own
-                        API key for any of 10 STT providers. Open source. No backend.
+                        bluemacaw is an AI speech-to-text desktop app you actually own. Speak
+                        naturally, turn voice into text in any app, bring your own API key for any
+                        of 10 transcription providers.
                     </p>
                     <div className="mt-10 flex flex-wrap justify-center gap-3">
                         <Button asChild size="xl">
@@ -45,7 +46,7 @@ export function Hero() {
                                 target="_blank"
                                 rel="noreferrer"
                             >
-                                Star on GitHub
+                                View source on GitHub
                             </a>
                         </Button>
                     </div>

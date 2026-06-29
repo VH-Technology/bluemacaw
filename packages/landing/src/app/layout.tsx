@@ -2,20 +2,58 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-    title: 'bluemacaw | Open Source Speech to Text',
+    metadataBase: new URL('https://bluemacaw.com'),
+    title: 'bluemacaw | Free Open Source AI Speech-to-Text Dictation App',
     description:
-        'A dictation app you own. Press a shortcut, talk, get text pasted wherever your cursor is. Bring your own key for any of 10 STT providers. Open source.',
+        'Free open-source voice dictation for Mac and Windows. Turn speech into text in any app, bring your own AI transcription provider, and keep your API keys on your machine.',
+    applicationName: 'bluemacaw',
+    keywords: [
+        'free open source dictation app',
+        'AI speech to text desktop app',
+        'voice dictation for Mac and Windows',
+        'voice to text app',
+        'speech to text in any app',
+        'private voice dictation',
+        'open source voice typing',
+        'bring your own key transcription',
+    ],
+    authors: [{ name: 'VH Technology' }],
+    creator: 'VH Technology',
+    publisher: 'VH Technology',
+    category: 'productivity',
+    alternates: {
+        canonical: '/',
+    },
     icons: {
         icon: [
             { url: '/icon.svg', type: 'image/svg+xml' },
             { url: '/favicon.ico', sizes: 'any' },
         ],
     },
+    robots: {
+        index: true,
+        follow: true,
+        googleBot: {
+            index: true,
+            follow: true,
+            'max-image-preview': 'large',
+            'max-snippet': -1,
+            'max-video-preview': -1,
+        },
+    },
     openGraph: {
-        title: 'bluemacaw | Open Source Speech to Text',
+        title: 'bluemacaw | Free Open Source AI Speech-to-Text Dictation App',
         description:
-            'A dictation app you own. Bring your own key, pick from 10 STT providers, ship text anywhere your cursor is.',
+            'A free open-source dictation app you own. Speak naturally, transcribe with your chosen AI provider, and paste text anywhere your cursor is.',
+        url: 'https://bluemacaw.com/',
+        siteName: 'bluemacaw',
         type: 'website',
+    },
+    twitter: {
+        card: 'summary',
+        title: 'bluemacaw | Free Open Source AI Speech-to-Text Dictation App',
+        description:
+            'Free open-source voice dictation for Mac and Windows. Bring your own AI transcription provider and keep your keys local.',
     },
 };
 

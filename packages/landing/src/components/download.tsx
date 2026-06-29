@@ -31,10 +31,10 @@ export function Download() {
         <section id="download" className="mx-auto max-w-6xl px-6 py-20">
             <div className="mb-10 text-center">
                 <h2 className="text-3xl font-black tracking-tight sm:text-4xl">
-                    Download for your platform
+                    Download the free open source dictation app.
                 </h2>
                 <p className="mt-3 text-muted-foreground">
-                    Free, open source, no account required.{' '}
+                    Start voice typing on macOS or Windows with no account required.{' '}
                     <a href="/docs/" className="font-semibold text-main hover:underline">
                         Full setup guide →
                     </a>

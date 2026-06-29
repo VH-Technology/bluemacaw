@@ -5,7 +5,9 @@ import { Hero } from './hero';
 describe('Hero', () => {
     it('renders the headline', () => {
         render(<Hero />);
-        expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/talk\. get text/i);
+        expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+            /your free, open source voice dictation app/i,
+        );
     });
 
     it('renders a primary download CTA', () => {
