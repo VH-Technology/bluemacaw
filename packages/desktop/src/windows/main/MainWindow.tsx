@@ -211,10 +211,6 @@ export function MainWindowInner() {
                             <h2 className="text-2xl font-black tracking-tight text-brand-navy dark:text-fg">
                                 Recent transcriptions
                             </h2>
-                            <p className="text-sm font-medium text-muted-foreground">
-                                Search, export, or expand longer transcripts without losing your
-                                place.
-                            </p>
                         </div>
                         <History
                             entries={historyEntries}

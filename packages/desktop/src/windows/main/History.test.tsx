@@ -39,6 +39,14 @@ describe('<History />', () => {
         expect(screen.getAllByTestId('history-row')).toHaveLength(3);
     });
 
+    it('shows the 10 most recent entries by default', () => {
+        const manyEntries = Array.from({ length: 12 }, (_, i) =>
+            makeEntry({ id: String(i + 1), text: `Entry ${i + 1}` }),
+        );
+        render(<History entries={manyEntries} />);
+        expect(screen.getAllByTestId('history-row')).toHaveLength(10);
+    });
+
     it('renders an empty-state message when there are no entries', () => {
         render(<History entries={[]} pageSize={10} />);
         expect(screen.getByText(/no transcriptions yet/i)).toBeInTheDocument();
@@ -53,9 +61,22 @@ describe('<History />', () => {
         expect(rows[0]).toHaveTextContent(/Goodbye moon/);
     });
 
+    it('clears the search term from the inline search action', async () => {
+        const user = userEvent.setup();
+        render(<History entries={entries} pageSize={10} />);
+        await user.type(screen.getByLabelText(/search/i), 'Goodbye');
+        expect(screen.getAllByTestId('history-row')).toHaveLength(1);
+
+        await user.click(screen.getByRole('button', { name: /clear search/i }));
+
+        expect(screen.getByLabelText(/search/i)).toHaveValue('');
+        expect(screen.getAllByTestId('history-row')).toHaveLength(3);
+    });
+
     it('filters by provider when a provider is chosen', async () => {
         const user = userEvent.setup();
         render(<History entries={entries} pageSize={10} />);
+        expect(screen.getByRole('option', { name: /all providers/i })).toBeInTheDocument();
         await user.selectOptions(screen.getByLabelText(/provider/i), 'Groq');
         const rows = screen.getAllByTestId('history-row');
         expect(rows).toHaveLength(1);
