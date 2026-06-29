@@ -43,7 +43,8 @@ describe('<SettingsModelConfigs />', () => {
         render(<SettingsModelConfigs />);
         const row = await screen.findByTestId('model-config-row-mc-1');
         expect(row).toHaveAttribute('data-active', 'true');
-        expect(row).toHaveTextContent('whisper-1');
+        expect(row).toHaveTextContent('Whisper 1');
+        expect(row).not.toHaveTextContent('whisper-1');
     });
 
     it('shows a realtime tag for saved realtime model configs', async () => {

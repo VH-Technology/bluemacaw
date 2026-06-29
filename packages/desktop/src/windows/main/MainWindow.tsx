@@ -30,6 +30,16 @@ interface UndoToastState {
     rowId: number | null;
 }
 
+const SETTINGS_SECTIONS = [
+    { id: 'settings-general', label: 'General' },
+    { id: 'settings-api-keys', label: 'API Keys' },
+    { id: 'settings-models', label: 'Models' },
+    { id: 'settings-recording', label: 'Recording' },
+    { id: 'settings-overlay', label: 'Overlay' },
+    { id: 'settings-history', label: 'History' },
+    { id: 'settings-updates', label: 'Updates' },
+] as const;
+
 /**
  * Outer gate — routes the user through onboarding the first time they
  * launch bluemacaw on a machine where required permissions are missing,
@@ -211,10 +221,6 @@ export function MainWindowInner() {
                             <h2 className="text-2xl font-black tracking-tight text-brand-navy dark:text-fg">
                                 Recent transcriptions
                             </h2>
-                            <p className="text-sm font-medium text-muted-foreground">
-                                Search, export, or expand longer transcripts without losing your
-                                place.
-                            </p>
                         </div>
                         <History
                             entries={historyEntries}
@@ -226,27 +232,57 @@ export function MainWindowInner() {
                 <TabsContent
                     value="settings"
                     data-testid="panel-settings"
-                    className="flex flex-col gap-6"
+                    className="mt-8 grid gap-5 lg:grid-cols-[11rem_minmax(0,1fr)] lg:items-start"
                 >
-                    <SettingsApiKeys />
-                    <SettingsModelConfigs />
-                    <SettingsRecording />
-                    <SettingsOverlay />
-                    <SettingsHistory onHistoryChanged={handleHistoryChanged} />
-                    <SettingsTheme />
-                    <SettingsUpdates
-                        status={updaterStatus}
-                        onCheckNow={() => void checkForUpdates()}
-                        onInstall={() => void installAndRestart()}
-                    />
-                    {appVersion && (
-                        <p
-                            className="mt-2 text-center text-xs text-muted-foreground"
-                            data-testid="app-version"
-                        >
-                            Version {appVersion}
-                        </p>
-                    )}
+                    <nav
+                        aria-label="Settings sections"
+                        className="flex gap-2 overflow-x-auto rounded-2xl border border-border bg-surface/80 p-2 shadow-card lg:sticky lg:top-6 lg:flex-col lg:overflow-visible"
+                    >
+                        {SETTINGS_SECTIONS.map((section) => (
+                            <a
+                                key={section.id}
+                                href={`#${section.id}`}
+                                className="whitespace-nowrap rounded-xl px-3 py-2 text-xs font-extrabold uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:bg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40"
+                            >
+                                {section.label}
+                            </a>
+                        ))}
+                    </nav>
+                    <div className="flex min-w-0 flex-col gap-6">
+                        <section id="settings-general" className="scroll-mt-6">
+                            <SettingsTheme />
+                        </section>
+                        <section id="settings-api-keys" className="scroll-mt-6">
+                            <SettingsApiKeys />
+                        </section>
+                        <section id="settings-models" className="scroll-mt-6">
+                            <SettingsModelConfigs />
+                        </section>
+                        <section id="settings-recording" className="scroll-mt-6">
+                            <SettingsRecording />
+                        </section>
+                        <section id="settings-overlay" className="scroll-mt-6">
+                            <SettingsOverlay />
+                        </section>
+                        <section id="settings-history" className="scroll-mt-6">
+                            <SettingsHistory onHistoryChanged={handleHistoryChanged} />
+                        </section>
+                        <section id="settings-updates" className="scroll-mt-6">
+                            <SettingsUpdates
+                                status={updaterStatus}
+                                onCheckNow={() => void checkForUpdates()}
+                                onInstall={() => void installAndRestart()}
+                            />
+                        </section>
+                        {appVersion && (
+                            <p
+                                className="mt-2 text-center text-xs text-muted-foreground"
+                                data-testid="app-version"
+                            >
+                                Version {appVersion}
+                            </p>
+                        )}
+                    </div>
                 </TabsContent>
             </Tabs>
             <Toast

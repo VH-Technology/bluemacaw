@@ -63,8 +63,15 @@ export function SettingsUpdates({
                 <CardTitle>Updates</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm font-medium normal-case">
-                <div className="flex items-center justify-between">
-                    <Label htmlFor={autoId}>Auto-update</Label>
+                <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-muted/30 p-3">
+                    <div className="flex flex-col gap-0.5 pr-3">
+                        <Label htmlFor={autoId} className="cursor-pointer">
+                            Auto-update
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                            Install future updates automatically when available.
+                        </p>
+                    </div>
                     <Switch
                         id={autoId}
                         checked={auto}
@@ -74,17 +81,26 @@ export function SettingsUpdates({
                         }}
                     />
                 </div>
-                <p className="text-xs text-muted-foreground" data-testid="updates-status-line">
-                    {statusLine(status)}
-                </p>
-                <div className="flex justify-end">
+                <div className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-0.5">
+                        <Label>Status</Label>
+                        <p
+                            className="text-xs text-muted-foreground"
+                            data-testid="updates-status-line"
+                        >
+                            {statusLine(status)}
+                        </p>
+                    </div>
                     {available ? (
                         // An update was found — swap "Check now" for the install
                         // action. Clicking it asks for confirmation first.
-                        <Button onClick={() => setConfirmOpen(true)}>Install &amp; restart</Button>
+                        <Button className="sm:ml-auto" onClick={() => setConfirmOpen(true)}>
+                            Install &amp; restart
+                        </Button>
                     ) : (
                         <Button
                             variant="outline"
+                            className="sm:ml-auto"
                             onClick={() => onCheckNow?.()}
                             disabled={checking || busy}
                         >

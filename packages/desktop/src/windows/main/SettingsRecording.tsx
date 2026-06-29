@@ -2,9 +2,8 @@ import { HotkeyInput } from '@/components/HotkeyInput';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
+import { Select } from '@/components/ui/select';
 import { WarningBanner } from '@/components/ui/warning-banner';
-import { autostart } from '@/lib/autostart';
 import {
     clearOriginalFnUsageType,
     getCancelHotkeyCombo,
@@ -34,14 +33,11 @@ function fnUsageLabel(value: number): string {
 export function SettingsRecording() {
     const hotkeyId = useId();
     const cancelHotkeyId = useId();
-    const autostartId = useId();
     const deviceId = useId();
     const [devices, setDevices] = useState<AudioDeviceInfo[]>([]);
     const [selectedDevice, setSelectedDevice] = useState<string>('');
     const [hotkey, setHotkey] = useState<string>('');
     const [cancelHotkey, setCancelHotkey] = useState<string>('');
-    const [autostartEnabled, setAutostartEnabled] = useState(false);
-    const [autostartError, setAutostartError] = useState<string | null>(null);
     const [testStatus, setTestStatus] = useState<'idle' | 'recording' | 'playing' | 'error'>(
         'idle',
     );
@@ -77,27 +73,9 @@ export function SettingsRecording() {
             setSelectedDevice(persistedDevice ?? '');
             setHotkey(persistedHotkey);
             setCancelHotkey(persistedCancelHotkey);
-            try {
-                setAutostartEnabled(await autostart.isEnabled());
-            } catch (e) {
-                console.error('autostart.isEnabled failed', e);
-            }
             await refreshDevices();
         })();
     }, [refreshDevices]);
-
-    async function handleAutostartToggle(next: boolean) {
-        const previous = autostartEnabled;
-        setAutostartEnabled(next);
-        setAutostartError(null);
-        try {
-            await autostart.set(next);
-        } catch (e) {
-            console.error('autostart.set failed', e);
-            setAutostartEnabled(previous);
-            setAutostartError(e instanceof Error ? e.message : String(e));
-        }
-    }
 
     async function handleDeviceChange(next: string) {
         setSelectedDevice(next);
@@ -255,77 +233,85 @@ export function SettingsRecording() {
                 <CardTitle>Recording</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 text-sm font-medium normal-case">
-                <div className="flex flex-col gap-1">
-                    <Label htmlFor={hotkeyId}>Hotkey</Label>
-                    <div id={hotkeyId}>
-                        <HotkeyInput
-                            value={hotkey}
-                            onChange={handleHotkeyChange}
-                            onCaptureStart={() => void handleCaptureStart()}
-                            onCaptureCancel={() => void handleCaptureCancel()}
-                            onUseFnRequested={() => void handleUseFnRequested()}
-                        />
-                    </div>
-                    {hotkeyError && (
-                        <p
-                            data-testid="hotkey-error"
-                            className="text-xs font-bold uppercase tracking-widest text-red-700"
-                        >
-                            {hotkeyError}
-                        </p>
-                    )}
-                    {pendingFnSetup && (
-                        <WarningBanner data-testid="fn-setup-confirm">
-                            <p>
-                                To use Fn, macOS needs <strong>Press 🌐 key to</strong> set to{' '}
-                                <strong>Do Nothing</strong> (currently:{' '}
-                                <strong>{fnUsageLabel(pendingFnSetup.previous)}</strong>). This is a
-                                global system setting. bluemacaw will restore your original value
-                                automatically when you switch away from Fn.
+                <div className="grid gap-4 md:grid-cols-2">
+                    <div className="flex flex-col gap-1">
+                        <Label htmlFor={hotkeyId}>Hotkey</Label>
+                        <div id={hotkeyId}>
+                            <HotkeyInput
+                                value={hotkey}
+                                onChange={handleHotkeyChange}
+                                onCaptureStart={() => void handleCaptureStart()}
+                                onCaptureCancel={() => void handleCaptureCancel()}
+                                onUseFnRequested={() => void handleUseFnRequested()}
+                            />
+                        </div>
+                        {hotkeyError && (
+                            <p
+                                data-testid="hotkey-error"
+                                className="text-xs font-bold uppercase tracking-widest text-red-700"
+                            >
+                                {hotkeyError}
                             </p>
-                            <div className="flex justify-end gap-2">
-                                <Button variant="outline" onClick={handleCancelFnSetup}>
-                                    Cancel
-                                </Button>
-                                <Button onClick={() => void handleConfirmFnSetup()}>
-                                    Set automatically
-                                </Button>
-                            </div>
-                        </WarningBanner>
-                    )}
-                </div>
-                <div className="flex flex-col gap-1">
-                    <Label htmlFor={cancelHotkeyId}>Cancel hotkey</Label>
-                    <p className="text-xs text-muted-foreground">
-                        Only registered while a recording is in flight, so bare keys like Esc won't
-                        intercept other apps when you're not recording.
-                    </p>
-                    <div id={cancelHotkeyId}>
-                        <HotkeyInput
-                            value={cancelHotkey}
-                            onChange={(c) => void handleCancelHotkeyChange(c)}
-                            onCaptureStart={handleCancelHotkeyCaptureStart}
-                            onCaptureCancel={handleCancelHotkeyCaptureCancel}
-                            allowFn={false}
-                            allowBareKey={true}
-                            allowChord={false}
-                        />
+                        )}
+                        {pendingFnSetup && (
+                            <WarningBanner data-testid="fn-setup-confirm">
+                                <p>
+                                    To use Fn, macOS needs <strong>Press 🌐 key to</strong> set to{' '}
+                                    <strong>Do Nothing</strong> (currently:{' '}
+                                    <strong>{fnUsageLabel(pendingFnSetup.previous)}</strong>). This
+                                    is a global system setting. bluemacaw will restore your original
+                                    value automatically when you switch away from Fn.
+                                </p>
+                                <div className="flex justify-end gap-2">
+                                    <Button variant="outline" onClick={handleCancelFnSetup}>
+                                        Cancel
+                                    </Button>
+                                    <Button onClick={() => void handleConfirmFnSetup()}>
+                                        Set automatically
+                                    </Button>
+                                </div>
+                            </WarningBanner>
+                        )}
                     </div>
-                    {cancelHotkeyError && (
-                        <p
-                            data-testid="cancel-hotkey-error"
-                            className="text-xs font-bold uppercase tracking-widest text-red-700"
-                        >
-                            {cancelHotkeyError}
-                        </p>
-                    )}
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                            <Label htmlFor={cancelHotkeyId}>Cancel hotkey</Label>
+                            <button
+                                type="button"
+                                aria-label="Cancel hotkey info"
+                                title="Only registered while a recording is in flight, so bare keys like Esc won't intercept other apps when you're not recording."
+                                className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-[11px] font-extrabold text-muted-foreground hover:bg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40"
+                            >
+                                i
+                            </button>
+                        </div>
+                        <div id={cancelHotkeyId}>
+                            <HotkeyInput
+                                value={cancelHotkey}
+                                onChange={(c) => void handleCancelHotkeyChange(c)}
+                                onCaptureStart={handleCancelHotkeyCaptureStart}
+                                onCaptureCancel={handleCancelHotkeyCaptureCancel}
+                                allowFn={false}
+                                allowBareKey={true}
+                                allowChord={false}
+                            />
+                        </div>
+                        {cancelHotkeyError && (
+                            <p
+                                data-testid="cancel-hotkey-error"
+                                className="text-xs font-bold uppercase tracking-widest text-red-700"
+                            >
+                                {cancelHotkeyError}
+                            </p>
+                        )}
+                    </div>
                 </div>
                 <div className="flex flex-col gap-1">
                     <Label htmlFor={deviceId}>Microphone</Label>
                     <div className="flex items-center gap-2">
-                        <select
+                        <Select
                             id={deviceId}
-                            className="h-10 flex-1 rounded-xl border border-border bg-surface px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40 focus-visible:border-main"
+                            wrapperClassName="flex-1"
                             value={selectedDevice}
                             onChange={(e) => void handleDeviceChange(e.target.value)}
                         >
@@ -335,7 +321,7 @@ export function SettingsRecording() {
                                     {d.label}
                                 </option>
                             ))}
-                        </select>
+                        </Select>
                         <Button
                             type="button"
                             variant="outline"
@@ -343,45 +329,19 @@ export function SettingsRecording() {
                         >
                             Refresh
                         </Button>
+                        <Button
+                            onClick={() => void handleTestRecording()}
+                            disabled={testStatus === 'recording'}
+                        >
+                            Test recording
+                        </Button>
                     </div>
                 </div>
-                <div className="flex items-center justify-between rounded-2xl border border-border bg-muted/30 p-3">
-                    <div className="flex flex-col gap-0.5 pr-3">
-                        <Label htmlFor={autostartId} className="cursor-pointer">
-                            Start at login
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                            Launch bluemacaw automatically into the tray when you sign in.
-                        </p>
-                    </div>
-                    <Switch
-                        id={autostartId}
-                        data-testid="settings-autostart-toggle"
-                        checked={autostartEnabled}
-                        onCheckedChange={(v: boolean) => void handleAutostartToggle(v)}
-                    />
-                </div>
-                {autostartError && (
-                    <p
-                        data-testid="settings-autostart-error"
-                        className="text-xs font-bold uppercase tracking-widest text-red-700"
-                    >
-                        {autostartError}
-                    </p>
-                )}
-                <div className="flex items-center justify-between">
-                    <span data-testid="test-status" className="text-xs uppercase tracking-widest">
-                        {testStatus === 'recording' && 'Recording 3s…'}
-                        {testStatus === 'playing' && 'Captured. Press play.'}
-                        {testStatus === 'error' && `Error: ${testError}`}
-                    </span>
-                    <Button
-                        onClick={() => void handleTestRecording()}
-                        disabled={testStatus === 'recording'}
-                    >
-                        Test recording
-                    </Button>
-                </div>
+                <span data-testid="test-status" className="text-xs uppercase tracking-widest">
+                    {testStatus === 'recording' && 'Recording 3s…'}
+                    {testStatus === 'playing' && 'Captured. Press play.'}
+                    {testStatus === 'error' && `Error: ${testError}`}
+                </span>
                 {audioUrl && testStatus === 'playing' && (
                     /* biome-ignore lint/a11y/useMediaCaption: test playback only */
                     <audio src={audioUrl} controls className="w-full" />

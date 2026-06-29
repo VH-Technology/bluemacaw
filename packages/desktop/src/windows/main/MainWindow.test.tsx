@@ -17,6 +17,8 @@ vi.mock('@/lib/db', () => ({
     setHotkeyCombo: vi.fn(async () => undefined),
     getCancelHotkeyCombo: vi.fn(async () => 'Cmd+Esc'),
     setCancelHotkeyCombo: vi.fn(async () => undefined),
+    getTheme: vi.fn(async () => 'system'),
+    setTheme: vi.fn(async () => undefined),
     // Used by the predicate-driven onboarding wizard when the gate routes
     // to show-onboarding. False means "step 2 not yet seen by user."
     getHotkeysOnboarded: vi.fn(async () => false),
@@ -63,6 +65,13 @@ vi.mock('@/lib/overlay-bridge', () => ({
     OVERLAY_POSITION_SETUP_OFF_EVENT: 'bluemacaw://overlay-position-setup-off',
 }));
 
+vi.mock('@/lib/autostart', () => ({
+    autostart: {
+        isEnabled: vi.fn(async () => false),
+        set: vi.fn(async () => undefined),
+    },
+}));
+
 vi.mock('@tauri-apps/api/event', () => ({
     listen: vi.fn(async () => () => undefined),
     emit: vi.fn(async () => undefined),
@@ -70,6 +79,10 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
     WebviewWindow: { getByLabel: vi.fn(async () => null) },
+}));
+
+vi.mock('@tauri-apps/api/window', () => ({
+    getCurrentWindow: vi.fn(() => ({ setTheme: vi.fn(async () => undefined) })),
 }));
 
 // useUpdater pulls in @tauri-apps/plugin-updater, which throws under jsdom
@@ -123,7 +136,18 @@ describe('<MainWindow />', () => {
         const user = userEvent.setup();
         render(<MainWindow />);
         await user.click(screen.getByRole('tab', { name: /settings/i }));
-        expect(await screen.findByTestId('panel-settings')).toBeInTheDocument();
+        const panel = await screen.findByTestId('panel-settings');
+        expect(panel).toBeInTheDocument();
+        expect(screen.getByRole('navigation', { name: /settings sections/i })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /general/i })).toHaveAttribute(
+            'href',
+            '#settings-general',
+        );
+        expect(screen.getByRole('link', { name: /recording/i })).toHaveAttribute(
+            'href',
+            '#settings-recording',
+        );
+        expect(panel.querySelector('section')?.id).toBe('settings-general');
     }, 15_000);
 
     it('renders a loading state while the onboarding gate is undecided', () => {

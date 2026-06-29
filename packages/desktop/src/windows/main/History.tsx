@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Select } from '@/components/ui/select';
 import type { TranscriptionRow } from '@/lib/db';
 import { downloadBlob, formatBulkAsMd, formatRowAsMd, formatRowAsTxt } from '@/lib/export';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -59,7 +59,7 @@ function exportRow(e: HistoryEntry, format: 'txt' | 'md') {
     }
 }
 
-export function History({ entries, pageSize = 25, onDelete, onExportFiltered }: HistoryProps) {
+export function History({ entries, pageSize = 10, onDelete, onExportFiltered }: HistoryProps) {
     const [search, setSearch] = useState('');
     const [providerFilter, setProviderFilter] = useState('all');
     const [page, setPage] = useState(0);
@@ -133,42 +133,80 @@ export function History({ entries, pageSize = 25, onDelete, onExportFiltered }: 
 
     return (
         <section className="flex flex-col gap-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end">
-                <div className="flex flex-1 flex-col gap-1">
-                    <Label htmlFor={searchId}>Search</Label>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                <div className="relative">
+                    <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        aria-hidden="true"
+                    >
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.35-4.35" />
+                    </svg>
                     <Input
                         id={searchId}
-                        placeholder="Search transcripts"
+                        aria-label="Search transcripts"
+                        className="pl-10 pr-10"
+                        placeholder="Search transcript text"
                         value={search}
                         onChange={(e) => {
                             setSearch(e.target.value);
                             setPage(0);
                         }}
                     />
+                    {search ? (
+                        <button
+                            type="button"
+                            aria-label="Clear search"
+                            onClick={() => {
+                                setSearch('');
+                                setPage(0);
+                            }}
+                            className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className="h-4 w-4"
+                                aria-hidden="true"
+                            >
+                                <path d="M18 6 6 18" />
+                                <path d="m6 6 12 12" />
+                            </svg>
+                        </button>
+                    ) : null}
                 </div>
-                <div className="flex flex-col gap-1">
-                    <Label htmlFor={providerSelectId}>Provider</Label>
-                    <select
-                        id={providerSelectId}
-                        className="h-10 rounded-xl border border-border bg-surface px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40 focus-visible:border-main"
-                        value={providerFilter}
-                        onChange={(e) => {
-                            setProviderFilter(e.target.value);
-                            setPage(0);
-                        }}
-                    >
-                        <option value="all">All</option>
-                        {providers.map((p) => (
-                            <option key={p} value={p}>
-                                {p}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div className="sm:w-44">
+                        <Select
+                            id={providerSelectId}
+                            aria-label="Provider"
+                            value={providerFilter}
+                            onChange={(e) => {
+                                setProviderFilter(e.target.value);
+                                setPage(0);
+                            }}
+                        >
+                            <option value="all">All Providers</option>
+                            {providers.map((p) => (
+                                <option key={p} value={p}>
+                                    {p}
+                                </option>
+                            ))}
+                        </Select>
+                    </div>
                     <Button
-                        size="sm"
                         variant="outline"
+                        className="w-full sm:w-auto"
                         onClick={() => {
                             const md = formatBulkAsMd(filtered.map(toTranscriptionRow), 'filtered');
                             downloadBlob('bluemacaw-history.md', md, 'text/markdown');

@@ -11,16 +11,23 @@ interface ProviderLogoProps {
     provider: Pick<ProviderConfig, 'id' | 'name' | 'logoSrc'>;
     selected?: boolean;
     testIdPrefix?: string;
+    className?: string;
 }
 
 export function ProviderLogo({
     provider,
     selected = false,
     testIdPrefix = 'provider-logo',
+    className,
 }: ProviderLogoProps) {
     if (provider.logoSrc) {
         return (
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted p-2">
+            <span
+                className={cn(
+                    'flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-muted p-2',
+                    className,
+                )}
+            >
                 <img
                     src={provider.logoSrc}
                     alt=""
@@ -36,8 +43,9 @@ export function ProviderLogo({
         <span
             aria-hidden="true"
             className={cn(
-                'flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-extrabold uppercase',
+                'flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-extrabold uppercase',
                 selected ? 'bg-main text-main-foreground' : 'bg-muted text-fg',
+                className,
             )}
         >
             {provider.name.slice(0, 2)}

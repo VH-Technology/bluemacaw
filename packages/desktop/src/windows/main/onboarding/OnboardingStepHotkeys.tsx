@@ -322,7 +322,7 @@ export function OnboardingStepHotkeys({ onBack, onNext }: OnboardingStepHotkeysP
                         </Label>
                         <p className="text-xs text-muted-foreground">
                             Launch automatically into the tray when you sign in. You can change this
-                            later in Settings → Recording.
+                            later in Settings → General.
                         </p>
                     </div>
                     <Switch
