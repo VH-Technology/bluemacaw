@@ -15,6 +15,9 @@
         --main: 226 71% 50%;
         --main-foreground: 0 0% 100%;
         --border: 234 30% 88%;
+        --scrollbar-track: 0 0% 100%;
+        --scrollbar-thumb: 234 26% 78%;
+        --scrollbar-thumb-hover: 226 71% 50%;
     }
     .dark {
         --bg: 234 40% 12%;
@@ -25,12 +28,18 @@
         --main: 226 71% 60%;
         --main-foreground: 0 0% 100%;
         --border: 234 30% 26%;
+        --scrollbar-track: 234 40% 12%;
+        --scrollbar-thumb: 234 24% 34%;
+        --scrollbar-thumb-hover: 226 71% 60%;
     }
 }
 
 @layer base {
     html {
         color-scheme: light;
+        scrollbar-color: hsl(var(--scrollbar-thumb)) hsl(var(--scrollbar-track));
+        scrollbar-gutter: stable;
+        scrollbar-width: thin;
     }
     html.dark {
         color-scheme: dark;
@@ -45,6 +54,24 @@
     body {
         background-color: hsl(var(--bg));
         color: hsl(var(--fg));
+    }
+    ::-webkit-scrollbar {
+        width: 12px;
+        height: 12px;
+    }
+    ::-webkit-scrollbar-track {
+        background: hsl(var(--scrollbar-track));
+    }
+    ::-webkit-scrollbar-thumb {
+        border: 3px solid hsl(var(--scrollbar-track));
+        border-radius: 9999px;
+        background: hsl(var(--scrollbar-thumb));
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: hsl(var(--scrollbar-thumb-hover));
+    }
+    ::-webkit-scrollbar-corner {
+        background: hsl(var(--scrollbar-track));
     }
     @media (prefers-reduced-motion: no-preference) {
         html,
