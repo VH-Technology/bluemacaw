@@ -8,12 +8,13 @@ export function PrivacyTeaser() {
                     className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-brand-coral/15 blur-2xl"
                 />
                 <h2 className="relative text-3xl font-black tracking-tight text-fg sm:text-4xl">
-                    Where do your keys live?
+                    Private voice dictation without a bluemacaw cloud.
                 </h2>
                 <p className="relative mt-4 max-w-2xl text-base text-fg/80 sm:text-lg">
                     Your API keys go straight into your OS&apos;s native credential store — Keychain
-                    on macOS, Credential Manager on Windows. They never touch a bluemacaw server
-                    because there isn&apos;t one.
+                    on macOS, Credential Manager on Windows. Your speech-to-text requests go to the
+                    provider you choose, never through a bluemacaw server, because there isn&apos;t
+                    one.
                 </p>
                 <a
                     href="/privacy/"
