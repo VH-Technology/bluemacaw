@@ -4,6 +4,7 @@ import { Demo } from './demo';
 import { Download } from './download';
 import { Features } from './features';
 import { PrivacyTeaser } from './privacy-teaser';
+import { ProductComparison } from './product-comparison';
 import { ProvidersGrid } from './providers-grid';
 import { SEO_FAQS, SeoFaq } from './seo-faq';
 
@@ -35,6 +36,21 @@ describe('home sections', () => {
         ]) {
             expect(screen.getByText(name)).toBeInTheDocument();
         }
+    });
+
+    it('ProductComparison compares bluemacaw against adjacent voice apps', () => {
+        render(<ProductComparison />);
+        expect(
+            screen.getByRole('table', { name: /voice dictation product comparison/i }),
+        ).toBeInTheDocument();
+        for (const name of ['bluemacaw', 'Wispr Flow', 'Vowen', 'FluidVoice']) {
+            expect(screen.getByRole('columnheader', { name })).toBeInTheDocument();
+        }
+        expect(screen.getByRole('rowheader', { name: 'Free, no upsells' })).toBeInTheDocument();
+        expect(screen.getByText(/Apache 2\.0, truly open source/i)).toBeInTheDocument();
+        expect(screen.getByText(/GPLv3, always tied to them/i)).toBeInTheDocument();
+        expect(screen.getByText(/Forces a 3GB model download/i)).toBeInTheDocument();
+        expect(screen.getByRole('rowheader', { name: 'Bird' })).toBeInTheDocument();
     });
 
     it('PrivacyTeaser links to /privacy/', () => {

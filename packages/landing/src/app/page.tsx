@@ -6,6 +6,7 @@ import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
 import { Hero } from '@/components/hero';
 import { PrivacyTeaser } from '@/components/privacy-teaser';
+import { ProductComparison } from '@/components/product-comparison';
 import { ProvidersGrid } from '@/components/providers-grid';
 import { SEO_FAQS, SeoFaq } from '@/components/seo-faq';
 import { APP_VERSION } from '@/lib/version';
@@ -63,6 +64,7 @@ export default function HomePage() {
                 <Demo />
                 <Features />
                 <ProvidersGrid />
+                <ProductComparison />
                 <PrivacyTeaser />
                 <SeoFaq />
                 <Download />
