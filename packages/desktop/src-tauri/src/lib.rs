@@ -91,6 +91,8 @@ pub fn run() {
             commands::download_whisper_model,
             commands::cancel_model_download,
             commands::transcribe_local,
+            commands::list_local_models,
+            commands::delete_local_model,
             commands::present_overlay,
             commands::duck_system_volume,
             commands::restore_system_volume,

@@ -66,6 +66,14 @@ pub struct AppState {
         std::sync::Mutex<std::collections::HashMap<String, CancellationToken>>,
 }
 
+/// Metadata about a locally-downloaded Whisper model.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalModel {
+    pub model_id: String,
+    pub file_size_bytes: u64,
+}
+
 /// Platform identifier emitted to the JS side. The webview keys per-OS
 /// behaviour off this value (e.g. which permission rows to show, whether
 /// to display the Wayland paste-fallback banner), so the variants must
@@ -462,6 +470,49 @@ pub async fn transcribe_local(
     tokio::task::spawn_blocking(move || crate::local_model::transcribe_wav_file(&mp, &audio))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// Returns metadata for every .gguf file in the models directory.
+#[tauri::command]
+pub fn list_local_models(app: AppHandle) -> Result<Vec<LocalModel>, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let dir = crate::local_model::model_dir(&app_data_dir);
+    if !dir.exists() {
+        return Ok(vec![]);
+    }
+    let mut models = Vec::new();
+    let entries = std::fs::read_dir(&dir).map_err(|e| e.to_string())?;
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if path.extension().map(|e| e == "gguf").unwrap_or(false) {
+            let model_id = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+            let file_size_bytes = path.metadata().map(|m| m.len()).unwrap_or(0);
+            models.push(LocalModel {
+                model_id,
+                file_size_bytes,
+            });
+        }
+    }
+    Ok(models)
+}
+
+/// Delete a local model file. No-ops if the file does not exist.
+#[tauri::command]
+pub fn delete_local_model(
+    app: AppHandle,
+    model_id: String,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mp = crate::local_model::model_path(&app_data_dir, &model_id);
+    if mp.exists() {
+        std::fs::remove_file(&mp).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 /// Realtime variant of [`start_recording`]. Same capture pipeline, but the
