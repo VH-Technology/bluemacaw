@@ -7,6 +7,7 @@ import type { Theme } from './use-theme';
 
 const DB_URL = 'sqlite:bluemacaw.db';
 const ACTIVE_MODEL_CONFIG_KEY = 'active_model_config_id';
+const ACTIVE_LOCAL_MODEL_ID_KEY = 'active_local_model_id';
 const OVERLAY_ENABLED_KEY = 'overlay_enabled';
 const OVERLAY_X_KEY = 'overlay_x';
 const OVERLAY_Y_KEY = 'overlay_y';
@@ -230,6 +231,26 @@ export async function setActiveModelConfigId(id: string | null): Promise<void> {
     await conn.execute(
         'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
         [ACTIVE_MODEL_CONFIG_KEY, id],
+    );
+}
+
+export async function getActiveLocalModelId(): Promise<string | null> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        ACTIVE_LOCAL_MODEL_ID_KEY,
+    ])) as { value: string }[];
+    return rows[0]?.value ?? null;
+}
+
+export async function setActiveLocalModelId(id: string | null): Promise<void> {
+    const conn = await db();
+    if (id === null) {
+        await conn.execute('DELETE FROM app_state WHERE key = ?', [ACTIVE_LOCAL_MODEL_ID_KEY]);
+        return;
+    }
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [ACTIVE_LOCAL_MODEL_ID_KEY, id],
     );
 }
 

@@ -1,7 +1,7 @@
 import type { TranscriptionModel } from 'ai';
 import { experimental_transcribe as transcribeAi } from 'ai';
 import { PROVIDERS } from '../providers';
-import { getActiveModelConfigId, getModelConfigWithApiKey } from './db';
+import { getActiveLocalModelId, getActiveModelConfigId, getModelConfigWithApiKey } from './db';
 import { vox } from './invoke';
 
 /**
@@ -12,7 +12,13 @@ import { vox } from './invoke';
  */
 export async function transcribe(audio: Blob): Promise<string> {
     const activeId = await getActiveModelConfigId();
-    if (!activeId) throw new Error('No model selected');
+    if (!activeId) {
+        const localId = await getActiveLocalModelId();
+        if (localId) {
+            return transcribeWithLocal(audio, localId);
+        }
+        throw new Error('No model selected');
+    }
     const cfg = await getModelConfigWithApiKey(activeId);
     if (!cfg) throw new Error(`Active model config ${activeId} no longer exists`);
     const provider = PROVIDERS.find((p) => p.id === cfg.providerId);
@@ -23,10 +29,11 @@ export async function transcribe(audio: Blob): Promise<string> {
             `${cfg.modelId} is a realtime model — transcribe() is for batch only. Use the recording controller's realtime path.`,
         );
     }
+    if (cfg.providerId === 'local') {
+        return transcribeWithLocal(audio, cfg.modelId);
+    }
     const apiKey = await vox.getSecret(cfg.apiKeyId);
     if (!apiKey) throw new Error(`No API key found in keychain for ${cfg.apiKeyNickname}`);
-    // Providers the AI SDK can't model (e.g. xAI Grok STT) implement a direct
-    // REST call via transcribeBatch instead of an experimental_transcribe model.
     if (provider.transcribeBatch) {
         return provider.transcribeBatch(
             new Uint8Array(await audio.arrayBuffer()),
@@ -40,4 +47,9 @@ export async function transcribe(audio: Blob): Promise<string> {
         audio: new Uint8Array(await audio.arrayBuffer()),
     });
     return text;
+}
+
+async function transcribeWithLocal(audio: Blob, modelId: string): Promise<string> {
+    const audioBytes = new Uint8Array(await audio.arrayBuffer());
+    return await vox.transcribeLocal(audioBytes, modelId);
 }
