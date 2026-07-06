@@ -89,6 +89,7 @@ pub fn run() {
             commands::get_platform_info,
             commands::restart_app,
             commands::download_whisper_model,
+            commands::cancel_model_download,
             commands::present_overlay,
             commands::duck_system_volume,
             commands::restore_system_volume,

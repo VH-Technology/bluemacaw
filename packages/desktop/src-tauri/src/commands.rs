@@ -421,6 +421,23 @@ pub async fn download_whisper_model(
     Ok(dest_str)
 }
 
+/// Cancels an in-progress model download. No-ops if the model_id is not
+/// currently downloading.
+#[tauri::command]
+pub fn cancel_model_download(
+    state: State<'_, AppState>,
+    model_id: String,
+) -> Result<(), String> {
+    let mut tokens = state
+        .download_cancel_tokens
+        .lock()
+        .map_err(|e| e.to_string())?;
+    if let Some(token) = tokens.remove(&model_id) {
+        token.cancel();
+    }
+    Ok(())
+}
+
 /// Realtime variant of [`start_recording`]. Same capture pipeline, but the
 /// audio source also emits `EVT_AUDIO_CHUNK` Tauri events with 16 kHz mono
 /// i16 PCM chunks as recording progresses. The buffered WAV is still
