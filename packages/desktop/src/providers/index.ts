@@ -5,12 +5,14 @@ import { elevenlabsConfig } from './elevenlabs';
 import { falConfig } from './fal';
 import { gladiaConfig } from './gladia';
 import { groqConfig } from './groq';
+import { localConfig } from './local';
 import { openaiConfig } from './openai';
 import { revaiConfig } from './revai';
 import type { ProviderConfig } from './types';
 import { xaiConfig } from './xai';
 
 export const PROVIDERS: readonly ProviderConfig[] = [
+    localConfig,
     assemblyaiConfig,
     azureOpenaiConfig,
     deepgramConfig,
