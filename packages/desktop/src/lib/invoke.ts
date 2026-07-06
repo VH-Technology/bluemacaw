@@ -153,6 +153,15 @@ export const vox = {
     duckSystemVolume: () => invoke<void>('duck_system_volume'),
     /** Restore the volume saved by `duckSystemVolume` (exactly). */
     restoreSystemVolume: () => invoke<void>('restore_system_volume'),
+
+    downloadWhisperModel: (modelId: string, url?: string) =>
+        invoke<string>('download_whisper_model', { modelId, url }),
+    cancelModelDownload: (modelId: string) => invoke<void>('cancel_model_download', { modelId }),
+    transcribeLocal: (audio: Uint8Array, modelId: string) =>
+        invoke<string>('transcribe_local', { audio: Array.from(audio), modelId }),
+    listLocalModels: () =>
+        invoke<Array<{ modelId: string; fileSizeBytes: number }>>('list_local_models'),
+    deleteLocalModel: (modelId: string) => invoke<void>('delete_local_model', { modelId }),
 };
 
 /**
