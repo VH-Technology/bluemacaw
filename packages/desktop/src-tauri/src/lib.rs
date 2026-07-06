@@ -90,6 +90,7 @@ pub fn run() {
             commands::restart_app,
             commands::download_whisper_model,
             commands::cancel_model_download,
+            commands::transcribe_local,
             commands::present_overlay,
             commands::duck_system_volume,
             commands::restore_system_volume,

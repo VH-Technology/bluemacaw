@@ -438,6 +438,32 @@ pub fn cancel_model_download(
     Ok(())
 }
 
+/// Run local Whisper transcription on a WAV buffer.
+/// `model_id` must be a known or custom (previously-downloaded) model ID.
+/// On Windows, the Whisper model path may not exist if the user hasn't
+/// downloaded one — returns a structured error in that case.
+#[tauri::command]
+pub async fn transcribe_local(
+    app: AppHandle,
+    audio: Vec<u8>,
+    model_id: String,
+) -> Result<String, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    let mp = crate::local_model::model_path(&app_data_dir, &model_id);
+    if !mp.exists() {
+        return Err(format!(
+            "Model not found: {}. Download it first in Settings → Local Models.",
+            model_id
+        ));
+    }
+    tokio::task::spawn_blocking(move || crate::local_model::transcribe_wav_file(&mp, &audio))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Realtime variant of [`start_recording`]. Same capture pipeline, but the
 /// audio source also emits `EVT_AUDIO_CHUNK` Tauri events with 16 kHz mono
 /// i16 PCM chunks as recording progresses. The buffered WAV is still

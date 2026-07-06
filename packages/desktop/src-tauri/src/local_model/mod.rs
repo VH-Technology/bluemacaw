@@ -1,4 +1,6 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 pub const KNOWN_MODEL_IDS: &[&str] = &[
     "ggml-tiny.en",
@@ -7,6 +9,10 @@ pub const KNOWN_MODEL_IDS: &[&str] = &[
     "ggml-medium.en",
     "ggml-large-v3",
 ];
+
+static CONTEXTS: once_cell::sync::Lazy<
+    Mutex<std::collections::HashMap<String, WhisperContext>>,
+> = once_cell::sync::Lazy::new(|| Mutex::new(std::collections::HashMap::new()));
 
 pub fn model_download_url(model_id: &str) -> Option<String> {
     if !KNOWN_MODEL_IDS.contains(&model_id) {
@@ -24,6 +30,81 @@ pub fn model_dir(app_data_dir: &std::path::Path) -> PathBuf {
 
 pub fn model_path(app_data_dir: &std::path::Path, model_id: &str) -> PathBuf {
     model_dir(app_data_dir).join(format!("{}.gguf", model_id))
+}
+
+pub fn transcribe_wav_file(model_path: &Path, wav_bytes: &[u8]) -> Result<String, String> {
+    let path_str = model_path.to_string_lossy().to_string();
+
+    let ctx = {
+        let mut cache = CONTEXTS.lock().map_err(|e| e.to_string())?;
+        if !cache.contains_key(&path_str) {
+            let params = WhisperContextParameters::default();
+            let ctx = WhisperContext::new_with_params(&path_str, params)
+                .map_err(|e| format!("Failed to load whisper model: {e}"))?;
+            cache.insert(path_str.clone(), ctx);
+        }
+        cache.get(&path_str).unwrap() as *const WhisperContext
+    };
+
+    let mut cursor = std::io::Cursor::new(wav_bytes);
+    let reader =
+        hound::WavReader::new(&mut cursor).map_err(|e| format!("Failed to read WAV: {e}"))?;
+    let spec = reader.spec();
+    let samples: Vec<f32> = match spec.sample_format {
+        hound::SampleFormat::Int => reader
+            .into_samples::<i16>()
+            .filter_map(|s| s.ok())
+            .map(|s| s as f32 / 32768.0)
+            .collect(),
+        hound::SampleFormat::Float => reader
+            .into_samples::<f32>()
+            .filter_map(|s| s.ok())
+            .collect(),
+    };
+
+    let n_channels = spec.channels;
+
+    let mono_samples: Vec<f32> = if n_channels > 1 {
+        (0..samples.len() / n_channels as usize)
+            .map(|i| {
+                (0..n_channels as usize)
+                    .map(|c| samples[i * n_channels as usize + c])
+                    .sum::<f32>()
+                    / n_channels as f32
+            })
+            .collect()
+    } else {
+        samples
+    };
+
+    let ctx = unsafe { &*ctx };
+    let mut state = ctx
+        .create_state()
+        .map_err(|e| format!("Failed to create state: {e}"))?;
+
+    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+    params.set_n_threads(num_cpus::get() as i32);
+    params.set_language(Some("en"));
+    params.set_print_special(false);
+    params.set_print_progress(false);
+    params.set_print_realtime(false);
+    params.set_print_timestamps(false);
+    params.set_single_segment(true);
+
+    state
+        .full(params, &mono_samples)
+        .map_err(|e| format!("Transcription failed: {e}"))?;
+
+    let num_segments = state.full_n_segments();
+
+    let mut text = String::new();
+    for i in 0..num_segments {
+        if let Some(segment) = state.get_segment(i) {
+            text.push_str(&segment.to_string());
+        }
+    }
+
+    Ok(text.trim().to_string())
 }
 
 #[cfg(test)]
