@@ -14,6 +14,7 @@ import { OnboardingScreen } from './OnboardingScreen';
 import { RecordingStatusPill } from './RecordingStatusPill';
 import { SettingsApiKeys } from './SettingsApiKeys';
 import { SettingsHistory } from './SettingsHistory';
+import { SettingsLocalModels } from './SettingsLocalModels';
 import { SettingsModelConfigs } from './SettingsModelConfigs';
 import { SettingsOverlay } from './SettingsOverlay';
 import { SettingsRecording } from './SettingsRecording';
@@ -34,6 +35,7 @@ const SETTINGS_SECTIONS = [
     { id: 'settings-general', label: 'General' },
     { id: 'settings-api-keys', label: 'API Keys' },
     { id: 'settings-models', label: 'Models' },
+    { id: 'settings-local-models', label: 'Local Models' },
     { id: 'settings-recording', label: 'Recording' },
     { id: 'settings-overlay', label: 'Overlay' },
     { id: 'settings-history', label: 'History' },
@@ -257,6 +259,9 @@ export function MainWindowInner() {
                         </section>
                         <section id="settings-models" className="scroll-mt-6">
                             <SettingsModelConfigs />
+                        </section>
+                        <section id="settings-local-models" className="scroll-mt-6">
+                            <SettingsLocalModels />
                         </section>
                         <section id="settings-recording" className="scroll-mt-6">
                             <SettingsRecording />
