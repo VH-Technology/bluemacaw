@@ -43,7 +43,7 @@ export function SettingsModelConfigs() {
     return (
         <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Models</CardTitle>
+                <CardTitle>Cloud models</CardTitle>
                 <Button size="sm" onClick={() => setAdding(true)} data-testid="add-model-config">
                     Add Model Config
                 </Button>
@@ -51,7 +51,7 @@ export function SettingsModelConfigs() {
             <CardContent className="flex flex-col gap-2 text-sm font-medium normal-case">
                 {configs.length === 0 ? (
                     <p className="text-fg/60" data-testid="model-configs-empty">
-                        No model configs yet. Add one and click it to make it active.
+                        No cloud model configs yet. Add one and click it to make it active.
                     </p>
                 ) : (
                     configs.map((c) => {
@@ -88,6 +88,14 @@ export function SettingsModelConfigs() {
                                         <span className="flex flex-wrap items-center gap-2 text-sm font-extrabold leading-tight">
                                             <span>{model?.displayName ?? c.modelId}</span>
                                             {model && <ModelModeBadge mode={model.mode} />}
+                                            {active && (
+                                                <span
+                                                    className="rounded-pill bg-main px-2 py-0.5 text-[11px] font-extrabold text-main-foreground"
+                                                    data-testid={`model-config-in-use-${c.id}`}
+                                                >
+                                                    In use
+                                                </span>
+                                            )}
                                             {price && (
                                                 <span className="rounded-pill bg-muted px-2 py-0.5 text-[11px] font-extrabold text-fg/70">
                                                     {price}

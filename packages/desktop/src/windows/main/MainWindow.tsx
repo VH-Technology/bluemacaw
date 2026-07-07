@@ -35,7 +35,6 @@ const SETTINGS_SECTIONS = [
     { id: 'settings-general', label: 'General' },
     { id: 'settings-api-keys', label: 'API Keys' },
     { id: 'settings-models', label: 'Models' },
-    { id: 'settings-local-models', label: 'Local Models' },
     { id: 'settings-recording', label: 'Recording' },
     { id: 'settings-overlay', label: 'Overlay' },
     { id: 'settings-history', label: 'History' },
@@ -259,9 +258,9 @@ export function MainWindowInner() {
                         </section>
                         <section id="settings-models" className="scroll-mt-6">
                             <SettingsModelConfigs />
-                        </section>
-                        <section id="settings-local-models" className="scroll-mt-6">
-                            <SettingsLocalModels />
+                            <div className="mt-4">
+                                <SettingsLocalModels />
+                            </div>
                         </section>
                         <section id="settings-recording" className="scroll-mt-6">
                             <SettingsRecording />
