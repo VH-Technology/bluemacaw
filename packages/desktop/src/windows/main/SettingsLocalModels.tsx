@@ -107,7 +107,11 @@ export function SettingsLocalModels({
                 </Button>
             </div>
 
-            {displayModels.length > 0 && (
+            {displayModels.length === 0 ? (
+                <p className="text-fg/60" data-testid="local-models-empty">
+                    No local models yet. Add one to download and use on-device.
+                </p>
+            ) : (
                 <div className="max-h-72 overflow-y-auto pr-1">
                     <div className="flex flex-col gap-2">
                         {displayModels.map((m) => {
