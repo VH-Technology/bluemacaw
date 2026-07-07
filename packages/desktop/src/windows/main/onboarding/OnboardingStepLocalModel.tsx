@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { setActiveLocalModelId } from '@/lib/db';
 import { vox } from '@/lib/invoke';
+import { DEFAULT_LOCAL_MODELS } from '@/providers/local';
 import { useState } from 'react';
 
 interface OnboardingStepLocalModelProps {
@@ -8,18 +9,6 @@ interface OnboardingStepLocalModelProps {
     onBack: () => void;
     onSkipFinish: () => void;
 }
-
-const MODELS = [
-    { id: 'ggml-tiny.en', label: 'Tiny (English)', desc: '~75 MB — fastest, weakest accuracy' },
-    { id: 'ggml-base.en', label: 'Base (English)', desc: '~145 MB — quick drafts' },
-    { id: 'ggml-small.en', label: 'Small (English)', desc: '~470 MB — good balance' },
-    {
-        id: 'ggml-medium.en',
-        label: 'Medium (English)',
-        desc: '~1.5 GB — best accuracy/speed tradeoff',
-    },
-    { id: 'ggml-large-v3', label: 'Large v3', desc: '~3 GB — maximum accuracy' },
-];
 
 export function OnboardingStepLocalModel({
     onFinish,
@@ -48,13 +37,24 @@ export function OnboardingStepLocalModel({
             <div className="flex flex-col gap-1">
                 <h2 className="text-lg font-extrabold tracking-tight">Download a local model</h2>
                 <p className="text-sm text-muted-foreground">
-                    Pick a Whisper model size. Larger models are more accurate but take longer to
-                    download and more disk space. You can download more later in Settings.
+                    Download a Whisper GGML model to run entirely on your device. The options below
+                    are popular sizes from{' '}
+                    <a
+                        href="https://huggingface.co/ggerganov/whisper.cpp"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-main hover:underline"
+                    >
+                        ggerganov/whisper.cpp
+                    </a>{' '}
+                    on Hugging Face — larger models are more accurate but need more disk space.
+                    These five are just a starting point; you can download any Whisper GGML model
+                    from the repo later in Settings.
                 </p>
             </div>
 
             <div className="flex flex-col gap-2">
-                {MODELS.map((m) => (
+                {DEFAULT_LOCAL_MODELS.map((m) => (
                     <label
                         key={m.id}
                         className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 ${
@@ -72,8 +72,9 @@ export function OnboardingStepLocalModel({
                             disabled={downloading}
                         />
                         <div className="flex flex-col gap-0.5">
-                            <span className="text-sm font-bold">{m.label}</span>
-                            <span className="text-xs text-muted-foreground">{m.desc}</span>
+                            <span className="text-sm font-bold">{m.displayName}</span>
+                            <span className="font-mono text-xs text-muted-foreground">{m.id}</span>
+                            <span className="text-xs text-muted-foreground">{m.description}</span>
                         </div>
                     </label>
                 ))}

@@ -1,7 +1,7 @@
 import { vox } from '../lib/invoke';
 import type { Model, ProviderConfig } from './types';
 
-const DEFAULT_LOCAL_MODELS: Model[] = [
+export const DEFAULT_LOCAL_MODELS: Model[] = [
     {
         id: 'ggml-tiny.en',
         displayName: 'Tiny (English)',
