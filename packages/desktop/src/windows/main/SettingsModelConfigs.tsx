@@ -98,14 +98,6 @@ export function SettingsModelConfigs({ refreshToken, onActiveChange }: SettingsM
                                         <span className="flex flex-wrap items-center gap-2 text-sm font-extrabold leading-tight">
                                             <span>{model?.displayName ?? c.modelId}</span>
                                             {model && <ModelModeBadge mode={model.mode} />}
-                                            {active && (
-                                                <span
-                                                    className="rounded-pill bg-main px-2 py-0.5 text-[11px] font-extrabold text-main-foreground"
-                                                    data-testid={`model-config-in-use-${c.id}`}
-                                                >
-                                                    In use
-                                                </span>
-                                            )}
                                             {price && (
                                                 <span className="rounded-pill bg-muted px-2 py-0.5 text-[11px] font-extrabold text-fg/70">
                                                     {price}

@@ -196,19 +196,16 @@ export function SettingsLocalModels({ refreshToken, onActiveChange }: SettingsLo
                                     className="flex min-w-0 flex-1 flex-col gap-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-main/40"
                                     data-testid={`select-local-model-${m.modelId}`}
                                 >
-                                    <span className="text-sm font-bold">{displayName}</span>
-                                    {displayName !== m.modelId && (
-                                        <span className="font-mono text-[11px] text-muted-foreground">
-                                            {m.modelId}
-                                        </span>
-                                    )}
-                                    <span className="text-xs text-muted-foreground">
-                                        {formatSize(m.fileSizeBytes)}
-                                        {activeId === m.modelId && (
-                                            <span className="ml-2 rounded-pill bg-main px-2 py-0.5 text-[11px] font-extrabold text-main-foreground">
-                                                In use
+                                    <span className="flex flex-wrap items-center gap-2 text-sm font-bold">
+                                        <span>{displayName}</span>
+                                    </span>
+                                    <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                        {displayName !== m.modelId && (
+                                            <span className="font-mono text-[11px] text-muted-foreground">
+                                                {m.modelId}
                                             </span>
                                         )}
+                                        <span>{formatSize(m.fileSizeBytes)}</span>
                                     </span>
                                 </button>
                                 <div className="flex items-center gap-2">
@@ -232,7 +229,8 @@ export function SettingsLocalModels({ refreshToken, onActiveChange }: SettingsLo
                                     ) : (
                                         <Button
                                             size="sm"
-                                            variant="ghost"
+                                            variant="outline"
+                                            className="shrink-0 border-red-500/30 text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/30"
                                             onClick={() => setDeleteConfirm(m.modelId)}
                                         >
                                             Delete
