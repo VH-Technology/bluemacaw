@@ -39,12 +39,14 @@ export function LocalModelDownloadSheet({
                                 ? 'Download failed'
                                 : isComplete
                                   ? 'Download complete'
-                                  : `Downloading ${download.displayName}`}
+                                  : 'Model is downloading'}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                            {isComplete
-                                ? 'Model is ready and selected.'
-                                : 'Runs on-device with no API key.'}
+                            {download.status === 'error'
+                                ? 'Check your connection or try again.'
+                                : isComplete
+                                  ? 'Model is ready and selected.'
+                                  : 'The model will be automatically selected for use once the download is finished.'}
                         </span>
                     </div>
                     <Button size="sm" variant="ghost" onClick={isDownloading ? onCancel : onClose}>

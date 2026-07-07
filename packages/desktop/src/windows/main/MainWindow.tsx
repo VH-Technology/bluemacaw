@@ -28,7 +28,10 @@ import { SettingsRecording } from './SettingsRecording';
 import { SettingsTheme } from './SettingsTheme';
 import { SettingsUpdates } from './SettingsUpdates';
 import { UpdateBanner } from './UpdateBanner';
-import type { LocalModelDownloadSheetState } from './local-model-download';
+import {
+    type LocalModelDownloadSheetState,
+    consumePendingLocalDownloadRequest,
+} from './local-model-download';
 
 function formatCreatedAt(ms: number): string {
     return new Date(ms).toISOString();
@@ -198,6 +201,12 @@ export function MainWindowInner() {
         },
         [localDownload],
     );
+
+    useEffect(() => {
+        const pending = consumePendingLocalDownloadRequest();
+        if (!pending) return;
+        handleStartLocalDownload(pending.modelId, pending.url, pending.displayName);
+    }, [handleStartLocalDownload]);
 
     const handleCancelLocalDownload = useCallback(async () => {
         if (!localDownload) return;
