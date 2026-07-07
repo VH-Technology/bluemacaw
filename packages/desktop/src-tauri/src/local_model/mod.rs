@@ -6,9 +6,13 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 
 pub const KNOWN_MODEL_IDS: &[&str] = &[
     "ggml-tiny.en",
+    "ggml-tiny",
     "ggml-base.en",
+    "ggml-base",
     "ggml-small.en",
+    "ggml-small",
     "ggml-medium.en",
+    "ggml-medium",
     "ggml-large-v3",
 ];
 

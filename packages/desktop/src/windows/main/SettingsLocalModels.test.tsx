@@ -28,7 +28,7 @@ import { SettingsLocalModels } from './SettingsLocalModels';
 describe('SettingsLocalModels', () => {
     it('renders the section heading', async () => {
         render(<SettingsLocalModels />);
-        expect(await screen.findByText('Local models (on-device)')).toBeDefined();
+        expect(await screen.findByText('Local')).toBeDefined();
     });
 
     it('shows download button', async () => {

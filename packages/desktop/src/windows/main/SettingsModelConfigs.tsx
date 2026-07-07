@@ -51,20 +51,17 @@ export function SettingsModelConfigs({ refreshToken, onActiveChange }: SettingsM
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-col gap-1">
                     <h3 className="text-xs font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
-                        Cloud models
+                        Cloud
                     </h3>
-                    <p className="text-xs font-medium text-muted-foreground">
-                        Hosted providers and API-key-backed configs.
-                    </p>
                 </div>
                 <Button size="sm" onClick={() => setAdding(true)} data-testid="add-model-config">
-                    Add Model Config
+                    Add cloud model
                 </Button>
             </div>
             <div className="flex flex-col gap-2 text-sm font-medium normal-case">
                 {configs.length === 0 ? (
                     <p className="text-fg/60" data-testid="model-configs-empty">
-                        No cloud model configs yet. Add one and click it to make it active.
+                        No cloud models yet. Add one and click it to make it active.
                     </p>
                 ) : (
                     configs.map((c) => {
