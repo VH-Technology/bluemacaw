@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     type ModelConfigWithApiKey,
     deleteModelConfig,
@@ -15,7 +14,12 @@ import { AddModelConfigDialog } from './AddModelConfigDialog';
 import { ModelModeBadge } from './ModelPicker';
 import { ProviderLogo } from './ProviderPicker';
 
-export function SettingsModelConfigs() {
+interface SettingsModelConfigsProps {
+    refreshToken?: number;
+    onActiveChange?: () => void;
+}
+
+export function SettingsModelConfigs({ refreshToken, onActiveChange }: SettingsModelConfigsProps) {
     const [configs, setConfigs] = useState<ModelConfigWithApiKey[]>([]);
     const [activeId, setActiveId] = useState<string | null>(null);
     const [adding, setAdding] = useState(false);
@@ -27,12 +31,14 @@ export function SettingsModelConfigs() {
     }, []);
 
     useEffect(() => {
+        void refreshToken;
         void reload();
-    }, [reload]);
+    }, [reload, refreshToken]);
 
     async function handleSelect(id: string) {
         await setActiveModelConfigId(id);
         setActiveId(id);
+        onActiveChange?.();
     }
 
     async function handleDelete(id: string) {
@@ -41,14 +47,21 @@ export function SettingsModelConfigs() {
     }
 
     return (
-        <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Cloud models</CardTitle>
+        <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                    <h3 className="text-xs font-extrabold uppercase tracking-[0.2em] text-muted-foreground">
+                        Cloud models
+                    </h3>
+                    <p className="text-xs font-medium text-muted-foreground">
+                        Hosted providers and API-key-backed configs.
+                    </p>
+                </div>
                 <Button size="sm" onClick={() => setAdding(true)} data-testid="add-model-config">
                     Add Model Config
                 </Button>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-2 text-sm font-medium normal-case">
+            </div>
+            <div className="flex flex-col gap-2 text-sm font-medium normal-case">
                 {configs.length === 0 ? (
                     <p className="text-fg/60" data-testid="model-configs-empty">
                         No cloud model configs yet. Add one and click it to make it active.
@@ -120,7 +133,7 @@ export function SettingsModelConfigs() {
                         );
                     })
                 )}
-            </CardContent>
+            </div>
             <AddModelConfigDialog
                 open={adding}
                 onClose={() => setAdding(false)}
@@ -129,6 +142,6 @@ export function SettingsModelConfigs() {
                     void reload();
                 }}
             />
-        </Card>
+        </div>
     );
 }

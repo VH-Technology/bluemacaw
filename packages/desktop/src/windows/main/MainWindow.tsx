@@ -14,8 +14,7 @@ import { OnboardingScreen } from './OnboardingScreen';
 import { RecordingStatusPill } from './RecordingStatusPill';
 import { SettingsApiKeys } from './SettingsApiKeys';
 import { SettingsHistory } from './SettingsHistory';
-import { SettingsLocalModels } from './SettingsLocalModels';
-import { SettingsModelConfigs } from './SettingsModelConfigs';
+import { SettingsModels } from './SettingsModels';
 import { SettingsOverlay } from './SettingsOverlay';
 import { SettingsRecording } from './SettingsRecording';
 import { SettingsTheme } from './SettingsTheme';
@@ -257,10 +256,7 @@ export function MainWindowInner() {
                             <SettingsApiKeys />
                         </section>
                         <section id="settings-models" className="scroll-mt-6">
-                            <SettingsModelConfigs />
-                            <div className="mt-4">
-                                <SettingsLocalModels />
-                            </div>
+                            <SettingsModels />
                         </section>
                         <section id="settings-recording" className="scroll-mt-6">
                             <SettingsRecording />
