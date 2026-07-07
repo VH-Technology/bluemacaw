@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+
+use crate::audio::resampler::Resampler;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 pub const KNOWN_MODEL_IDS: &[&str] = &[
@@ -50,32 +52,47 @@ pub fn transcribe_wav_file(model_path: &Path, wav_bytes: &[u8]) -> Result<String
     let reader =
         hound::WavReader::new(&mut cursor).map_err(|e| format!("Failed to read WAV: {e}"))?;
     let spec = reader.spec();
-    let samples: Vec<f32> = match spec.sample_format {
+    let sample_rate = spec.sample_rate;
+    let samples: Vec<i16> = match spec.sample_format {
         hound::SampleFormat::Int => reader
             .into_samples::<i16>()
             .filter_map(|s| s.ok())
-            .map(|s| s as f32 / 32768.0)
             .collect(),
         hound::SampleFormat::Float => reader
             .into_samples::<f32>()
             .filter_map(|s| s.ok())
+            .map(|s| (s.clamp(-1.0, 1.0) * 32767.0) as i16)
             .collect(),
     };
 
-    let n_channels = spec.channels;
+    let n_channels = spec.channels as usize;
 
-    let mono_samples: Vec<f32> = if n_channels > 1 {
-        (0..samples.len() / n_channels as usize)
+    let mono_i16: Vec<i16> = if n_channels > 1 {
+        (0..samples.len() / n_channels)
             .map(|i| {
-                (0..n_channels as usize)
-                    .map(|c| samples[i * n_channels as usize + c])
-                    .sum::<f32>()
-                    / n_channels as f32
+                let mut acc: i32 = 0;
+                for c in 0..n_channels {
+                    acc += samples[i * n_channels + c] as i32;
+                }
+                let avg = acc / n_channels as i32;
+                avg.clamp(i16::MIN as i32, i16::MAX as i32) as i16
             })
             .collect()
     } else {
         samples
     };
+
+    let mono_samples_i16 = if sample_rate == Resampler::target_rate() {
+        mono_i16
+    } else {
+        let mut resampler = Resampler::new(sample_rate);
+        resampler.process(&mono_i16)
+    };
+
+    let mono_samples: Vec<f32> = mono_samples_i16
+        .iter()
+        .map(|s| *s as f32 / 32768.0)
+        .collect();
 
     let ctx = unsafe { &*ctx };
     let mut state = ctx
