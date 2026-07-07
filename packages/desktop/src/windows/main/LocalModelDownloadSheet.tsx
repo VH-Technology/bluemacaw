@@ -30,7 +30,7 @@ export function LocalModelDownloadSheet({
               : 0;
 
     return (
-        <Card className="fixed bottom-6 right-6 z-50 w-[22rem] border-border bg-surface p-4 shadow-card">
+        <Card className="fixed bottom-6 right-6 z-50 w-[22rem] border border-border/70 bg-surface p-4 shadow-card-lg">
             <div className="flex flex-col gap-3">
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex flex-col">
