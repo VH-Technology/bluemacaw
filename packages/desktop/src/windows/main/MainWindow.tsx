@@ -3,23 +3,35 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toast } from '@/components/ui/toast';
 import { useHotkeyRecording } from '@/hooks/useHotkeyRecording';
 import { useUpdater } from '@/hooks/useUpdater';
-import { listTranscriptions, restoreTranscription, softDeleteTranscription } from '@/lib/db';
+import {
+    listTranscriptions,
+    restoreTranscription,
+    setActiveLocalModelId,
+    softDeleteTranscription,
+} from '@/lib/db';
+import { vox } from '@/lib/invoke';
 import { useOnboardingGate } from '@/lib/use-onboarding-gate';
 import { getVersion } from '@tauri-apps/api/app';
+import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-shell';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Dashboard } from './Dashboard';
 import { History, type HistoryEntry } from './History';
+import { LocalModelDownloadSheet } from './LocalModelDownloadSheet';
 import { OnboardingScreen } from './OnboardingScreen';
 import { RecordingStatusPill } from './RecordingStatusPill';
 import { SettingsApiKeys } from './SettingsApiKeys';
 import { SettingsHistory } from './SettingsHistory';
-import { SettingsModelConfigs } from './SettingsModelConfigs';
+import { SettingsModels } from './SettingsModels';
 import { SettingsOverlay } from './SettingsOverlay';
 import { SettingsRecording } from './SettingsRecording';
 import { SettingsTheme } from './SettingsTheme';
 import { SettingsUpdates } from './SettingsUpdates';
 import { UpdateBanner } from './UpdateBanner';
+import {
+    type LocalModelDownloadSheetState,
+    consumePendingLocalDownloadRequest,
+} from './local-model-download';
 
 function formatCreatedAt(ms: number): string {
     return new Date(ms).toISOString();
@@ -85,6 +97,7 @@ export function MainWindowInner() {
     // the Settings tab surfaces updates via its own Install & restart button.
     const [activeTab, setActiveTab] = useState('dashboard');
     const [appVersion, setAppVersion] = useState<string | null>(null);
+    const [localDownload, setLocalDownload] = useState<LocalModelDownloadSheetState | null>(null);
 
     // Silent background check once on mount. Failures here are non-fatal —
     // the user can still trigger a manual check from Settings → Updates.
@@ -107,6 +120,103 @@ export function MainWindowInner() {
             .then(setAppVersion)
             .catch(() => setAppVersion(null));
     }, []);
+
+    useEffect(() => {
+        let mounted = true;
+        const unlistenFns: Array<() => void> = [];
+
+        const onProgress = listen<{
+            modelId: string;
+            received: number;
+            total: number;
+        }>('download://progress', (event) => {
+            const { modelId, received, total } = event.payload;
+            if (!mounted) return;
+            setLocalDownload((prev) =>
+                prev && prev.modelId === modelId
+                    ? { ...prev, progress: { received, total } }
+                    : prev,
+            );
+        });
+
+        const onComplete = listen<{ modelId: string }>('download://complete', (event) => {
+            const { modelId } = event.payload;
+            if (!mounted) return;
+            setLocalDownload((prev) =>
+                prev && prev.modelId === modelId ? { ...prev, status: 'complete' } : prev,
+            );
+            void setActiveLocalModelId(modelId).catch(() => {});
+            setTimeout(() => {
+                if (!mounted) return;
+                setLocalDownload((prev) => (prev && prev.modelId === modelId ? null : prev));
+            }, 2500);
+        });
+
+        const onError = listen<{ modelId: string; error: string }>('download://error', (event) => {
+            const { modelId, error } = event.payload;
+            if (!mounted) return;
+            setLocalDownload((prev) =>
+                prev && prev.modelId === modelId ? { ...prev, status: 'error', error } : prev,
+            );
+        });
+
+        void Promise.all([onProgress, onComplete, onError]).then((handlers) => {
+            if (!mounted) {
+                for (const unlisten of handlers) {
+                    unlisten();
+                }
+                return;
+            }
+            unlistenFns.push(...handlers);
+        });
+
+        return () => {
+            mounted = false;
+            for (const unlisten of unlistenFns) {
+                unlisten();
+            }
+        };
+    }, []);
+
+    const handleStartLocalDownload = useCallback(
+        (modelId: string, url?: string, displayName?: string) => {
+            if (localDownload?.status === 'downloading') return;
+            setLocalDownload({
+                modelId,
+                displayName: displayName ?? modelId,
+                status: 'downloading',
+                progress: null,
+            });
+            void vox.downloadWhisperModel(modelId, url).catch((e) => {
+                setLocalDownload((prev) =>
+                    prev && prev.modelId === modelId
+                        ? {
+                              ...prev,
+                              status: 'error',
+                              error: e instanceof Error ? e.message : String(e),
+                          }
+                        : prev,
+                );
+            });
+        },
+        [localDownload],
+    );
+
+    useEffect(() => {
+        const pending = consumePendingLocalDownloadRequest();
+        if (!pending) return;
+        handleStartLocalDownload(pending.modelId, pending.url, pending.displayName);
+    }, [handleStartLocalDownload]);
+
+    const handleCancelLocalDownload = useCallback(async () => {
+        if (!localDownload) return;
+        if (localDownload.status !== 'downloading') {
+            setLocalDownload(null);
+            return;
+        }
+        await vox.cancelModelDownload(localDownload.modelId);
+        setLocalDownload(null);
+    }, [localDownload]);
 
     const loadHistory = useCallback(async () => {
         try {
@@ -256,7 +366,10 @@ export function MainWindowInner() {
                             <SettingsApiKeys />
                         </section>
                         <section id="settings-models" className="scroll-mt-6">
-                            <SettingsModelConfigs />
+                            <SettingsModels
+                                localDownload={localDownload}
+                                onStartLocalDownload={handleStartLocalDownload}
+                            />
                         </section>
                         <section id="settings-recording" className="scroll-mt-6">
                             <SettingsRecording />
@@ -305,6 +418,13 @@ export function MainWindowInner() {
                         Undo
                     </Button>
                 </div>
+            )}
+            {localDownload && (
+                <LocalModelDownloadSheet
+                    download={localDownload}
+                    onClose={() => setLocalDownload(null)}
+                    onCancel={() => void handleCancelLocalDownload()}
+                />
             )}
         </main>
     );

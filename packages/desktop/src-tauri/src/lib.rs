@@ -10,6 +10,7 @@ pub mod platform;
 pub mod secrets;
 pub mod shortcut;
 pub mod system_volume;
+pub mod local_model;
 pub mod tray;
 
 use std::sync::{Arc, Mutex};
@@ -87,6 +88,11 @@ pub fn run() {
             commands::set_fn_usage_type,
             commands::get_platform_info,
             commands::restart_app,
+            commands::download_whisper_model,
+            commands::cancel_model_download,
+            commands::transcribe_local,
+            commands::list_local_models,
+            commands::delete_local_model,
             commands::present_overlay,
             commands::duck_system_volume,
             commands::restore_system_volume,
@@ -107,6 +113,9 @@ pub fn run() {
                 fn_tap: Mutex::new(None),
                 #[cfg(target_os = "macos")]
                 chord_tap: Mutex::new(None),
+                download_cancel_tokens: std::sync::Mutex::new(
+                    std::collections::HashMap::new(),
+                ),
             };
             app.manage(app_state);
 

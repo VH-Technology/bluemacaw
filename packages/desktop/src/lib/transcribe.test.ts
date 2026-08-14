@@ -5,6 +5,7 @@ vi.mock('ai', () => ({
     experimental_transcribe: vi.fn(async () => ({ text: 'hello world' })),
 }));
 vi.mock('./db', () => ({
+    getActiveLocalModelId: vi.fn(),
     getActiveModelConfigId: vi.fn(),
     getModelConfigWithApiKey: vi.fn(),
 }));
@@ -88,6 +89,7 @@ describe('transcribe orchestration', () => {
             'fal',
             'gladia',
             'groq',
+            'local',
             'openai',
             'revai',
             'xai',

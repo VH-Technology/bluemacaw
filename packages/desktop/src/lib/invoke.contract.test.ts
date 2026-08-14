@@ -67,7 +67,13 @@ const ALLOWLIST: ReadonlyArray<{
     command: string;
     kind: 'registered-not-called' | 'called-not-registered' | 'arg-mismatch';
     reason: string;
-}> = [];
+}> = [
+    {
+        command: 'list_local_models',
+        kind: 'registered-not-called',
+        reason: 'invoke<Array<{...}>> nested generics break the regex parser — see invoke.ts:162',
+    },
+];
 
 /** Rust types that Tauri injects automatically and must be stripped from the
  *  comparable arg list. Matched as a prefix on the type spelling (after `:`),

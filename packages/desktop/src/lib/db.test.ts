@@ -21,6 +21,7 @@ import {
     clearOriginalFnUsageType,
     deleteApiKey,
     deleteModelConfig,
+    getActiveLocalModelId,
     getActiveModelConfigId,
     getHistoryLastSweep,
     getHistoryStats,
@@ -40,6 +41,7 @@ import {
     purgeOlderThan,
     restoreTranscription,
     saveTranscription,
+    setActiveLocalModelId,
     setActiveModelConfigId,
     setHistoryLastSweep,
     setHotkeyCombo,
@@ -275,6 +277,18 @@ describe('db.addModelConfig', () => {
         await addModelConfig({ apiKeyId: 'key-1', modelId: 'whisper-1' });
         await expect(getActiveModelConfigId()).resolves.toBe('mc-existing');
     });
+
+    it('does not auto-promote when a local model is already active', async () => {
+        const h = getSharedHarness();
+        await h.execute(
+            "INSERT INTO api_keys (id, provider_id, nickname) VALUES ('key-1', 'openai', 'Personal')",
+        );
+        await setActiveLocalModelId('ggml-medium.en');
+        const row = await addModelConfig({ apiKeyId: 'key-1', modelId: 'whisper-1' });
+        await expect(getActiveModelConfigId()).resolves.toBeNull();
+        await expect(getActiveLocalModelId()).resolves.toBe('ggml-medium.en');
+        expect(row.apiKeyId).toBe('key-1');
+    });
 });
 
 describe('db.deleteModelConfig', () => {
@@ -333,6 +347,35 @@ describe('db.activeModelConfigId', () => {
         await setActiveModelConfigId('mc-1');
         await setActiveModelConfigId(null);
         await expect(getActiveModelConfigId()).resolves.toBeNull();
+    });
+});
+
+describe('db.active model mutual exclusivity (cloud vs local)', () => {
+    it('activating a cloud config clears the active local model', async () => {
+        await setActiveLocalModelId('ggml-medium.en');
+        await setActiveModelConfigId('mc-1');
+        await expect(getActiveModelConfigId()).resolves.toBe('mc-1');
+        await expect(getActiveLocalModelId()).resolves.toBeNull();
+    });
+
+    it('activating a local model clears the active cloud config', async () => {
+        await setActiveModelConfigId('mc-1');
+        await setActiveLocalModelId('ggml-medium.en');
+        await expect(getActiveLocalModelId()).resolves.toBe('ggml-medium.en');
+        await expect(getActiveModelConfigId()).resolves.toBeNull();
+    });
+
+    it('setting the cloud config to null does not touch the local model', async () => {
+        await setActiveLocalModelId('ggml-tiny.en');
+        // Explicit null clear should only remove the cloud slot.
+        await setActiveModelConfigId(null);
+        await expect(getActiveLocalModelId()).resolves.toBe('ggml-tiny.en');
+    });
+
+    it('setting the local model to null does not touch the cloud config', async () => {
+        await setActiveModelConfigId('mc-9');
+        await setActiveLocalModelId(null);
+        await expect(getActiveModelConfigId()).resolves.toBe('mc-9');
     });
 });
 

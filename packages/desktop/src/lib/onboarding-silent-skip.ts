@@ -76,6 +76,17 @@ export async function hasModelConfigSet(): Promise<boolean> {
     }
 }
 
+export async function hasLocalModelSet(): Promise<boolean> {
+    try {
+        const { vox } = await import('@/lib/invoke');
+        const models = await vox.listLocalModels();
+        return models.length > 0;
+    } catch (e) {
+        console.error('hasLocalModelSet: probe failed', e);
+        return false;
+    }
+}
+
 /**
  * Returns `true` when every wizard step's requirement is already
  * satisfied — i.e. running the wizard end-to-end would be a no-op. The
@@ -83,11 +94,12 @@ export async function hasModelConfigSet(): Promise<boolean> {
  * to the main UI on app launch.
  */
 export async function shouldSilentSkip(): Promise<boolean> {
-    const [perms, hotkeys, key, model] = await Promise.all([
+    const [perms, hotkeys, key, model, local] = await Promise.all([
         hasAllPermissionsSet(),
         hasHotkeysConfigured(),
         hasApiKeySet(),
         hasModelConfigSet(),
+        hasLocalModelSet(),
     ]);
-    return perms && hotkeys && key && model;
+    return perms && hotkeys && (local || (key && model));
 }

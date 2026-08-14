@@ -6,6 +6,7 @@ use crate::markers::ERR_INPUT_MONITORING_REQUIRED;
 use crate::markers::ERR_WAYLAND_PASTE_UNSUPPORTED;
 use crate::paste::Paster;
 use crate::platform::is_wayland_session;
+use tokio_util::sync::CancellationToken;
 use crate::secrets::Vault;
 use crate::shortcut::HotkeyCombo;
 use crate::shortcut::parse::{
@@ -61,6 +62,16 @@ pub struct AppState {
     /// shortcuts just drops the binding.
     #[cfg(target_os = "macos")]
     pub chord_tap: Mutex<Option<Arc<MacOsChordTap>>>,
+    pub download_cancel_tokens:
+        std::sync::Mutex<std::collections::HashMap<String, CancellationToken>>,
+}
+
+/// Metadata about a locally-downloaded Whisper model.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalModel {
+    pub model_id: String,
+    pub file_size_bytes: u64,
 }
 
 /// Platform identifier emitted to the JS side. The webview keys per-OS
@@ -290,6 +301,218 @@ pub struct AudioChunkEvent {
     pub session_id: String,
     pub samples: Vec<i16>,
     pub sample_rate: u32,
+}
+
+/// Emitted from `download_whisper_model` as request streams bytes.
+/// `received` and `total` are in bytes. `total` is 0 when the
+/// Content-Length header is absent (best-effort progress only).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadProgressEvent {
+    pub model_id: String,
+    pub received: u64,
+    pub total: u64,
+}
+const EVT_DOWNLOAD_PROGRESS: &str = "download://progress";
+const EVT_DOWNLOAD_COMPLETE: &str = "download://complete";
+const EVT_DOWNLOAD_ERROR: &str = "download://error";
+
+/// Streaming download of a Whisper GGUF model from its public URL into
+/// `{app_data_dir}/models/{model_id}.gguf`. Emits `download://progress`
+/// events as bytes arrive and `download://complete` with the final path
+/// on success. A second call with the same `model_id` cancels the first
+/// download (the old one's `received` bytes are discarded) and restarts.
+#[tauri::command]
+pub async fn download_whisper_model(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    model_id: String,
+    url: Option<String>,
+) -> Result<String, String> {
+    use std::fs;
+    use std::io::Write;
+
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    let dest = crate::local_model::model_path(&app_data_dir, &model_id);
+
+    let download_url = match &url {
+        Some(u) if !u.is_empty() => u.clone(),
+        _ => crate::local_model::model_download_url(&model_id)
+            .ok_or_else(|| format!("Unknown model id: {model_id}"))?,
+    };
+
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    let cancel = CancellationToken::new();
+    {
+        let mut tokens = state
+            .download_cancel_tokens
+            .lock()
+            .map_err(|e| e.to_string())?;
+        if let Some(old) = tokens.insert(model_id.clone(), cancel.clone()) {
+            old.cancel();
+        }
+    }
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&download_url)
+        .send()
+        .await
+        .map_err(|e| format!("Download request failed: {e}"))?;
+
+    let total = response.content_length().unwrap_or(0);
+    let mut stream = response.bytes_stream();
+    let mut file = fs::File::create(&dest).map_err(|e| e.to_string())?;
+    let mut received: u64 = 0;
+    let app_emit = app.clone();
+    let mid = model_id.clone();
+
+    loop {
+        tokio::select! {
+            _ = cancel.cancelled() => {
+                let _ = fs::remove_file(&dest);
+                let mut tokens = state
+                    .download_cancel_tokens
+                    .lock()
+                    .map_err(|e| e.to_string())?;
+                tokens.remove(&mid);
+                return Err("Download cancelled".to_string());
+            }
+            chunk = futures_util::StreamExt::next(&mut stream) => {
+                match chunk {
+                    Some(Ok(bytes)) => {
+                        file.write_all(&bytes).map_err(|e| e.to_string())?;
+                        received += bytes.len() as u64;
+                        let _ = app_emit.emit(
+                            EVT_DOWNLOAD_PROGRESS,
+                            DownloadProgressEvent {
+                                model_id: mid.clone(),
+                                received,
+                                total,
+                            },
+                        );
+                    }
+                    Some(Err(e)) => {
+                        let _ = fs::remove_file(&dest);
+                        let _ = app_emit.emit(
+                            EVT_DOWNLOAD_ERROR,
+                            serde_json::json!({ "modelId": mid, "error": e.to_string() }),
+                        );
+                        return Err(format!("Download stream error: {e}"));
+                    }
+                    None => break,
+                }
+            }
+        }
+    }
+
+    {
+        let mut tokens = state
+            .download_cancel_tokens
+            .lock()
+            .map_err(|e| e.to_string())?;
+        tokens.remove(&model_id);
+    }
+
+    let dest_str = dest.to_string_lossy().to_string();
+    let _ = app.emit(
+        EVT_DOWNLOAD_COMPLETE,
+        serde_json::json!({ "modelId": model_id, "localPath": dest_str }),
+    );
+
+    Ok(dest_str)
+}
+
+/// Cancels an in-progress model download. No-ops if the model_id is not
+/// currently downloading.
+#[tauri::command]
+pub fn cancel_model_download(
+    state: State<'_, AppState>,
+    model_id: String,
+) -> Result<(), String> {
+    let mut tokens = state
+        .download_cancel_tokens
+        .lock()
+        .map_err(|e| e.to_string())?;
+    if let Some(token) = tokens.remove(&model_id) {
+        token.cancel();
+    }
+    Ok(())
+}
+
+/// Run local Whisper transcription on a WAV buffer.
+/// `model_id` must be a known or custom (previously-downloaded) model ID.
+/// On Windows, the Whisper model path may not exist if the user hasn't
+/// downloaded one — returns a structured error in that case.
+#[tauri::command]
+pub async fn transcribe_local(
+    app: AppHandle,
+    audio: Vec<u8>,
+    model_id: String,
+) -> Result<String, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    let mp = crate::local_model::model_path(&app_data_dir, &model_id);
+    if !mp.exists() {
+        return Err(format!(
+            "Model not found: {}. Download it first in Settings → Local Models.",
+            model_id
+        ));
+    }
+    tokio::task::spawn_blocking(move || crate::local_model::transcribe_wav_file(&mp, &audio))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Returns metadata for every .gguf file in the models directory.
+#[tauri::command]
+pub fn list_local_models(app: AppHandle) -> Result<Vec<LocalModel>, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let dir = crate::local_model::model_dir(&app_data_dir);
+    if !dir.exists() {
+        return Ok(vec![]);
+    }
+    let mut models = Vec::new();
+    let entries = std::fs::read_dir(&dir).map_err(|e| e.to_string())?;
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if path.extension().map(|e| e == "gguf").unwrap_or(false) {
+            let model_id = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+            let file_size_bytes = path.metadata().map(|m| m.len()).unwrap_or(0);
+            models.push(LocalModel {
+                model_id,
+                file_size_bytes,
+            });
+        }
+    }
+    Ok(models)
+}
+
+/// Delete a local model file. No-ops if the file does not exist.
+#[tauri::command]
+pub fn delete_local_model(
+    app: AppHandle,
+    model_id: String,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mp = crate::local_model::model_path(&app_data_dir, &model_id);
+    if mp.exists() {
+        std::fs::remove_file(&mp).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 /// Realtime variant of [`start_recording`]. Same capture pipeline, but the
