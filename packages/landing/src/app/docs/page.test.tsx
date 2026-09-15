@@ -13,6 +13,13 @@ describe('Docs page', () => {
         }
     });
 
+    it('documents the Homebrew install command in the macOS section', () => {
+        const { container } = render(<DocsPage />);
+        expect(container.querySelector('#install-macos')).toHaveTextContent(
+            'brew install --cask vh-technology/tap/bluemacaw',
+        );
+    });
+
     it('cross-links to the GitHub providers doc', () => {
         render(<DocsPage />);
         expect(screen.getByRole('link', { name: /docs\/providers\.md/i })).toHaveAttribute(

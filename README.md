@@ -9,9 +9,12 @@ Cross-platform speech-to-text desktop app. Press a global shortcut, dictate, get
 
 ## Install
 
-*Available once the first signed release ships (Plan D).* For now, see `docs/build-and-release.md` for local build instructions.
+- **macOS:** [Download DMG](https://bluemacaw.com) (signed + notarized), or with Homebrew:
 
-- **macOS:** [Download DMG](https://bluemacaw.com) (signed + notarized)
+  ```sh
+  brew install --cask vh-technology/tap/bluemacaw
+  ```
+
 - **Windows:** [Download installer](https://bluemacaw.com) (unsigned at v1; SmartScreen warning expected)
 
 ## Why bluemacaw

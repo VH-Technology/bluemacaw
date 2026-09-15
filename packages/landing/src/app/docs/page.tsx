@@ -116,7 +116,17 @@ function InstallMacOS() {
                 <strong>Requirements:</strong> macOS 12 Monterey or later (Apple Silicon or Intel).
                 The DMG is a single universal binary that runs natively on both.
             </p>
-            <h3>Install</h3>
+            <h3>Install with Homebrew</h3>
+            <pre>
+                <code>brew install --cask vh-technology/tap/bluemacaw</code>
+            </pre>
+            <p>
+                The cask installs the same signed and notarized DMG as the manual steps below.
+                bluemacaw updates itself in-app, so <code>brew upgrade</code> only reinstalls when
+                the app on disk is older than the cask. Remove the app and its data with{' '}
+                <code>brew uninstall --cask --zap bluemacaw</code>.
+            </p>
+            <h3>Install from the DMG</h3>
             <ol>
                 <li>
                     Download <code>bluemacaw_x.y.z_universal.dmg</code> from the{' '}

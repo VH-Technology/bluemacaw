@@ -288,6 +288,74 @@ jobs:
       - name: Attach manifest to GitHub release
         run: gh release upload "$TAG" latest.json --clobber --repo "$GITHUB_REPOSITORY"
 
+  # Bumps the Homebrew cask in VH-Technology/homebrew-tap to the version just
+  # released, so `brew install --cask vh-technology/tap/bluemacaw` serves it.
+  # The push needs write access to the tap repo via ONE of two secrets (see
+  # docs/build-and-release.md § Homebrew tap):
+  #   HOMEBREW_TAP_DEPLOY_KEY — SSH private key of a write-enabled deploy key
+  #   HOMEBREW_TAP_TOKEN      — fine-grained PAT scoped to homebrew-tap
+  publish-homebrew:
+    name: Bump Homebrew cask
+    needs: build
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ github.event.release.tag_name }}
+      CASK: Casks/bluemacaw.rb
+    steps:
+      - name: Download DMG and compute sha256
+        id: dmg
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          asset="bluemacaw_${version}_universal.dmg"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset"
+          sha="$(sha256sum "$asset" | cut -d' ' -f1)"
+          echo "$asset sha256=$sha"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      # actions/checkout uses ssh-key when it is non-empty, otherwise token.
+      # With neither secret set, github.token can read the public tap but the
+      # push below fails with a permissions error — by design, not silently.
+      - name: Check out homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: VH-Technology/homebrew-tap
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN || github.token }}
+          path: tap
+
+      - name: Update cask version + sha256
+        working-directory: tap
+        env:
+          VERSION: ${{ steps.dmg.outputs.version }}
+          SHA: ${{ steps.dmg.outputs.sha }}
+        run: |
+          set -euo pipefail
+          sed -i -E "s|^(  version \").*(\")$|\1${VERSION}\2|" "$CASK"
+          sed -i -E "s|^(  sha256 \").*(\")$|\1${SHA}\2|" "$CASK"
+          grep -E '^  (version|sha256) ' "$CASK"
+          # Fail loudly if either substitution didn't land.
+          grep -q "^  version \"${VERSION}\"$" "$CASK"
+          grep -q "^  sha256 \"${SHA}\"$" "$CASK"
+
+      - name: Commit and push
+        working-directory: tap
+        env:
+          VERSION: ${{ steps.dmg.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "cask already at ${VERSION}; nothing to push"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "bluemacaw ${VERSION}"
+          git push origin HEAD:main
+
       # Snapshot the full release list as changelog.json and attach it to the
       # release. The landing's changelog page fetches the live GitHub API
       # first, then falls back to this asset (via the
