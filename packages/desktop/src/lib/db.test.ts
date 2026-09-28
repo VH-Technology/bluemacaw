@@ -33,6 +33,7 @@ import {
     getRetentionDays,
     getSelectedMicDeviceId,
     getTheme,
+    getTranscriptCleanupApiKeyId,
     hardDeleteTranscription,
     listApiKeys,
     listModelConfigDependencies,
@@ -51,6 +52,7 @@ import {
     setRetentionDays,
     setSelectedMicDeviceId,
     setTheme,
+    setTranscriptCleanupApiKeyId,
     softDeleteTranscription,
 } from './db';
 
@@ -404,6 +406,69 @@ describe('db.overlayEnabled', () => {
         );
         expect(rows[0]?.count).toBe(1);
         await expect(getOverlayEnabled()).resolves.toBe(true);
+    });
+});
+
+describe('db.transcriptCleanupApiKeyId', () => {
+    it('returns null when cleanup is disabled', async () => {
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+
+    it('round-trips an OpenAI API key id', async () => {
+        const key = await addApiKey({
+            providerId: 'openai',
+            nickname: 'Cleanup',
+            secret: 'sk-test',
+        });
+
+        await setTranscriptCleanupApiKeyId(key.id);
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBe(key.id);
+    });
+
+    it('rejects API keys from other providers', async () => {
+        const key = await addApiKey({
+            providerId: 'groq',
+            nickname: 'Not OpenAI',
+            secret: 'gsk-test',
+        });
+
+        await expect(setTranscriptCleanupApiKeyId(key.id)).rejects.toThrow(/OpenAI/);
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+
+    it('treats a dangling stored API key id as disabled', async () => {
+        await getSharedHarness().execute(
+            "INSERT INTO app_state (key, value) VALUES ('transcript_cleanup_openai_api_key_id', 'missing')",
+        );
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+
+    it('disables cleanup when its API key is deleted', async () => {
+        const key = await addApiKey({
+            providerId: 'openai',
+            nickname: 'Disposable',
+            secret: 'sk-test',
+        });
+        await setTranscriptCleanupApiKeyId(key.id);
+
+        await deleteApiKey(key.id);
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+
+    it('can be disabled explicitly', async () => {
+        const key = await addApiKey({
+            providerId: 'openai',
+            nickname: 'Cleanup',
+            secret: 'sk-test',
+        });
+        await setTranscriptCleanupApiKeyId(key.id);
+
+        await setTranscriptCleanupApiKeyId(null);
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
     });
 });
 

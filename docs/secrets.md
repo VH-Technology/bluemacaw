@@ -29,7 +29,13 @@ The webview accesses the vault exclusively through three Tauri commands defined 
 - `set_secret(secretId, key) → ()`
 - `delete_secret(secretId) → ()`
 
-The TS wrapper exposes them as `vox.getSecret`, `vox.setSecret`, `vox.deleteSecret` (`src/lib/invoke.ts`). Discovery of which secret ids exist is a SQL concern handled by `lib/db.ts` against the `api_keys` table.
+The TS wrapper exposes them as `vox.getSecret`, `vox.setSecret`, `vox.deleteSecret` (`src/lib/invoke.ts`). Discovery of which secret ids exist is a SQL concern handled by `lib/db.ts` against the `api_keys` table. Transcription model configs and optional transcript cleanup each reference an opaque API-key UUID; neither stores the key itself.
+
+## Optional transcript cleanup
+
+Text cleanup is disabled by default. When a user enables it and selects an existing OpenAI key in Settings, `cleanup-transcript.ts` fetches that key just in time and sends the completed transcript text to OpenAI using `gpt-4o-mini`. The cleanup request does not resend audio, uses the OpenAI Responses API with `store: false`, performs no retry, and has a 10-second timeout. If the request fails, bluemacaw pastes and stores the raw transcript instead.
+
+The selected key UUID is stored in SQLite as the `app_state` value `transcript_cleanup_openai_api_key_id`. Deleting that API key also disables cleanup. The transcript necessarily exists in webview memory before and after the request; neither the key nor an additional raw-transcript copy is persisted by the cleanup feature.
 
 ## Defense in depth
 
@@ -69,6 +75,7 @@ The Rust crate uses `env_logger` (initialized in `lib.rs`). Log lines come from 
 | Plaintext keys in app log files | All log call sites use `Debug`; a key never appears in formatted output. |
 | Stolen disk image | Keys live in OS keychain (encrypted at rest with the user's login credentials) — not in the SQLite db, not in `tauri-plugin-store`'s `settings.dat`. |
 | Accidental telemetry leak | No telemetry exists. |
+| Optional cleanup discloses transcript text to another provider | Disabled by default, requires an explicitly selected OpenAI key, is disclosed in Settings, and sends requests directly to OpenAI with `store: false`. |
 
 ### Out of scope (v1)
 

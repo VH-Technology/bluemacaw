@@ -29,8 +29,8 @@ export default function PrivacyPage() {
                         </li>
                     </ul>
                     <p>
-                        Keys are fetched only at the moment of transcription, held in memory for the
-                        duration of one HTTP request, and never written to disk outside the OS
+                        Keys are fetched only when making a provider request, held in memory for the
+                        duration of that request, and never written to disk outside the OS
                         credential store. Keys are never logged, never sent to bluemacaw&apos;s
                         servers (we don&apos;t have any), and the source code path that handles them
                         is open: <code>packages/desktop/src-tauri/src/secrets/</code>.
@@ -39,6 +39,14 @@ export default function PrivacyPage() {
                     <p>
                         Audio is captured by <code>cpal</code> directly from your microphone, sent
                         only to the STT provider you chose, and never persisted by bluemacaw.
+                    </p>
+                    <h2>Optional text cleanup</h2>
+                    <p>
+                        Text cleanup is off by default. If you enable it and select an OpenAI API
+                        key, bluemacaw sends each completed transcript directly to OpenAI to remove
+                        speech fillers before pasting. The cleanup request does not resend audio,
+                        asks OpenAI not to store the response, and falls back to the raw transcript
+                        if cleanup fails.
                     </p>
                     <h2>History</h2>
                     <p>

@@ -1,3 +1,4 @@
+import type { cleanupTranscript as cleanupTranscriptFn } from './cleanup-transcript';
 import {
     getActiveModelConfigId,
     getModelConfigWithApiKey,
@@ -43,6 +44,8 @@ export interface RecordingDeps {
         | 'restoreSystemVolume'
     >;
     transcribe: typeof transcribeFn;
+    /** Optionally post-process a finished transcript before paste and history. */
+    cleanupTranscript?: typeof cleanupTranscriptFn;
     /** Persist a finished transcription. Defaults to db.saveTranscription. */
     saveTranscription?: typeof saveTranscription;
     /** Resolve the active model config for the history record. Defaults to db lookup. */
@@ -181,6 +184,16 @@ async function stopAndTranscribe(
             setState({ kind: 'transcribing' });
             const blob = new Blob([new Uint8Array(bytes)], { type: 'audio/wav' });
             text = await deps.transcribe(blob);
+        }
+
+        if (deps.cleanupTranscript) {
+            try {
+                text = await deps.cleanupTranscript(text);
+            } catch {
+                // Cleanup is optional. Never lose a completed transcription
+                // because the second provider request failed or timed out.
+                console.warn('transcript cleanup failed; using raw transcript');
+            }
         }
 
         let pasteFailed: string | null = null;

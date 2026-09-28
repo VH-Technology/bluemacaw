@@ -19,6 +19,8 @@ vi.mock('@/lib/db', () => ({
     setCancelHotkeyCombo: vi.fn(async () => undefined),
     getTheme: vi.fn(async () => 'system'),
     setTheme: vi.fn(async () => undefined),
+    getTranscriptCleanupApiKeyId: vi.fn(async () => null),
+    setTranscriptCleanupApiKeyId: vi.fn(async () => undefined),
     // Used by the predicate-driven onboarding wizard when the gate routes
     // to show-onboarding. False means "step 2 not yet seen by user."
     getHotkeysOnboarded: vi.fn(async () => false),

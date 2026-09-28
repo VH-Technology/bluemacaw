@@ -1,3 +1,4 @@
+import { cleanupTranscript } from '@/lib/cleanup-transcript';
 import { getCancelHotkeyCombo } from '@/lib/db';
 import { vox } from '@/lib/invoke';
 import { EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_TOGGLE } from '@/lib/markers';
@@ -17,7 +18,7 @@ import { useEffect, useRef, useState } from 'react';
 // second copy of this string.
 export const SHORTCUT_EVENT = EVT_SHORTCUT_TOGGLE;
 
-const defaultDeps: RecordingDeps = { vox, transcribe };
+const defaultDeps: RecordingDeps = { vox, transcribe, cleanupTranscript };
 
 export type PublishFn = (state: RecordingState) => Promise<void>;
 

@@ -14,7 +14,8 @@ export function PrivacyTeaser() {
                     Your API keys go straight into your OS&apos;s native credential store — Keychain
                     on macOS, Credential Manager on Windows. Your speech-to-text requests go to the
                     provider you choose, never through a bluemacaw server, because there isn&apos;t
-                    one.
+                    one. Optional text cleanup is off by default and goes directly to OpenAI only
+                    when you enable it.
                 </p>
                 <a
                     href="/privacy/"

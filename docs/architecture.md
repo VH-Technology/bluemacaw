@@ -120,6 +120,7 @@ sequenceDiagram
     participant Cmd as commands.rs (Rust)
     participant Audio as MicrophoneSource (cpal)
     participant Provider as STT Provider (AI SDK)
+    participant Cleanup as OpenAI cleanup (optional)
     participant Paster as EnigoPaster
     participant Focused as Focused App
 
@@ -137,11 +138,17 @@ sequenceDiagram
     Overlay->>Overlay: lib/transcribe.ts loads active model config + key
     Overlay->>Provider: experimental_transcribe({ model, audio })
     Provider-->>Overlay: { text }
+    opt Text cleanup enabled
+        Overlay->>Cleanup: generateText({ transcript, store: false })
+        Cleanup-->>Overlay: cleaned text
+    end
     Overlay->>Cmd: invoke("paste_text", { text })
     Cmd->>Paster: paste_text(&text)
     Paster->>Focused: synthetic Cmd+V / Ctrl+V
     Overlay->>Overlay: db.saveTranscription(...)
 ```
+
+Text cleanup is disabled by default. When enabled in Settings, `cleanup-transcript.ts` resolves the selected OpenAI key just in time, removes speech fillers, and strips a matching pair of quotes only when they wrap the entire result. Cleanup errors and timeouts fail open to the raw transcript. Both paste and history use the resulting final text. The nullable OpenAI key id is stored in the generic `app_state` table under `transcript_cleanup_openai_api_key_id`; no API key material is stored in SQLite.
 
 If paste fails (e.g. macOS Accessibility revoked, or Windows synthetic keystrokes fail), the text still lands on the clipboard and the history row is still saved. The error marker is translated into a UI-friendly message in `recording-controller.ts`.
 

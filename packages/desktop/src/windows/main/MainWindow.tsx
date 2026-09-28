@@ -21,6 +21,7 @@ import { LocalModelDownloadSheet } from './LocalModelDownloadSheet';
 import { OnboardingScreen } from './OnboardingScreen';
 import { RecordingStatusPill } from './RecordingStatusPill';
 import { SettingsApiKeys } from './SettingsApiKeys';
+import { SettingsCleanup } from './SettingsCleanup';
 import { SettingsHistory } from './SettingsHistory';
 import { SettingsModels } from './SettingsModels';
 import { SettingsOverlay } from './SettingsOverlay';
@@ -46,6 +47,7 @@ const SETTINGS_SECTIONS = [
     { id: 'settings-general', label: 'General' },
     { id: 'settings-api-keys', label: 'API Keys' },
     { id: 'settings-models', label: 'Models' },
+    { id: 'settings-cleanup', label: 'Cleanup' },
     { id: 'settings-recording', label: 'Recording' },
     { id: 'settings-overlay', label: 'Overlay' },
     { id: 'settings-history', label: 'History' },
@@ -88,6 +90,7 @@ export function MainWindowInner() {
     const { status: updaterStatus, checkForUpdates, installAndRestart } = useUpdater();
     const [historyEntries, setHistoryEntries] = useState<readonly HistoryEntry[]>([]);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [apiKeysRefreshToken, setApiKeysRefreshToken] = useState(0);
     const [undoToast, setUndoToast] = useState<UndoToastState>({ open: false, rowId: null });
     // Update-check failures are transient (often a cold-boot network blip), so
     // we surface them as an auto-dismissing toast rather than a banner that
@@ -363,13 +366,18 @@ export function MainWindowInner() {
                             <SettingsTheme />
                         </section>
                         <section id="settings-api-keys" className="scroll-mt-6">
-                            <SettingsApiKeys />
+                            <SettingsApiKeys
+                                onKeysChanged={() => setApiKeysRefreshToken((value) => value + 1)}
+                            />
                         </section>
                         <section id="settings-models" className="scroll-mt-6">
                             <SettingsModels
                                 localDownload={localDownload}
                                 onStartLocalDownload={handleStartLocalDownload}
                             />
+                        </section>
+                        <section id="settings-cleanup" className="scroll-mt-6">
+                            <SettingsCleanup refreshToken={apiKeysRefreshToken} />
                         </section>
                         <section id="settings-recording" className="scroll-mt-6">
                             <SettingsRecording />
