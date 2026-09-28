@@ -7,6 +7,7 @@ Until then:
 - **Local clean build & install (macOS):** `/build-clean` slash command (defined in `.claude/commands/build-clean.md`). Runs `tauri build`, copies the bundle into `/Applications/bluemacaw.app`, performs a TCC reset so a fresh permission flow can be exercised.
 - **Dev loop:** `/dev-desktop` (Vite + cargo watch).
 - **CI release workflow:** `.github/workflows/release.yml`. Currently builds the macOS and Windows bundles on tag pushes.
+- **macOS deployment target:** 10.15, set by `bundle.macOS.minimumSystemVersion` in `tauri.conf.json`. Tauri propagates this to `MACOSX_DEPLOYMENT_TARGET`; `whisper-rs`/`ggml` requires 10.15 for C++ `std::filesystem`.
 
 The Plan D rewrite of this doc will cover:
 
@@ -99,5 +100,6 @@ Because of step 3, **key rotation requires a manual installer path for affected 
 | App reports 404 on update check                           | The `update.json` asset failed to upload (check the `publish-update-manifest` job logs).            |
 | Updater never offers an update despite a newer release    | `tauri.conf.json` `version` field on the running build is `>=` the manifest `version`.             |
 | In-app install hangs at 0%                                | Bundle URL in `update.json` is wrong — re-run the manifest job after fixing the asset name.        |
+| macOS build reports `std::filesystem` APIs unavailable    | The deployment target fell below 10.15; check `bundle.macOS.minimumSystemVersion`.                  |
 
 For architecture, see [`architecture.md`](./architecture.md). For macOS permissions wired into the bundle, see [`permissions.md`](./permissions.md).
