@@ -33,6 +33,8 @@ import {
     getRetentionDays,
     getSelectedMicDeviceId,
     getTheme,
+    getTranscriptCleanupApiKeyId,
+    getTranscriptCleanupOptions,
     hardDeleteTranscription,
     listApiKeys,
     listModelConfigDependencies,
@@ -51,6 +53,8 @@ import {
     setRetentionDays,
     setSelectedMicDeviceId,
     setTheme,
+    setTranscriptCleanupApiKeyId,
+    setTranscriptCleanupOptions,
     softDeleteTranscription,
 } from './db';
 
@@ -404,6 +408,109 @@ describe('db.overlayEnabled', () => {
         );
         expect(rows[0]?.count).toBe(1);
         await expect(getOverlayEnabled()).resolves.toBe(true);
+    });
+});
+
+describe('db.transcriptCleanupApiKeyId', () => {
+    it('returns null when cleanup is disabled', async () => {
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+
+    it('round-trips an OpenAI API key id', async () => {
+        const key = await addApiKey({
+            providerId: 'openai',
+            nickname: 'Cleanup',
+            secret: 'sk-test',
+        });
+
+        await setTranscriptCleanupApiKeyId(key.id);
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBe(key.id);
+    });
+
+    it('rejects API keys from other providers', async () => {
+        const key = await addApiKey({
+            providerId: 'groq',
+            nickname: 'Not OpenAI',
+            secret: 'gsk-test',
+        });
+
+        await expect(setTranscriptCleanupApiKeyId(key.id)).rejects.toThrow(/OpenAI/);
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+
+    it('treats a dangling stored API key id as disabled', async () => {
+        await getSharedHarness().execute(
+            "INSERT INTO app_state (key, value) VALUES ('transcript_cleanup_openai_api_key_id', 'missing')",
+        );
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+
+    it('disables cleanup when its API key is deleted', async () => {
+        const key = await addApiKey({
+            providerId: 'openai',
+            nickname: 'Disposable',
+            secret: 'sk-test',
+        });
+        await setTranscriptCleanupApiKeyId(key.id);
+
+        await deleteApiKey(key.id);
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+
+    it('can be disabled explicitly', async () => {
+        const key = await addApiKey({
+            providerId: 'openai',
+            nickname: 'Cleanup',
+            secret: 'sk-test',
+        });
+        await setTranscriptCleanupApiKeyId(key.id);
+
+        await setTranscriptCleanupApiKeyId(null);
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+});
+
+describe('db.transcriptCleanupOptions', () => {
+    it('returns reasonable defaults when no options are stored', async () => {
+        await expect(getTranscriptCleanupOptions()).resolves.toMatchObject({
+            modelId: 'gpt-4o-mini',
+            prompt: expect.stringMatching(/speech-to-text transcripts/i),
+        });
+    });
+
+    it('round-trips a custom model and prompt atomically', async () => {
+        const options = {
+            modelId: 'gpt-4.1-mini',
+            prompt: 'Remove filler words and preserve everything else.',
+        };
+
+        await setTranscriptCleanupOptions(options);
+
+        await expect(getTranscriptCleanupOptions()).resolves.toEqual(options);
+    });
+
+    it('falls back to defaults when stored options are malformed', async () => {
+        await getSharedHarness().execute(
+            "INSERT INTO app_state (key, value) VALUES ('transcript_cleanup_options', '{not-json')",
+        );
+
+        await expect(getTranscriptCleanupOptions()).resolves.toMatchObject({
+            modelId: 'gpt-4o-mini',
+            prompt: expect.stringMatching(/speech-to-text transcripts/i),
+        });
+    });
+
+    it('rejects blank models and prompts', async () => {
+        await expect(
+            setTranscriptCleanupOptions({ modelId: ' ', prompt: 'valid' }),
+        ).rejects.toThrow(/model/i);
+        await expect(
+            setTranscriptCleanupOptions({ modelId: 'gpt-4o-mini', prompt: ' ' }),
+        ).rejects.toThrow(/prompt/i);
     });
 });
 

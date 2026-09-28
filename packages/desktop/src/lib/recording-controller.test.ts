@@ -25,6 +25,7 @@ function makeDeps(): RecordingDeps {
             restoreSystemVolume: vi.fn(async () => undefined),
         },
         transcribe: vi.fn(async () => 'hello world'),
+        cleanupTranscript: vi.fn(async (text: string) => text),
         getSelectedMicDeviceId: vi.fn(async () => null),
     };
 }
@@ -140,6 +141,45 @@ describe('recording-controller toggle', () => {
             expect(blob?.type).toBe('audio/wav');
             expect(deps.vox.pasteText).toHaveBeenCalledWith('hello world');
             expect(states.map((s) => s.kind)).toEqual(['transcribing', 'idle']);
+        });
+
+        it('cleans the transcript before paste and stores the cleaned text', async () => {
+            if (!deps.cleanupTranscript) throw new Error('missing cleanup dependency');
+            vi.mocked(deps.transcribe).mockResolvedValueOnce('um hello world');
+            vi.mocked(deps.cleanupTranscript).mockResolvedValueOnce('hello world');
+            deps.saveTranscription = vi.fn(async () => undefined);
+            deps.resolveActiveConfig = vi.fn(async () => ({
+                providerId: 'openai',
+                modelId: 'whisper-1',
+            }));
+            const { setState } = makeSetState();
+
+            await toggle(recState, deps, setState);
+
+            expect(deps.cleanupTranscript).toHaveBeenCalledWith('um hello world');
+            expect(deps.vox.pasteText).toHaveBeenCalledWith('hello world');
+            expect(deps.saveTranscription).toHaveBeenCalledWith(
+                expect.objectContaining({ text: 'hello world' }),
+            );
+            const cleanupOrder = vi.mocked(deps.cleanupTranscript).mock.invocationCallOrder[0];
+            const pasteOrder = vi.mocked(deps.vox.pasteText).mock.invocationCallOrder[0];
+            expect(cleanupOrder).toBeLessThan(pasteOrder ?? 0);
+        });
+
+        it('pastes the raw transcript when optional cleanup fails', async () => {
+            if (!deps.cleanupTranscript) throw new Error('missing cleanup dependency');
+            vi.mocked(deps.cleanupTranscript).mockRejectedValueOnce(
+                new Error('OpenAI unavailable'),
+            );
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const { setState, states } = makeSetState();
+
+            await toggle(recState, deps, setState);
+
+            expect(deps.vox.pasteText).toHaveBeenCalledWith('hello world');
+            expect(states.map((s) => s.kind)).toEqual(['transcribing', 'idle']);
+            expect(warn).toHaveBeenCalledWith('transcript cleanup failed; using raw transcript');
+            warn.mockRestore();
         });
 
         it('publishes error if stop_recording fails (no transcribing state)', async () => {
@@ -359,6 +399,28 @@ describe('recording-controller realtime path', () => {
         expect(deps.transcribe).not.toHaveBeenCalled();
         expect(deps.vox.pasteText).toHaveBeenCalledWith('hello realtime');
         expect(states.map((s) => s.kind)).toEqual(['transcribing', 'idle']);
+    });
+
+    it('cleans realtime transcripts before paste', async () => {
+        const deps = makeRealtimeDeps();
+        if (!deps.cleanupTranscript) throw new Error('missing cleanup dependency');
+        vi.mocked(deps.cleanupTranscript).mockResolvedValueOnce('clean realtime');
+        const { setState } = makeSetState();
+        const recState: RecordingState = {
+            kind: 'recording',
+            sessionId: 'rt-session-1',
+            startedAt: 0,
+            realtime: {
+                rustSessionId: 'rt-session-1',
+                session: deps.session,
+                unlisten: deps.unlisten,
+            },
+        };
+
+        await toggle(recState, deps, setState);
+
+        expect(deps.cleanupTranscript).toHaveBeenCalledWith('hello realtime');
+        expect(deps.vox.pasteText).toHaveBeenCalledWith('clean realtime');
     });
 
     it('cancel calls session.abort and unlisten before tearing down cpal', async () => {

@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import Database from '@tauri-apps/plugin-sql';
 import { modelPricePerMinute } from '../providers/util';
+import { type TranscriptCleanupOptions, defaultTranscriptCleanupOptions } from './cleanup-config';
 import { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_OTHER } from './defaults';
 import { getPlatform } from './use-platform';
 import type { Theme } from './use-theme';
@@ -33,6 +34,8 @@ const FN_USAGE_TYPE_ORIGINAL_KEY = 'fn_usage_type_original';
 const RETENTION_DAYS_KEY = 'history_retention_days';
 const HISTORY_LAST_SWEEP_KEY = 'history_last_sweep';
 const THEME_KEY = 'theme';
+const TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY = 'transcript_cleanup_openai_api_key_id';
+const TRANSCRIPT_CLEANUP_OPTIONS_KEY = 'transcript_cleanup_options';
 const SOFT_DELETE_GRACE_DAYS = 30;
 
 export interface ApiKeyRow {
@@ -154,10 +157,87 @@ export async function deleteApiKey(id: string): Promise<void> {
     const activeId = await getActiveModelConfigId();
     const dependents = await listModelConfigDependencies(id);
     await conn.execute('DELETE FROM api_keys WHERE id = ?', [id]);
+    await conn.execute('DELETE FROM app_state WHERE key = ? AND value = ?', [
+        TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY,
+        id,
+    ]);
     await invoke<void>('delete_secret', { secretId: id });
     if (activeId !== null && dependents.some((d) => d.id === activeId)) {
         await conn.execute('DELETE FROM app_state WHERE key = ?', [ACTIVE_MODEL_CONFIG_KEY]);
     }
+}
+
+export async function getTranscriptCleanupApiKeyId(): Promise<string | null> {
+    const conn = await db();
+    const rows = (await conn.select(
+        `SELECT app.value
+         FROM app_state app
+         JOIN api_keys key ON key.id = app.value
+         WHERE app.key = ? AND key.provider_id = 'openai'`,
+        [TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY],
+    )) as { value: string }[];
+    return rows[0]?.value ?? null;
+}
+
+export async function setTranscriptCleanupApiKeyId(id: string | null): Promise<void> {
+    const conn = await db();
+    if (id === null) {
+        await conn.execute('DELETE FROM app_state WHERE key = ?', [
+            TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY,
+        ]);
+        return;
+    }
+
+    const keys = (await conn.select('SELECT provider_id FROM api_keys WHERE id = ?', [id])) as {
+        provider_id: string;
+    }[];
+    if (keys[0]?.provider_id !== 'openai') {
+        throw new Error('Transcript cleanup requires an OpenAI API key');
+    }
+
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY, id],
+    );
+}
+
+export async function getTranscriptCleanupOptions(): Promise<TranscriptCleanupOptions> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        TRANSCRIPT_CLEANUP_OPTIONS_KEY,
+    ])) as { value: string }[];
+    const raw = rows[0]?.value;
+    if (!raw) return defaultTranscriptCleanupOptions();
+
+    try {
+        const parsed = JSON.parse(raw) as Partial<TranscriptCleanupOptions>;
+        if (
+            typeof parsed.modelId !== 'string' ||
+            !parsed.modelId.trim() ||
+            typeof parsed.prompt !== 'string' ||
+            !parsed.prompt.trim()
+        ) {
+            return defaultTranscriptCleanupOptions();
+        }
+        return { modelId: parsed.modelId.trim(), prompt: parsed.prompt.trim() };
+    } catch {
+        return defaultTranscriptCleanupOptions();
+    }
+}
+
+export async function setTranscriptCleanupOptions(
+    options: TranscriptCleanupOptions,
+): Promise<void> {
+    const modelId = options.modelId.trim();
+    const prompt = options.prompt.trim();
+    if (!modelId) throw new Error('Transcript cleanup model cannot be blank');
+    if (!prompt) throw new Error('Transcript cleanup prompt cannot be blank');
+
+    const conn = await db();
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [TRANSCRIPT_CLEANUP_OPTIONS_KEY, JSON.stringify({ modelId, prompt })],
+    );
 }
 
 export async function listModelConfigs(): Promise<ModelConfigWithApiKey[]> {
