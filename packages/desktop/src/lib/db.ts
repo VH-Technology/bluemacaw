@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import Database from '@tauri-apps/plugin-sql';
 import { modelPricePerMinute } from '../providers/util';
+import { type TranscriptCleanupOptions, defaultTranscriptCleanupOptions } from './cleanup-config';
 import { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_OTHER } from './defaults';
 import { getPlatform } from './use-platform';
 import type { Theme } from './use-theme';
@@ -34,6 +35,7 @@ const RETENTION_DAYS_KEY = 'history_retention_days';
 const HISTORY_LAST_SWEEP_KEY = 'history_last_sweep';
 const THEME_KEY = 'theme';
 const TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY = 'transcript_cleanup_openai_api_key_id';
+const TRANSCRIPT_CLEANUP_OPTIONS_KEY = 'transcript_cleanup_options';
 const SOFT_DELETE_GRACE_DAYS = 30;
 
 export interface ApiKeyRow {
@@ -196,6 +198,45 @@ export async function setTranscriptCleanupApiKeyId(id: string | null): Promise<v
     await conn.execute(
         'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
         [TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY, id],
+    );
+}
+
+export async function getTranscriptCleanupOptions(): Promise<TranscriptCleanupOptions> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        TRANSCRIPT_CLEANUP_OPTIONS_KEY,
+    ])) as { value: string }[];
+    const raw = rows[0]?.value;
+    if (!raw) return defaultTranscriptCleanupOptions();
+
+    try {
+        const parsed = JSON.parse(raw) as Partial<TranscriptCleanupOptions>;
+        if (
+            typeof parsed.modelId !== 'string' ||
+            !parsed.modelId.trim() ||
+            typeof parsed.prompt !== 'string' ||
+            !parsed.prompt.trim()
+        ) {
+            return defaultTranscriptCleanupOptions();
+        }
+        return { modelId: parsed.modelId.trim(), prompt: parsed.prompt.trim() };
+    } catch {
+        return defaultTranscriptCleanupOptions();
+    }
+}
+
+export async function setTranscriptCleanupOptions(
+    options: TranscriptCleanupOptions,
+): Promise<void> {
+    const modelId = options.modelId.trim();
+    const prompt = options.prompt.trim();
+    if (!modelId) throw new Error('Transcript cleanup model cannot be blank');
+    if (!prompt) throw new Error('Transcript cleanup prompt cannot be blank');
+
+    const conn = await db();
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [TRANSCRIPT_CLEANUP_OPTIONS_KEY, JSON.stringify({ modelId, prompt })],
     );
 }
 

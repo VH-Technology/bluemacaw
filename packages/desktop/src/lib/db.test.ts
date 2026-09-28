@@ -34,6 +34,7 @@ import {
     getSelectedMicDeviceId,
     getTheme,
     getTranscriptCleanupApiKeyId,
+    getTranscriptCleanupOptions,
     hardDeleteTranscription,
     listApiKeys,
     listModelConfigDependencies,
@@ -53,6 +54,7 @@ import {
     setSelectedMicDeviceId,
     setTheme,
     setTranscriptCleanupApiKeyId,
+    setTranscriptCleanupOptions,
     softDeleteTranscription,
 } from './db';
 
@@ -469,6 +471,46 @@ describe('db.transcriptCleanupApiKeyId', () => {
         await setTranscriptCleanupApiKeyId(null);
 
         await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+});
+
+describe('db.transcriptCleanupOptions', () => {
+    it('returns reasonable defaults when no options are stored', async () => {
+        await expect(getTranscriptCleanupOptions()).resolves.toMatchObject({
+            modelId: 'gpt-4o-mini',
+            prompt: expect.stringMatching(/speech-to-text transcripts/i),
+        });
+    });
+
+    it('round-trips a custom model and prompt atomically', async () => {
+        const options = {
+            modelId: 'gpt-4.1-mini',
+            prompt: 'Remove filler words and preserve everything else.',
+        };
+
+        await setTranscriptCleanupOptions(options);
+
+        await expect(getTranscriptCleanupOptions()).resolves.toEqual(options);
+    });
+
+    it('falls back to defaults when stored options are malformed', async () => {
+        await getSharedHarness().execute(
+            "INSERT INTO app_state (key, value) VALUES ('transcript_cleanup_options', '{not-json')",
+        );
+
+        await expect(getTranscriptCleanupOptions()).resolves.toMatchObject({
+            modelId: 'gpt-4o-mini',
+            prompt: expect.stringMatching(/speech-to-text transcripts/i),
+        });
+    });
+
+    it('rejects blank models and prompts', async () => {
+        await expect(
+            setTranscriptCleanupOptions({ modelId: ' ', prompt: 'valid' }),
+        ).rejects.toThrow(/model/i);
+        await expect(
+            setTranscriptCleanupOptions({ modelId: 'gpt-4o-mini', prompt: ' ' }),
+        ).rejects.toThrow(/prompt/i);
     });
 });
 

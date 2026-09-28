@@ -20,7 +20,12 @@ vi.mock('@/lib/db', () => ({
     getTheme: vi.fn(async () => 'system'),
     setTheme: vi.fn(async () => undefined),
     getTranscriptCleanupApiKeyId: vi.fn(async () => null),
+    getTranscriptCleanupOptions: vi.fn(async () => ({
+        modelId: 'gpt-4o-mini',
+        prompt: 'Default cleanup prompt',
+    })),
     setTranscriptCleanupApiKeyId: vi.fn(async () => undefined),
+    setTranscriptCleanupOptions: vi.fn(async () => undefined),
     // Used by the predicate-driven onboarding wizard when the gate routes
     // to show-onboarding. False means "step 2 not yet seen by user."
     getHotkeysOnboarded: vi.fn(async () => false),

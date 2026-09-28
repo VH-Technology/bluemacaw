@@ -33,7 +33,7 @@ The TS wrapper exposes them as `vox.getSecret`, `vox.setSecret`, `vox.deleteSecr
 
 ## Optional transcript cleanup
 
-Text cleanup is disabled by default. When a user enables it and selects an existing OpenAI key in Settings, `cleanup-transcript.ts` fetches that key just in time and sends the completed transcript text to OpenAI using `gpt-4o-mini`. The cleanup request does not resend audio, uses the OpenAI Responses API with `store: false`, performs no retry, and has a 10-second timeout. If the request fails, bluemacaw pastes and stores the raw transcript instead.
+Text cleanup is disabled by default. When a user enables it and selects an existing OpenAI key in Settings, `cleanup-transcript.ts` fetches that key just in time and sends the completed transcript text to OpenAI. The model and cleanup prompt are configurable, with `gpt-4o-mini` and a conservative filler-removal prompt as defaults. The cleanup request does not resend audio, uses the OpenAI Responses API with `store: false`, performs no retry, and has a 10-second timeout. If the request fails, bluemacaw pastes and stores the raw transcript instead.
 
 The selected key UUID is stored in SQLite as the `app_state` value `transcript_cleanup_openai_api_key_id`. Deleting that API key also disables cleanup. The transcript necessarily exists in webview memory before and after the request; neither the key nor an additional raw-transcript copy is persisted by the cleanup feature.
 

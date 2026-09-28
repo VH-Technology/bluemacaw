@@ -1,10 +1,11 @@
 // @vitest-environment node
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./db', () => ({
     getTranscriptCleanupApiKeyId: vi.fn(),
+    getTranscriptCleanupOptions: vi.fn(),
 }));
 
 vi.mock('./invoke', () => ({
@@ -69,12 +70,18 @@ const server = setupServer(
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeEach(() => {
+    vi.mocked(db.getTranscriptCleanupApiKeyId).mockReset();
+    vi.mocked(db.getTranscriptCleanupOptions).mockReset().mockResolvedValue({
+        modelId: 'gpt-4o-mini',
+        prompt: 'Default cleanup prompt',
+    });
+    vi.mocked(vox.getSecret).mockReset();
+});
 afterEach(() => {
     server.resetHandlers();
     responseText = 'This is ready.';
     requestBody = null;
-    vi.mocked(db.getTranscriptCleanupApiKeyId).mockReset();
-    vi.mocked(vox.getSecret).mockReset();
 });
 afterAll(() => server.close());
 
@@ -102,6 +109,19 @@ describe('cleanupTranscript', () => {
 
         expect(vox.getSecret).toHaveBeenCalledWith('key-1');
         expect(requestBody).toMatchObject({ model: 'gpt-4o-mini', store: false });
+    });
+
+    it('uses the configured OpenAI model and cleanup prompt', async () => {
+        enableCleanup();
+        vi.mocked(db.getTranscriptCleanupOptions).mockResolvedValueOnce({
+            modelId: 'gpt-4.1-mini',
+            prompt: 'Only remove verbal fillers.',
+        });
+
+        await cleanupTranscript('Um, this is ready.');
+
+        expect(requestBody).toMatchObject({ model: 'gpt-4.1-mini' });
+        expect(JSON.stringify(requestBody)).toContain('Only remove verbal fillers.');
     });
 
     it.each([
