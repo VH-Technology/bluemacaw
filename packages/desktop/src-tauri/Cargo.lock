@@ -356,7 +356,7 @@ dependencies = [
 
 [[package]]
 name = "bluemacaw"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "alsa",
  "block2 0.6.2",
@@ -364,7 +364,8 @@ dependencies = [
  "core-foundation 0.10.1",
  "core-graphics 0.24.0",
  "cpal",
- "enigo",
+ "enigo 0.2.1",
+ "enigo 0.6.1",
  "env_logger",
  "futures-util",
  "hound",
@@ -1356,7 +1357,26 @@ dependencies = [
  "log",
  "objc2 0.5.2",
  "windows 0.56.0",
- "xkbcommon",
+ "xkbcommon 0.7.0",
+ "xkeysym",
+]
+
+[[package]]
+name = "enigo"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71c6c56e50f7acae2906a0dcbb34529ca647e40421119ad5d12e7f8ba6e50010"
+dependencies = [
+ "core-foundation 0.10.1",
+ "core-graphics 0.25.0",
+ "foreign-types-shared 0.3.1",
+ "libc",
+ "log",
+ "objc2 0.6.4",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "windows 0.61.3",
+ "xkbcommon 0.9.0",
  "xkeysym",
 ]
 
@@ -2898,6 +2918,15 @@ name = "memmap2"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43a5a03cefb0d953ec0be133036f14e109412fa594edc2f77227249db66cc3ed"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "memmap2"
+version = "0.9.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0"
 dependencies = [
  "libc",
 ]
@@ -7937,7 +7966,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13867d259930edc7091a6c41b4ce6eee464328c6ff9659b7e4c668ca20d4c91e"
 dependencies = [
  "libc",
- "memmap2",
+ "memmap2 0.8.0",
+ "xkeysym",
+]
+
+[[package]]
+name = "xkbcommon"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7a974f48060a14e95705c01f24ad9c3345022f4d97441b8a36beb7ed5c4a02d"
+dependencies = [
+ "libc",
+ "memmap2 0.9.11",
  "xkeysym",
 ]
 

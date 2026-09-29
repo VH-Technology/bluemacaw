@@ -4,7 +4,13 @@ use std::sync::Mutex;
 use std::thread::sleep;
 use std::time::Duration;
 
+#[cfg(not(target_os = "macos"))]
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+pub use macos::PASTE_EVENT_MARKER;
 
 use crate::clipboard::Clipboard;
 
@@ -57,6 +63,12 @@ impl<C: Clipboard> EnigoPaster<C> {
     /// Send the platform paste keystroke (Cmd+V on macOS, Ctrl+V elsewhere).
     /// Split out so it's swappable and so the clipboard write can be
     /// exercised independently.
+    #[cfg(target_os = "macos")]
+    fn send_paste_keystroke(&self) -> Result<(), String> {
+        macos::send_paste_keystroke()
+    }
+
+    #[cfg(not(target_os = "macos"))]
     fn send_paste_keystroke(&self) -> Result<(), String> {
         let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
         let modifier = if cfg!(target_os = "macos") {
