@@ -16,7 +16,8 @@ Examples:
 - `secrets/mod.rs` — `InMemoryVault` get/set/delete semantics; `SecretKey::Debug` redaction.
 - `audio/microphone.rs` — WAV encoding (`encode_wav_pcm16`) round-trip; session bookkeeping; peak-level reset on read; poisoned-mutex behaviour.
 - `clipboard/mod.rs` — `InMemoryClipboard` read/write/overwrite + trait-object behaviour.
-- `paste/mod.rs` — `RecordingPaster` records each call; `EnigoPaster` writes through to the trait object.
+- `paste/mod.rs` — `RecordingPaster` records calls and writes the test clipboard. `paste/macos.rs` tests the production shortcut sequencing with injected key-operation failures, including Command cleanup and permission-error mapping. Native event delivery is checked separately with the probe below.
+- `shortcut/macos_fn.rs` / `shortcut/macos_chord.rs` — synthetic paste events cannot retrigger or corrupt physical Fn/chord/double-tap state.
 - `shortcut/parse.rs` — combo parser / formatter round-trips, case insensitivity, alias normalisation (Option/Alt, Cmd/Meta), function/arrow keys, exhaustive modifier combinations.
 - `audio/permissions/mod.rs` — the platform module is wired up and returns *some* `PermissionState`. We deliberately do not assert which, because CI runners and dev machines differ.
 
@@ -106,6 +107,37 @@ A missing-coverage failure is not a CI gate today — we surface the report and 
 - **Cross-module flow without OS dependencies** → Integration layer.
 - **End-to-end transcribe-style flow** → Functional layer with MSW.
 - **OS-level behavior** — `cpal` actually capturing audio, `keyring` actually writing the keychain — is exercised manually via `/dev-desktop` and `/build-clean`. There is no automated harness for OS-level behavior; that's a deliberate scope decision (the cost of CI runners with real mics + keychains exceeds the value at v1).
+
+## macOS native paste probe
+
+`packages/desktop/src-tauri/examples/paste_probe.rs` runs the production
+`EnigoPaster` on the main thread, with a `pbcopy`/`pbpaste` clipboard adapter and
+a listen-only event tap. It captures only this process's tagged paste events
+(keycodes, flags, source IDs, and timing), not unrelated typing or clipboard
+contents. It is an opt-in diagnostic, not part of the unattended test suite.
+
+From `packages/desktop/src-tauri`:
+
+```sh
+cargo run --example paste_probe -- --check-permissions
+cargo run --example paste_probe -- 100
+```
+
+The probe's host process needs Accessibility and Input Monitoring. After the
+five-second countdown it pastes numbered lines into the focused field and
+checks that both V events carry Command without other shortcut modifiers,
+the event source is private, and the final Command release is present.
+
+Focus a disposable text field before the countdown ends. Run once with the
+pointer stationary and again while moving the physical mouse. Also check
+physical hotkey releases near completion and held modifiers. Verify exactly
+one complete numbered line per request in the receiving field: observing
+events alone does not prove the application accepted the paste.
+
+Repeat in TextEdit, a browser text area, and an Electron editor, including
+selection replacement and non-US/Dvorak layouts. Test the actual app with Fn,
+modifier chords, and double-tap Command to confirm paste never toggles recording
+and physical modifiers continue working afterward.
 
 ## Spec cross-reference
 

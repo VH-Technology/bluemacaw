@@ -33,7 +33,7 @@ use super::{HotkeyCombo, ShortcutError, ShortcutManager};
 use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop};
 use core_graphics::event::{
     CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement,
-    CGEventType,
+    CGEventType, EventField,
 };
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -84,10 +84,15 @@ struct TapState {
 }
 
 impl MacOsChordTap {
-    pub fn new<F: Fn() + Send + Sync + 'static>(on_toggle: F, mode_combo: &HotkeyCombo) -> Result<Self, ShortcutError> {
+    pub fn new<F: Fn() + Send + Sync + 'static>(
+        on_toggle: F,
+        mode_combo: &HotkeyCombo,
+    ) -> Result<Self, ShortcutError> {
         let mode = match mode_combo {
             HotkeyCombo::ModifiersOnly { mods } => ChordMode::ModifiersOnly { mods: *mods },
-            HotkeyCombo::DoubleTap { modifier } => ChordMode::DoubleTap { modifier: *modifier },
+            HotkeyCombo::DoubleTap { modifier } => ChordMode::DoubleTap {
+                modifier: *modifier,
+            },
             _ => {
                 return Err(ShortcutError::Backend(
                     "MacOsChordTap only handles ModifiersOnly / DoubleTap combos".into(),
@@ -124,28 +129,15 @@ impl MacOsChordTap {
                 CGEventTapOptions::ListenOnly,
                 vec![CGEventType::FlagsChanged, CGEventType::KeyDown],
                 move |_proxy, etype, event| {
-                    let flags = event.get_flags().bits();
                     let mut runtime = arm_for_cb.lock().unwrap();
-                    match etype {
-                        CGEventType::FlagsChanged => {
-                            handle_flags_changed(
-                                &mut runtime,
-                                mode,
-                                flags,
-                                on_toggle_for_cb.as_ref(),
-                            );
-                        }
-                        CGEventType::KeyDown => {
-                            // Any non-modifier press resets the chord
-                            // detection so a Cmd+Opt+S chord doesn't
-                            // also fire the Cmd+Opt modifier-only
-                            // chord, and a Cmd+S keypress doesn't get
-                            // misread as the second tap of a Cmd
-                            // double-tap.
-                            runtime.invalidate();
-                        }
-                        _ => {}
-                    }
+                    handle_event(
+                        &mut runtime,
+                        mode,
+                        etype,
+                        event.get_flags().bits(),
+                        event.get_integer_value_field(EventField::EVENT_SOURCE_USER_DATA),
+                        on_toggle_for_cb.as_ref(),
+                    );
                     None
                 },
             );
@@ -178,9 +170,9 @@ impl MacOsChordTap {
             }
         });
 
-        let setup = rx
-            .recv()
-            .map_err(|_| ShortcutError::Backend("chord tap thread terminated before setup".into()))?;
+        let setup = rx.recv().map_err(|_| {
+            ShortcutError::Backend("chord tap thread terminated before setup".into())
+        })?;
         setup?;
         self.state.lock().unwrap().thread = Some(handle);
         Ok(())
@@ -256,6 +248,27 @@ impl ChordRuntime {
     }
 }
 
+fn handle_event(
+    runtime: &mut ChordRuntime,
+    mode: ChordMode,
+    event_type: CGEventType,
+    flags: u64,
+    source_user_data: i64,
+    on_toggle: &dyn Fn(),
+) {
+    // Synthetic paste must not complete a double-tap, rearm a chord, or
+    // invalidate a physical gesture. Filter before touching runtime state.
+    if source_user_data == crate::paste::PASTE_EVENT_MARKER {
+        return;
+    }
+    match event_type {
+        CGEventType::FlagsChanged => handle_flags_changed(runtime, mode, flags, on_toggle),
+        // A physical non-modifier key invalidates a pending chord/double-tap.
+        CGEventType::KeyDown => runtime.invalidate(),
+        _ => {}
+    }
+}
+
 fn flags_to_modifier_set(flags: u64) -> u8 {
     let mut out = 0u8;
     if (flags & FLAG_CMD) != 0 {
@@ -273,12 +286,8 @@ fn flags_to_modifier_set(flags: u64) -> u8 {
     out
 }
 
-fn handle_flags_changed<F>(
-    runtime: &mut ChordRuntime,
-    mode: ChordMode,
-    flags: u64,
-    on_toggle: &F,
-) where
+fn handle_flags_changed<F>(runtime: &mut ChordRuntime, mode: ChordMode, flags: u64, on_toggle: &F)
+where
     F: Fn() + ?Sized,
 {
     let current = flags_to_modifier_set(flags);
@@ -314,9 +323,7 @@ fn handle_flags_changed<F>(
             if press && !runtime.poisoned {
                 if let Some(last) = runtime.last_release {
                     if last.elapsed() <= DOUBLE_TAP_WINDOW {
-                        log::info!(
-                            "chord tap: double-tap fired (modifier=0x{modifier:x})"
-                        );
+                        log::info!("chord tap: double-tap fired (modifier=0x{modifier:x})");
                         on_toggle();
                         runtime.last_release = None;
                         runtime.last_held = exactly_target;
@@ -354,6 +361,90 @@ fn handle_flags_changed<F>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::paste::PASTE_EVENT_MARKER;
+    use std::cell::Cell;
+
+    #[test]
+    fn paste_command_does_not_complete_a_physical_double_tap() {
+        let count = Cell::new(0);
+        let cb = || count.set(count.get() + 1);
+        let mode = ChordMode::DoubleTap {
+            modifier: ModifierSet::CMD,
+        };
+        let mut rt = ChordRuntime::new();
+        handle_event(&mut rt, mode, CGEventType::FlagsChanged, FLAG_CMD, 0, &cb);
+        handle_event(&mut rt, mode, CGEventType::FlagsChanged, 0, 0, &cb);
+        handle_event(
+            &mut rt,
+            mode,
+            CGEventType::FlagsChanged,
+            FLAG_CMD,
+            PASTE_EVENT_MARKER,
+            &cb,
+        );
+        assert_eq!(count.get(), 0);
+        assert!(!rt.last_held);
+        // The next real press still completes the user's double-tap.
+        handle_event(&mut rt, mode, CGEventType::FlagsChanged, FLAG_CMD, 0, &cb);
+        assert_eq!(count.get(), 1);
+    }
+
+    #[test]
+    fn paste_v_does_not_invalidate_a_physical_double_tap() {
+        let count = Cell::new(0);
+        let cb = || count.set(count.get() + 1);
+        let mode = ChordMode::DoubleTap {
+            modifier: ModifierSet::CMD,
+        };
+        let mut rt = ChordRuntime::new();
+        handle_event(&mut rt, mode, CGEventType::FlagsChanged, FLAG_CMD, 0, &cb);
+        handle_event(&mut rt, mode, CGEventType::FlagsChanged, 0, 0, &cb);
+        handle_event(
+            &mut rt,
+            mode,
+            CGEventType::KeyDown,
+            FLAG_CMD,
+            PASTE_EVENT_MARKER,
+            &cb,
+        );
+        handle_event(&mut rt, mode, CGEventType::FlagsChanged, FLAG_CMD, 0, &cb);
+        assert_eq!(count.get(), 1);
+    }
+
+    #[test]
+    fn paste_release_does_not_rearm_a_held_modifier_chord() {
+        let count = Cell::new(0);
+        let cb = || count.set(count.get() + 1);
+        let mode = ChordMode::ModifiersOnly {
+            mods: ModifierSet::CMD | ModifierSet::ALT,
+        };
+        let mut rt = ChordRuntime::new();
+        handle_event(
+            &mut rt,
+            mode,
+            CGEventType::FlagsChanged,
+            FLAG_CMD | FLAG_ALT,
+            0,
+            &cb,
+        );
+        handle_event(
+            &mut rt,
+            mode,
+            CGEventType::FlagsChanged,
+            0,
+            PASTE_EVENT_MARKER,
+            &cb,
+        );
+        handle_event(
+            &mut rt,
+            mode,
+            CGEventType::FlagsChanged,
+            FLAG_CMD | FLAG_ALT,
+            0,
+            &cb,
+        );
+        assert_eq!(count.get(), 1);
+    }
 
     #[test]
     fn flag_constants_align_with_cgevent_constants() {
@@ -369,7 +460,10 @@ mod tests {
     fn flags_to_modifier_set_maps_each_bit() {
         assert_eq!(flags_to_modifier_set(0), 0);
         assert_eq!(flags_to_modifier_set(FLAG_CMD), ModifierSet::CMD);
-        assert_eq!(flags_to_modifier_set(FLAG_CMD | FLAG_ALT), ModifierSet::CMD | ModifierSet::ALT);
+        assert_eq!(
+            flags_to_modifier_set(FLAG_CMD | FLAG_ALT),
+            ModifierSet::CMD | ModifierSet::ALT
+        );
     }
 
     #[test]
@@ -399,7 +493,9 @@ mod tests {
         let cb: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
             *count_c.lock().unwrap() += 1;
         });
-        let mode = ChordMode::ModifiersOnly { mods: ModifierSet::CMD | ModifierSet::ALT };
+        let mode = ChordMode::ModifiersOnly {
+            mods: ModifierSet::CMD | ModifierSet::ALT,
+        };
         let mut rt = ChordRuntime::new();
 
         // Press Cmd+Opt simultaneously — fires once.
@@ -424,7 +520,9 @@ mod tests {
         let cb: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
             *count_c.lock().unwrap() += 1;
         });
-        let mode = ChordMode::ModifiersOnly { mods: ModifierSet::CMD | ModifierSet::ALT };
+        let mode = ChordMode::ModifiersOnly {
+            mods: ModifierSet::CMD | ModifierSet::ALT,
+        };
         let mut rt = ChordRuntime::new();
 
         // Cmd+Opt+Shift held — NOT an exact match, so don't fire.
@@ -439,7 +537,9 @@ mod tests {
         let cb: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
             *count_c.lock().unwrap() += 1;
         });
-        let mode = ChordMode::ModifiersOnly { mods: ModifierSet::CMD | ModifierSet::ALT };
+        let mode = ChordMode::ModifiersOnly {
+            mods: ModifierSet::CMD | ModifierSet::ALT,
+        };
         let mut rt = ChordRuntime::new();
 
         handle_flags_changed(&mut rt, mode, FLAG_CMD, &*cb);
@@ -453,7 +553,9 @@ mod tests {
         let cb: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
             *count_c.lock().unwrap() += 1;
         });
-        let mode = ChordMode::DoubleTap { modifier: ModifierSet::CMD };
+        let mode = ChordMode::DoubleTap {
+            modifier: ModifierSet::CMD,
+        };
         let mut rt = ChordRuntime::new();
 
         // Press Cmd, release Cmd.
@@ -469,7 +571,9 @@ mod tests {
         let cb: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
             *count_c.lock().unwrap() += 1;
         });
-        let mode = ChordMode::DoubleTap { modifier: ModifierSet::CMD };
+        let mode = ChordMode::DoubleTap {
+            modifier: ModifierSet::CMD,
+        };
         let mut rt = ChordRuntime::new();
 
         // Tap 1
@@ -488,7 +592,9 @@ mod tests {
         let cb: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
             *count_c.lock().unwrap() += 1;
         });
-        let mode = ChordMode::DoubleTap { modifier: ModifierSet::CMD };
+        let mode = ChordMode::DoubleTap {
+            modifier: ModifierSet::CMD,
+        };
         let mut rt = ChordRuntime::new();
 
         // Tap 1: Cmd down, Cmd up
@@ -512,7 +618,9 @@ mod tests {
         let cb: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
             *count_c.lock().unwrap() += 1;
         });
-        let mode = ChordMode::ModifiersOnly { mods: ModifierSet::CMD | ModifierSet::ALT };
+        let mode = ChordMode::ModifiersOnly {
+            mods: ModifierSet::CMD | ModifierSet::ALT,
+        };
         let mut rt = ChordRuntime::new();
 
         // A non-modifier KeyDown arrived (e.g. user pressed S), so

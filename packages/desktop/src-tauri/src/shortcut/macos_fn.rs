@@ -23,7 +23,7 @@ use super::{HotkeyCombo, ShortcutError, ShortcutManager};
 use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop};
 use core_graphics::event::{
     CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement,
-    CGEventType,
+    CGEventType, EventField,
 };
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -73,26 +73,13 @@ impl MacOsFnTap {
                 CGEventTapOptions::ListenOnly,
                 vec![CGEventType::FlagsChanged],
                 move |_proxy, _etype, event| {
-                    let raw_flags = event.get_flags().bits();
-                    let fn_pressed = (raw_flags & FN_FLAG_MASK) != 0;
-                    // Trace every FlagsChanged we observe so we can
-                    // distinguish "tap never fires" from "tap fires but Fn
-                    // bit isn't set" (the latter means the system mapped
-                    // Fn to language-switch or similar — see System
-                    // Settings → Keyboard → "Press 🌐 key to:").
-                    log::debug!(
-                        "Fn tap event: raw_flags=0x{raw_flags:x} fn_pressed={fn_pressed}"
-                    );
                     let mut last = prev_for_cb.lock().unwrap();
-                    if fn_pressed != *last {
-                        *last = fn_pressed;
-                        if fn_pressed {
-                            log::info!("Fn key pressed — firing toggle");
-                            (on_toggle_for_cb)();
-                        } else {
-                            log::debug!("Fn key released");
-                        }
-                    }
+                    handle_flags_changed(
+                        &mut last,
+                        event.get_flags().bits(),
+                        event.get_integer_value_field(EventField::EVENT_SOURCE_USER_DATA),
+                        on_toggle_for_cb.as_ref(),
+                    );
                     // ListenOnly tap: returning Some passes through
                     // unchanged. We never want to consume the event.
                     None
@@ -166,9 +153,48 @@ impl ShortcutManager for MacOsFnTap {
     }
 }
 
+fn handle_flags_changed(
+    last: &mut bool,
+    raw_flags: u64,
+    source_user_data: i64,
+    on_toggle: &dyn Fn(),
+) {
+    // Private-source paste flags intentionally omit physically held Fn.
+    // Treating them as a real release would make the next Fn event refire.
+    if source_user_data == crate::paste::PASTE_EVENT_MARKER {
+        return;
+    }
+    let fn_pressed = (raw_flags & FN_FLAG_MASK) != 0;
+    log::debug!("Fn tap event: raw_flags=0x{raw_flags:x} fn_pressed={fn_pressed}");
+    if fn_pressed != *last {
+        *last = fn_pressed;
+        if fn_pressed {
+            log::info!("Fn key pressed — firing toggle");
+            on_toggle();
+        } else {
+            log::debug!("Fn key released");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn paste_flags_do_not_release_a_physically_held_fn_key() {
+        let count = std::cell::Cell::new(0);
+        let cb = || count.set(count.get() + 1);
+        let mut last = false;
+        handle_flags_changed(&mut last, FN_FLAG_MASK, 0, &cb);
+        handle_flags_changed(&mut last, 0, crate::paste::PASTE_EVENT_MARKER, &cb);
+        handle_flags_changed(&mut last, FN_FLAG_MASK, 0, &cb);
+        assert_eq!(count.get(), 1);
+        // A real release/press should still fire again.
+        handle_flags_changed(&mut last, 0, 0, &cb);
+        handle_flags_changed(&mut last, FN_FLAG_MASK, 0, &cb);
+        assert_eq!(count.get(), 2);
+    }
 
     #[test]
     fn fn_flag_mask_matches_secondary_fn_constant() {
@@ -187,7 +213,10 @@ mod tests {
             })
             .unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("MacOsFnTap only supports Fn combos"), "got: {msg}");
+        assert!(
+            msg.contains("MacOsFnTap only supports Fn combos"),
+            "got: {msg}"
+        );
     }
 
     #[test]

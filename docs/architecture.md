@@ -39,6 +39,7 @@ There is no Node runtime in the renderer. There is no preload script. Tauri's ca
 | `overlay_panel.rs` | macOS-only. Converts the overlay `NSWindow` into a non-activating `NSPanel` so clicks on the recording pill don't steal focus from the app being dictated into. |
 | `clipboard/mod.rs` | `Clipboard` trait + `TauriClipboard` (production, via `tauri-plugin-clipboard-manager`) + `InMemoryClipboard` (test). |
 | `paste/mod.rs` | `Paster` trait + `EnigoPaster` (writes clipboard, posts `Cmd/Ctrl+V` via `enigo`). |
+| `paste/macos.rs` | macOS-only Enigo 0.6.1 sender: private CoreGraphics source, explicit Command flags, tagged events, and Command-release cleanup on failure. Windows uses Enigo 0.2.1. |
 
 Migration SQL lives in `packages/desktop/src-tauri/migrations/` (`0001_init.sql`, `0002_provider_configs.sql`).
 
@@ -150,7 +151,9 @@ sequenceDiagram
 
 Text cleanup is disabled by default. When enabled in Settings, `cleanup-transcript.ts` resolves the selected OpenAI key just in time, removes speech fillers, and strips a matching pair of quotes only when they wrap the entire result. Cleanup errors and timeouts fail open to the raw transcript. Both paste and history use the resulting final text. The nullable OpenAI key id is stored in the generic `app_state` table under `transcript_cleanup_openai_api_key_id`; the configurable model and prompt are stored together under `transcript_cleanup_options`, with `gpt-4o-mini` and the built-in safe cleanup prompt used when that row is absent or malformed. No API key material is stored in SQLite.
 
-If paste fails (e.g. macOS Accessibility revoked, or Windows synthetic keystrokes fail), the text still lands on the clipboard and the history row is still saved. The error marker is translated into a UI-friendly message in `recording-controller.ts`.
+If paste fails (e.g. macOS Accessibility revoked, or Windows synthetic keystrokes fail), the history row is still saved. Text already written to the clipboard remains available for manual paste; the macOS Accessibility preflight can fail before the clipboard write. The error marker is translated into a UI-friendly message in `recording-controller.ts`.
+
+On macOS, paste uses a private CoreGraphics event source and explicit Command flags on V-down/V-up, so physical mouse/key input cannot clear the shortcut's synthetic modifier. `PASTE_EVENT_MARKER` tags these events; the Fn/chord/double-tap listeners ignore them before updating their state. The sender attempts Command release even when V fails and does not retry a potentially completed paste. The Tauri command remains synchronous for HIToolbox keyboard-layout lookup, and the 80 ms clipboard-settle delay is independent of modifier handling. See the native paste probe in [`testing.md`](./testing.md) for OS-level validation.
 
 For *why* each privileged step is gated, see [`permissions.md`](./permissions.md). For how the key reaches `experimental_transcribe`, see [`secrets.md`](./secrets.md). For adding a tenth provider, see [`providers.md`](./providers.md).
 
