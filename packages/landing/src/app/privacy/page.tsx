@@ -48,6 +48,11 @@ export default function PrivacyPage() {
                         asks OpenAI not to store the response, and falls back to the raw transcript
                         if cleanup fails.
                     </p>
+                    <p>
+                        On macOS 27 and later you can run cleanup on-device instead, with Apple
+                        Intelligence. The transcript is processed by Apple&apos;s on-device model
+                        and never leaves your Mac.
+                    </p>
                     <h2>History</h2>
                     <p>
                         Transcribed text is stored locally in a SQLite database in your app data

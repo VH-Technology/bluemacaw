@@ -23,6 +23,8 @@ import {
     deleteModelConfig,
     getActiveLocalModelId,
     getActiveModelConfigId,
+    getAppleIntelligenceCleanupEnabled,
+    getAppleIntelligenceCleanupPrompt,
     getHistoryLastSweep,
     getHistoryStats,
     getHotkeyCombo,
@@ -45,6 +47,8 @@ import {
     saveTranscription,
     setActiveLocalModelId,
     setActiveModelConfigId,
+    setAppleIntelligenceCleanupEnabled,
+    setAppleIntelligenceCleanupPrompt,
     setHistoryLastSweep,
     setHotkeyCombo,
     setOriginalFnUsageType,
@@ -511,6 +515,71 @@ describe('db.transcriptCleanupOptions', () => {
         await expect(
             setTranscriptCleanupOptions({ modelId: 'gpt-4o-mini', prompt: ' ' }),
         ).rejects.toThrow(/prompt/i);
+    });
+});
+
+describe('db.appleIntelligenceCleanup', () => {
+    it('is disabled by default', async () => {
+        await expect(getAppleIntelligenceCleanupEnabled()).resolves.toBe(false);
+    });
+
+    it('round-trips the enabled flag', async () => {
+        await setAppleIntelligenceCleanupEnabled(true);
+        await expect(getAppleIntelligenceCleanupEnabled()).resolves.toBe(true);
+
+        await setAppleIntelligenceCleanupEnabled(false);
+        await expect(getAppleIntelligenceCleanupEnabled()).resolves.toBe(false);
+    });
+
+    it('turns OpenAI cleanup off when enabled, so only one engine runs', async () => {
+        const key = await addApiKey({ providerId: 'openai', nickname: 'Cleanup', secret: 'sk' });
+        await setTranscriptCleanupApiKeyId(key.id);
+
+        await setAppleIntelligenceCleanupEnabled(true);
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+        await expect(getAppleIntelligenceCleanupEnabled()).resolves.toBe(true);
+    });
+
+    it('is turned off when OpenAI cleanup is enabled', async () => {
+        const key = await addApiKey({ providerId: 'openai', nickname: 'Cleanup', secret: 'sk' });
+        await setAppleIntelligenceCleanupEnabled(true);
+
+        await setTranscriptCleanupApiKeyId(key.id);
+
+        await expect(getAppleIntelligenceCleanupEnabled()).resolves.toBe(false);
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBe(key.id);
+    });
+
+    it('stays on when OpenAI cleanup is merely disabled', async () => {
+        await setAppleIntelligenceCleanupEnabled(true);
+
+        await setTranscriptCleanupApiKeyId(null);
+
+        await expect(getAppleIntelligenceCleanupEnabled()).resolves.toBe(true);
+    });
+
+    it('defaults to the grammar and filler cleanup prompt', async () => {
+        await expect(getAppleIntelligenceCleanupPrompt()).resolves.toMatch(/grammar/i);
+        await expect(getAppleIntelligenceCleanupPrompt()).resolves.toMatch(/filler words/i);
+    });
+
+    it('round-trips a trimmed custom prompt', async () => {
+        await setAppleIntelligenceCleanupPrompt('  Fix typos only.  ');
+
+        await expect(getAppleIntelligenceCleanupPrompt()).resolves.toBe('Fix typos only.');
+    });
+
+    it('rejects a blank prompt', async () => {
+        await expect(setAppleIntelligenceCleanupPrompt('   ')).rejects.toThrow(/prompt/i);
+    });
+
+    it('falls back to the default prompt when the stored one is blank', async () => {
+        await getSharedHarness().execute(
+            "INSERT INTO app_state (key, value) VALUES ('transcript_cleanup_apple_intelligence_prompt', '  ')",
+        );
+
+        await expect(getAppleIntelligenceCleanupPrompt()).resolves.toMatch(/filler words/i);
     });
 });
 

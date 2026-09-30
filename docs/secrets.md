@@ -37,6 +37,8 @@ Text cleanup is disabled by default. When a user enables it and selects an exist
 
 The selected key UUID is stored in SQLite as the `app_state` value `transcript_cleanup_openai_api_key_id`. Deleting that API key also disables cleanup. The transcript necessarily exists in webview memory before and after the request; neither the key nor an additional raw-transcript copy is persisted by the cleanup feature.
 
+On macOS 27 and later, cleanup can run on-device with Apple Intelligence instead. That engine needs no key and makes no network request. The webview passes the transcript to the Rust side, which hands it to the bundled `bluemacaw-apple-intelligence` sidecar over stdin, never argv, so other processes can't read it from `ps`. Apple's on-device model processes it locally. Only one engine is active at a time; enabling on-device cleanup clears `transcript_cleanup_openai_api_key_id`. Neither the sidecar nor the cleanup feature persists the transcript.
+
 ## Defense in depth
 
 ### Zeroization
@@ -75,7 +77,7 @@ The Rust crate uses `env_logger` (initialized in `lib.rs`). Log lines come from 
 | Plaintext keys in app log files | All log call sites use `Debug`; a key never appears in formatted output. |
 | Stolen disk image | Keys live in OS keychain (encrypted at rest with the user's login credentials) — not in the SQLite db, not in `tauri-plugin-store`'s `settings.dat`. |
 | Accidental telemetry leak | No telemetry exists. |
-| Optional cleanup discloses transcript text to another provider | Disabled by default, requires an explicitly selected OpenAI key, is disclosed in Settings, and sends requests directly to OpenAI with `store: false`. |
+| Optional cleanup discloses transcript text to another provider | Disabled by default, requires an explicitly selected OpenAI key, is disclosed in Settings, and sends requests directly to OpenAI with `store: false`. The on-device engine (macOS 27+) keeps transcripts on the Mac. |
 
 ### Out of scope (v1)
 

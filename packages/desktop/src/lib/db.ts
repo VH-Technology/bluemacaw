@@ -1,7 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
 import Database from '@tauri-apps/plugin-sql';
 import { modelPricePerMinute } from '../providers/util';
-import { type TranscriptCleanupOptions, defaultTranscriptCleanupOptions } from './cleanup-config';
+import {
+    DEFAULT_APPLE_INTELLIGENCE_CLEANUP_PROMPT,
+    type TranscriptCleanupOptions,
+    defaultTranscriptCleanupOptions,
+} from './cleanup-config';
 import { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_OTHER } from './defaults';
 import { getPlatform } from './use-platform';
 import type { Theme } from './use-theme';
@@ -36,6 +40,8 @@ const HISTORY_LAST_SWEEP_KEY = 'history_last_sweep';
 const THEME_KEY = 'theme';
 const TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY = 'transcript_cleanup_openai_api_key_id';
 const TRANSCRIPT_CLEANUP_OPTIONS_KEY = 'transcript_cleanup_options';
+const APPLE_INTELLIGENCE_CLEANUP_ENABLED_KEY = 'transcript_cleanup_apple_intelligence_enabled';
+const APPLE_INTELLIGENCE_CLEANUP_PROMPT_KEY = 'transcript_cleanup_apple_intelligence_prompt';
 const SOFT_DELETE_GRACE_DAYS = 30;
 
 export interface ApiKeyRow {
@@ -195,9 +201,57 @@ export async function setTranscriptCleanupApiKeyId(id: string | null): Promise<v
         throw new Error('Transcript cleanup requires an OpenAI API key');
     }
 
+    // Only one cleanup engine runs. Turn the other one off first so a failed
+    // write leaves cleanup off rather than both engines on.
+    await setAppleIntelligenceCleanupEnabled(false);
     await conn.execute(
         'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
         [TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY, id],
+    );
+}
+
+export async function getAppleIntelligenceCleanupEnabled(): Promise<boolean> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        APPLE_INTELLIGENCE_CLEANUP_ENABLED_KEY,
+    ])) as { value: string }[];
+    return rows[0]?.value === 'true';
+}
+
+/**
+ * Turn on-device cleanup on or off. Enabling it turns OpenAI cleanup off
+ * (clears its key id), so at most one engine is ever active.
+ */
+export async function setAppleIntelligenceCleanupEnabled(enabled: boolean): Promise<void> {
+    const conn = await db();
+    if (enabled) {
+        await conn.execute('DELETE FROM app_state WHERE key = ?', [
+            TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY,
+        ]);
+    }
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [APPLE_INTELLIGENCE_CLEANUP_ENABLED_KEY, enabled ? 'true' : 'false'],
+    );
+}
+
+export async function getAppleIntelligenceCleanupPrompt(): Promise<string> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        APPLE_INTELLIGENCE_CLEANUP_PROMPT_KEY,
+    ])) as { value: string }[];
+    const prompt = rows[0]?.value.trim();
+    return prompt || DEFAULT_APPLE_INTELLIGENCE_CLEANUP_PROMPT;
+}
+
+export async function setAppleIntelligenceCleanupPrompt(prompt: string): Promise<void> {
+    const trimmed = prompt.trim();
+    if (!trimmed) throw new Error('Transcript cleanup prompt cannot be blank');
+
+    const conn = await db();
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [APPLE_INTELLIGENCE_CLEANUP_PROMPT_KEY, trimmed],
     );
 }
 

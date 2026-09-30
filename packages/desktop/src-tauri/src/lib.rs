@@ -1,3 +1,4 @@
+pub mod apple_intelligence;
 pub mod audio;
 pub mod clipboard;
 pub mod commands;
@@ -93,6 +94,8 @@ pub fn run() {
             commands::transcribe_local,
             commands::list_local_models,
             commands::delete_local_model,
+            commands::get_apple_intelligence_status,
+            commands::generate_with_apple_intelligence,
             commands::present_overlay,
             commands::duck_system_volume,
             commands::restore_system_volume,

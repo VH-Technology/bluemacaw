@@ -16,7 +16,7 @@ Cross-platform speech-to-text desktop app. Press a global shortcut, dictate, get
 
 ## Why bluemacaw
 
-- **Bring your own key.** Your API keys live in your OS keychain. Audio goes only to the STT provider you chose; optional transcript cleanup goes directly to OpenAI only when enabled. No bluemacaw backend.
+- **Bring your own key.** Your API keys live in your OS keychain. Audio goes only to the STT provider you chose; optional transcript cleanup goes directly to OpenAI only when enabled, or stays on-device with Apple Intelligence on macOS 27+. No bluemacaw backend.
 - **Multi-provider.** Pick the model that fits: OpenAI Whisper, Groq's distil-whisper, Deepgram Nova, AssemblyAI, ElevenLabs Scribe, and more.
 - **Cross-platform.** macOS, Windows. Same shortcut. Same UX.
 - **Open source (Apache 2.0).** Read the code. Verify the privacy story.

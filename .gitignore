@@ -7,6 +7,8 @@ packages/*/out/
 packages/*/build/
 packages/*/.next/
 packages/desktop/src-tauri/target/
+# Sidecars compiled by src-tauri/build.rs (Tauri externalBin convention)
+packages/desktop/src-tauri/binaries/
 dist/
 
 # Test artifacts

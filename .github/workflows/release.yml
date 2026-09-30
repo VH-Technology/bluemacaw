@@ -80,7 +80,9 @@ jobs:
         # them with MSRV walls from `darling` and others.
         platform:
           - name: macos-universal
-            os: macos-14
+            # Xcode 26+ is required for FoundationModels (on-device Apple
+            # Intelligence cleanup). macos-14 images top out below that.
+            os: macos-26
             args: --target universal-apple-darwin
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
             rust-toolchain: stable
@@ -111,10 +113,12 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             packages/desktop/src-tauri/target
-          key: ${{ matrix.platform.name }}-cargo-release-${{ hashFiles('packages/desktop/src-tauri/Cargo.lock', 'packages/desktop/src-tauri/Cargo.toml') }}
+          # Keyed on the runner image too: a target/ cached on another image
+          # carries CMake builds (whisper.cpp) pointing at that image's Xcode.
+          key: ${{ matrix.platform.name }}-${{ matrix.platform.os }}-cargo-release-${{ hashFiles('packages/desktop/src-tauri/Cargo.lock', 'packages/desktop/src-tauri/Cargo.toml') }}
           restore-keys: |
-            ${{ matrix.platform.name }}-cargo-release-
-            ${{ matrix.platform.name }}-cargo-
+            ${{ matrix.platform.name }}-${{ matrix.platform.os }}-cargo-release-
+            ${{ matrix.platform.name }}-${{ matrix.platform.os }}-cargo-
 
       # The cache above restores `target/` to speed up builds. That includes
       # `target/.../bundle/`, which holds artifacts from the previous run —
@@ -140,7 +144,7 @@ jobs:
       # and export the env vars notarytool needs. tauri-action picks up
       # APPLE_API_ISSUER/KEY/KEY_PATH from the env automatically.
       - name: Set up notarization API key (macOS)
-        if: matrix.platform.os == 'macos-14'
+        if: runner.os == 'macOS'
         env:
           KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
@@ -174,6 +178,10 @@ jobs:
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS builds fail instead of silently bundling the stub Apple
+          # Intelligence sidecar when the SDK lacks FoundationModels (see
+          # src-tauri/build.rs). Ignored by the Windows build.
+          BLUEMACAW_REQUIRE_FOUNDATION_MODELS: '1'
         with:
           projectPath: packages/desktop
           args: ${{ matrix.platform.args }}
@@ -181,7 +189,7 @@ jobs:
       # Tauri's bundler doesn't notarize the DMG wrapper (only the inner .app).
       # This script submits the DMG to Apple, staples the ticket, and verifies.
       - name: Notarize and staple DMG (macOS)
-        if: matrix.platform.os == 'macos-14'
+        if: runner.os == 'macOS'
         working-directory: packages/desktop
         run: ./scripts/notarize-staple-dmg.sh
 

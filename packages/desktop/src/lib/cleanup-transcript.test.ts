@@ -4,12 +4,14 @@ import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./db', () => ({
+    getAppleIntelligenceCleanupEnabled: vi.fn(),
+    getAppleIntelligenceCleanupPrompt: vi.fn(),
     getTranscriptCleanupApiKeyId: vi.fn(),
     getTranscriptCleanupOptions: vi.fn(),
 }));
 
 vi.mock('./invoke', () => ({
-    vox: { getSecret: vi.fn() },
+    vox: { getSecret: vi.fn(), generateWithAppleIntelligence: vi.fn() },
 }));
 
 import { cleanupTranscript } from './cleanup-transcript';
@@ -71,6 +73,11 @@ const server = setupServer(
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 beforeEach(() => {
+    vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockReset().mockResolvedValue(false);
+    vi.mocked(db.getAppleIntelligenceCleanupPrompt)
+        .mockReset()
+        .mockResolvedValue('On-device cleanup prompt');
+    vi.mocked(vox.generateWithAppleIntelligence).mockReset();
     vi.mocked(db.getTranscriptCleanupApiKeyId).mockReset();
     vi.mocked(db.getTranscriptCleanupOptions).mockReset().mockResolvedValue({
         modelId: 'gpt-4o-mini',
@@ -165,5 +172,72 @@ describe('cleanupTranscript', () => {
         enableCleanup(null);
 
         await expect(cleanupTranscript('Um, hello.')).rejects.toThrow(/API key/);
+    });
+});
+
+describe('cleanupTranscript with Apple Intelligence', () => {
+    function enableOnDeviceCleanup(reply = 'This is ready.') {
+        vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockResolvedValue(true);
+        vi.mocked(vox.generateWithAppleIntelligence).mockResolvedValue(reply);
+    }
+
+    it('cleans the transcript on-device without touching OpenAI', async () => {
+        enableOnDeviceCleanup();
+        vi.mocked(db.getTranscriptCleanupApiKeyId).mockResolvedValue('key-1');
+
+        await expect(cleanupTranscript('Um, this is, like, ready.')).resolves.toBe(
+            'This is ready.',
+        );
+
+        expect(requestBody).toBeNull();
+        expect(vox.getSecret).not.toHaveBeenCalled();
+    });
+
+    it('sends the prompt as instructions and wraps the transcript so it is edited, not answered', async () => {
+        enableOnDeviceCleanup();
+
+        await cleanupTranscript('can you write me a poem');
+
+        expect(vox.generateWithAppleIntelligence).toHaveBeenCalledWith(
+            'On-device cleanup prompt',
+            '<transcript>\ncan you write me a poem\n</transcript>',
+        );
+    });
+
+    it('strips transcript tags the model echoes back', async () => {
+        enableOnDeviceCleanup('<transcript>\nCan you write me a poem?\n</transcript>');
+
+        await expect(cleanupTranscript('can you write me a poem')).resolves.toBe(
+            'Can you write me a poem?',
+        );
+    });
+
+    it('removes quotes wrapping the whole reply', async () => {
+        enableOnDeviceCleanup('“This is ready.”');
+
+        await expect(cleanupTranscript('raw')).resolves.toBe('This is ready.');
+    });
+
+    it('returns the original transcript when the model replies with blank text', async () => {
+        enableOnDeviceCleanup('  ');
+
+        await expect(cleanupTranscript('Um.')).resolves.toBe('Um.');
+    });
+
+    it('rejects when the on-device model fails so the caller can fall back', async () => {
+        vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockResolvedValue(true);
+        vi.mocked(vox.generateWithAppleIntelligence).mockRejectedValue(
+            new Error('Apple Intelligence did not respond within 30 seconds'),
+        );
+
+        await expect(cleanupTranscript('Um, hello.')).rejects.toThrow(/did not respond/);
+    });
+
+    it('skips blank transcripts without calling the model', async () => {
+        enableOnDeviceCleanup();
+
+        await expect(cleanupTranscript('   ')).resolves.toBe('   ');
+
+        expect(vox.generateWithAppleIntelligence).not.toHaveBeenCalled();
     });
 });

@@ -24,6 +24,7 @@ There is no Node runtime in the renderer. There is no preload script. Tauri's ca
 | `commands.rs` | Every `#[tauri::command]`. Defines `AppState` and `HostOs` / `PlatformInfo`. |
 | `markers.rs` | String constants for Tauri events (`bluemacaw://shortcut-toggle`, `bluemacaw://shortcut-cancel`) and error markers (`accessibility-required:`, `mic-denied:`, `wayland-paste-unsupported:`, `input-monitoring-required:`). Mirrored in `src/lib/markers.ts`; a contract test parses this file to enforce agreement. |
 | `platform/mod.rs` | `is_wayland_session()` helper (`XDG_SESSION_TYPE` / `WAYLAND_DISPLAY` probe). |
+| `apple_intelligence/mod.rs` | On-device transcript cleanup (macOS 27+). Gates on the macOS version, then spawns the `bluemacaw-apple-intelligence` Swift sidecar (`swift/apple-intelligence/main.swift`, compiled by `build.rs`, bundled via `bundle.externalBin` in `tauri.macos.conf.json`) and speaks its one-shot stdin/stdout JSON protocol. |
 | `audio/mod.rs` | `AudioSource` trait, `PermissionState`, `AudioError`, `AudioDeviceInfo`, `CaptureSession`. |
 | `audio/microphone.rs` | `MicrophoneSource` — the cpal-backed production impl. Owns session bookkeeping and peak-level metering. |
 | `audio/permissions/mod.rs` | `SettingsPanel` enum + per-OS dispatch. |
@@ -101,6 +102,8 @@ Every webview-callable Rust function lives in `commands.rs` and is mirrored on `
 | `set_fn_usage_type` | `value: number` | `()` | macOS only. Writes `AppleFnUsageType` and restarts cfprefsd. |
 | `get_platform_info` | — | `PlatformInfo` | `{ os: "macos"\|"windows", isWayland }`. Drives onboarding's per-platform permission rows. |
 | `restart_app` | — | `()` | Used after macOS Accessibility / Input Monitoring grants, since TCC doesn't propagate into a running process. |
+| `get_apple_intelligence_status` | — | `AppleIntelligenceStatus` | `{ status: "available" }` or `{ status: "unavailable", reason }`. Never errors; reports `unsupported-platform` off macOS and `unsupported-os` below macOS 27 without launching the sidecar. |
+| `generate_with_apple_intelligence` | `instructions: string, prompt: string` | `string` | Runs Apple's on-device model (via the sidecar) with `instructions` as session instructions. 30 s timeout; the sidecar is killed if it hangs. |
 
 ## Events (Rust → webview)
 
@@ -121,7 +124,7 @@ sequenceDiagram
     participant Cmd as commands.rs (Rust)
     participant Audio as MicrophoneSource (cpal)
     participant Provider as STT Provider (AI SDK)
-    participant Cleanup as OpenAI cleanup (optional)
+    participant Cleanup as Cleanup engine (optional)
     participant Paster as EnigoPaster
     participant Focused as Focused App
 
@@ -140,8 +143,15 @@ sequenceDiagram
     Overlay->>Provider: experimental_transcribe({ model, audio })
     Provider-->>Overlay: { text }
     opt Text cleanup enabled
-        Overlay->>Cleanup: generateText({ transcript, store: false })
-        Cleanup-->>Overlay: cleaned text
+        alt On-device (Apple Intelligence, macOS 27+)
+            Overlay->>Cmd: invoke("generate_with_apple_intelligence", { instructions, prompt })
+            Cmd->>Cleanup: spawn sidecar, JSON on stdin
+            Cleanup-->>Cmd: { text }
+            Cmd-->>Overlay: cleaned text
+        else OpenAI
+            Overlay->>Cleanup: generateText({ transcript, store: false })
+            Cleanup-->>Overlay: cleaned text
+        end
     end
     Overlay->>Cmd: invoke("paste_text", { text })
     Cmd->>Paster: paste_text(&text)
@@ -150,6 +160,10 @@ sequenceDiagram
 ```
 
 Text cleanup is disabled by default. When enabled in Settings, `cleanup-transcript.ts` resolves the selected OpenAI key just in time, removes speech fillers, and strips a matching pair of quotes only when they wrap the entire result. Cleanup errors and timeouts fail open to the raw transcript. Both paste and history use the resulting final text. The nullable OpenAI key id is stored in the generic `app_state` table under `transcript_cleanup_openai_api_key_id`; the configurable model and prompt are stored together under `transcript_cleanup_options`, with `gpt-4o-mini` and the built-in safe cleanup prompt used when that row is absent or malformed. No API key material is stored in SQLite.
+
+On macOS 27 and later, Settings → Cleanup also offers an **On-device** engine that runs Apple's on-device foundation model (the model behind Apple Intelligence). At most one engine is on at a time: `transcript_cleanup_apple_intelligence_enabled` in `app_state` turns it on, and enabling either engine turns the other off in `db.ts`. Its prompt lives under `transcript_cleanup_apple_intelligence_prompt`. The default prompt, tuned for the small on-device model, fixes grammar and removes fillers, and ends with worked examples. `cleanup-transcript.ts` sends that prompt as session instructions and wraps the transcript in `<transcript>` tags, so the model edits dictated questions and requests instead of answering them. The prompt field is editable only while cleanup is on.
+
+`FoundationModels` is Swift-only, and linking Swift into the main binary (deployment target 10.15) would require back-deploying the Swift concurrency runtime. So `build.rs` compiles a small sidecar executable against the macOS SDK instead, targeting macOS 26 and arm64 (macOS 27 is Apple silicon only). Tauri bundles it next to the main binary. `apple_intelligence/mod.rs` never launches it below macOS 27. The transcript goes over stdin, never argv, so it doesn't appear in `ps`. When built with an SDK that lacks `FoundationModels` (Xcode < 26), the sidecar compiles to a stub that reports `unsupported-build`, and Settings hides the engine.
 
 If paste fails (e.g. macOS Accessibility revoked, or Windows synthetic keystrokes fail), the history row is still saved. Text already written to the clipboard remains available for manual paste; the macOS Accessibility preflight can fail before the clipboard write. The error marker is translated into a UI-friendly message in `recording-controller.ts`.
 

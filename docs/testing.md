@@ -20,6 +20,7 @@ Examples:
 - `shortcut/macos_fn.rs` / `shortcut/macos_chord.rs` — synthetic paste events cannot retrigger or corrupt physical Fn/chord/double-tap state.
 - `shortcut/parse.rs` — combo parser / formatter round-trips, case insensitivity, alias normalisation (Option/Alt, Cmd/Meta), function/arrow keys, exhaustive modifier combinations.
 - `audio/permissions/mod.rs` — the platform module is wired up and returns *some* `PermissionState`. We deliberately do not assert which, because CI runners and dev machines differ.
+- `apple_intelligence/mod.rs` — the sidecar protocol, the macOS 27 gate, and process handling (stdin request, error/crash reporting, timeout kill), driven by `/bin/sh` scripts standing in for the Swift sidecar. `real_sidecar_cleans_up_a_transcript` is `#[ignore]`d. It runs the real sidecar against Apple's on-device model; on a macOS 27 Mac with Apple Intelligence on, run `cargo test --lib apple_intelligence -- --ignored`.
 
 History CRUD, retention, and stats live JS-side in `lib/db.ts` rather than in Rust (a divergence from Plan B). They are tested under the Vitest layer below — see `lib/db.test.ts` and the `__tests__/db-harness.ts` helper, which runs against an in-process `better-sqlite3` database with the migration SQL applied per test.
 

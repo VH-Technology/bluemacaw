@@ -8,9 +8,18 @@ vi.mock('@/lib/db', () => ({
     getTranscriptCleanupOptions: vi.fn(),
     setTranscriptCleanupApiKeyId: vi.fn(),
     setTranscriptCleanupOptions: vi.fn(),
+    getAppleIntelligenceCleanupEnabled: vi.fn(),
+    setAppleIntelligenceCleanupEnabled: vi.fn(),
+    getAppleIntelligenceCleanupPrompt: vi.fn(),
+    setAppleIntelligenceCleanupPrompt: vi.fn(),
+}));
+
+vi.mock('@/lib/invoke', () => ({
+    vox: { getAppleIntelligenceStatus: vi.fn() },
 }));
 
 import * as db from '@/lib/db';
+import { vox } from '@/lib/invoke';
 import { SettingsCleanup } from './SettingsCleanup';
 
 const personalKey = {
@@ -39,14 +48,32 @@ beforeEach(() => {
     });
     vi.mocked(db.setTranscriptCleanupApiKeyId).mockReset().mockResolvedValue(undefined);
     vi.mocked(db.setTranscriptCleanupOptions).mockReset().mockResolvedValue(undefined);
+    vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockReset().mockResolvedValue(false);
+    vi.mocked(db.setAppleIntelligenceCleanupEnabled).mockReset().mockResolvedValue(undefined);
+    vi.mocked(db.getAppleIntelligenceCleanupPrompt)
+        .mockReset()
+        .mockResolvedValue('On-device cleanup prompt');
+    vi.mocked(db.setAppleIntelligenceCleanupPrompt).mockReset().mockResolvedValue(undefined);
+    // Not macOS 27: the card behaves as the OpenAI-only cleanup it always was.
+    vi.mocked(vox.getAppleIntelligenceStatus)
+        .mockReset()
+        .mockResolvedValue({ status: 'unavailable', reason: 'unsupported-platform' });
 });
 
-describe('<SettingsCleanup />', () => {
+function onDeviceButton() {
+    return screen.getByRole('button', { name: /^on-device/i });
+}
+
+function openAiButton() {
+    return screen.getByRole('button', { name: /^openai/i });
+}
+
+describe('<SettingsCleanup /> with OpenAI', () => {
     it('shows the privacy disclosure and only OpenAI keys', async () => {
         render(<SettingsCleanup />);
 
-        expect(screen.getByText(/sends each completed transcript to OpenAI/i)).toBeInTheDocument();
         const select = await screen.findByLabelText(/OpenAI API key/i);
+        expect(screen.getByText(/sends each completed transcript to OpenAI/i)).toBeInTheDocument();
         expect(select).toHaveTextContent('Personal');
         expect(select).not.toHaveTextContent('Work');
     });
@@ -67,11 +94,36 @@ describe('<SettingsCleanup />', () => {
         expect(screen.getByLabelText(/Cleanup prompt/i)).toHaveValue('Default cleanup prompt');
     });
 
+    it('locks the model and prompt while cleanup is off', async () => {
+        render(<SettingsCleanup />);
+
+        expect(await screen.findByLabelText(/OpenAI model/i)).toBeDisabled();
+        expect(screen.getByLabelText(/Cleanup prompt/i)).toBeDisabled();
+        expect(screen.getByRole('button', { name: /reset defaults/i })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /save cleanup instructions/i })).toBeDisabled();
+    });
+
+    it('unlocks the model and prompt once cleanup is enabled', async () => {
+        const user = userEvent.setup();
+        render(<SettingsCleanup />);
+        await user.selectOptions(
+            await screen.findByLabelText(/OpenAI API key/i),
+            'openai-personal',
+        );
+
+        await user.click(screen.getByLabelText(/enable text cleanup/i));
+
+        await waitFor(() => expect(screen.getByLabelText(/Cleanup prompt/i)).toBeEnabled());
+        expect(screen.getByLabelText(/OpenAI model/i)).toBeEnabled();
+    });
+
     it('saves a custom model and prompt', async () => {
+        vi.mocked(db.getTranscriptCleanupApiKeyId).mockResolvedValueOnce('openai-personal');
         const user = userEvent.setup();
         render(<SettingsCleanup />);
         const model = await screen.findByLabelText(/OpenAI model/i);
         const prompt = screen.getByLabelText(/Cleanup prompt/i);
+        await waitFor(() => expect(prompt).toBeEnabled());
 
         await user.clear(model);
         await user.type(model, 'gpt-4.1-mini');
@@ -86,6 +138,7 @@ describe('<SettingsCleanup />', () => {
     });
 
     it('resets the model and prompt to defaults', async () => {
+        vi.mocked(db.getTranscriptCleanupApiKeyId).mockResolvedValueOnce('openai-personal');
         vi.mocked(db.getTranscriptCleanupOptions).mockResolvedValueOnce({
             modelId: 'custom-model',
             prompt: 'Custom prompt',
@@ -93,8 +146,10 @@ describe('<SettingsCleanup />', () => {
         const user = userEvent.setup();
         render(<SettingsCleanup />);
         await screen.findByDisplayValue('custom-model');
+        const reset = screen.getByRole('button', { name: /reset defaults/i });
+        await waitFor(() => expect(reset).toBeEnabled());
 
-        await user.click(screen.getByRole('button', { name: /reset defaults/i }));
+        await user.click(reset);
 
         expect(db.setTranscriptCleanupOptions).toHaveBeenCalledWith({
             modelId: 'gpt-4o-mini',
@@ -117,7 +172,6 @@ describe('<SettingsCleanup />', () => {
 
         await user.selectOptions(select, 'openai-personal');
         expect(toggle).not.toBeDisabled();
-
         await user.click(toggle);
 
         await waitFor(() => {
@@ -140,6 +194,7 @@ describe('<SettingsCleanup />', () => {
         const user = userEvent.setup();
         render(<SettingsCleanup />);
         const select = await screen.findByLabelText(/OpenAI API key/i);
+        await waitFor(() => expect(select).toHaveValue('openai-personal'));
 
         await user.selectOptions(select, 'openai-work');
 
@@ -156,6 +211,7 @@ describe('<SettingsCleanup />', () => {
         await user.click(toggle);
 
         expect(db.setTranscriptCleanupApiKeyId).toHaveBeenCalledWith(null);
+        await waitFor(() => expect(screen.getByLabelText(/Cleanup prompt/i)).toBeDisabled());
     });
 
     it('keeps cleanup enabled and shows an error when disabling cannot be persisted', async () => {
@@ -185,10 +241,11 @@ describe('<SettingsCleanup />', () => {
     });
 
     it('reloads available keys when the refresh token changes', async () => {
+        vi.mocked(db.getTranscriptCleanupApiKeyId).mockResolvedValueOnce('openai-personal');
         const user = userEvent.setup();
         const { rerender } = render(<SettingsCleanup refreshToken={0} />);
         const select = await screen.findByLabelText(/OpenAI API key/i);
-        expect(select).toHaveValue('');
+        await waitFor(() => expect(select).toHaveValue('openai-personal'));
         expect(select).toHaveTextContent('Personal');
         await user.clear(screen.getByLabelText(/OpenAI model/i));
         await user.type(screen.getByLabelText(/OpenAI model/i), 'unsaved-model');
@@ -226,16 +283,199 @@ describe('<SettingsCleanup />', () => {
     });
 
     it('clears an options-load error after successfully saving options', async () => {
+        vi.mocked(db.getTranscriptCleanupApiKeyId).mockResolvedValueOnce('openai-personal');
         vi.mocked(db.getTranscriptCleanupOptions).mockRejectedValueOnce(new Error('database busy'));
         const user = userEvent.setup();
         render(<SettingsCleanup />);
         expect(await screen.findByRole('alert')).toHaveTextContent(/database busy/i);
         const model = screen.getByLabelText(/OpenAI model/i);
+        await waitFor(() => expect(model).toBeEnabled());
         await user.clear(model);
         await user.type(model, 'gpt-4.1-mini');
 
         await user.click(screen.getByRole('button', { name: /save cleanup instructions/i }));
 
         await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    });
+
+    it('does not offer on-device cleanup where Apple Intelligence is out of reach', async () => {
+        render(<SettingsCleanup />);
+        await screen.findByLabelText(/OpenAI API key/i);
+
+        expect(screen.queryByRole('button', { name: /^on-device/i })).not.toBeInTheDocument();
+    });
+});
+
+describe('<SettingsCleanup /> with Apple Intelligence', () => {
+    beforeEach(() => {
+        vi.mocked(vox.getAppleIntelligenceStatus).mockResolvedValue({ status: 'available' });
+    });
+
+    it('offers on-device cleanup and picks it by default', async () => {
+        render(<SettingsCleanup />);
+
+        await waitFor(() => expect(onDeviceButton()).toHaveAttribute('aria-pressed', 'true'));
+        expect(openAiButton()).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.queryByLabelText(/OpenAI API key/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/OpenAI model/i)).not.toBeInTheDocument();
+        expect(screen.getByText(/never leave this Mac/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/Cleanup prompt/i)).toHaveValue('On-device cleanup prompt');
+    });
+
+    it('keeps OpenAI selected for people already using OpenAI cleanup', async () => {
+        vi.mocked(db.getTranscriptCleanupApiKeyId).mockResolvedValueOnce('openai-personal');
+        render(<SettingsCleanup />);
+
+        await waitFor(() => expect(openAiButton()).toHaveAttribute('aria-pressed', 'true'));
+        expect(screen.getByLabelText(/OpenAI API key/i)).toHaveValue('openai-personal');
+    });
+
+    it('enables on-device cleanup and unlocks its prompt', async () => {
+        const user = userEvent.setup();
+        render(<SettingsCleanup />);
+        const toggle = screen.getByLabelText(/enable text cleanup/i);
+        await waitFor(() => expect(toggle).toBeEnabled());
+        expect(screen.getByLabelText(/Cleanup prompt/i)).toBeDisabled();
+
+        await user.click(toggle);
+
+        await waitFor(() => {
+            expect(db.setAppleIntelligenceCleanupEnabled).toHaveBeenCalledWith(true);
+            expect(toggle).toHaveAttribute('aria-checked', 'true');
+            expect(screen.getByLabelText(/Cleanup prompt/i)).toBeEnabled();
+        });
+    });
+
+    it('disables on-device cleanup and locks its prompt', async () => {
+        vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockResolvedValueOnce(true);
+        const user = userEvent.setup();
+        render(<SettingsCleanup />);
+        const toggle = screen.getByLabelText(/enable text cleanup/i);
+        await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+
+        await user.click(toggle);
+
+        await waitFor(() => {
+            expect(db.setAppleIntelligenceCleanupEnabled).toHaveBeenCalledWith(false);
+            expect(screen.getByLabelText(/Cleanup prompt/i)).toBeDisabled();
+        });
+    });
+
+    it('saves the on-device prompt without touching the OpenAI options', async () => {
+        vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockResolvedValueOnce(true);
+        const user = userEvent.setup();
+        render(<SettingsCleanup />);
+        const prompt = await screen.findByLabelText(/Cleanup prompt/i);
+        await waitFor(() => expect(prompt).toBeEnabled());
+
+        await user.clear(prompt);
+        await user.type(prompt, 'Fix grammar only.');
+        await user.click(screen.getByRole('button', { name: /save cleanup instructions/i }));
+
+        expect(db.setAppleIntelligenceCleanupPrompt).toHaveBeenCalledWith('Fix grammar only.');
+        expect(db.setTranscriptCleanupOptions).not.toHaveBeenCalled();
+    });
+
+    it('resets the on-device prompt to the grammar and filler default', async () => {
+        vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockResolvedValueOnce(true);
+        const user = userEvent.setup();
+        render(<SettingsCleanup />);
+        const reset = await screen.findByRole('button', { name: /reset defaults/i });
+        await waitFor(() => expect(reset).toBeEnabled());
+
+        await user.click(reset);
+
+        expect(db.setAppleIntelligenceCleanupPrompt).toHaveBeenCalledWith(
+            expect.stringMatching(/grammar[\s\S]*filler words/i),
+        );
+        await waitFor(() =>
+            expect((screen.getByLabelText(/Cleanup prompt/i) as HTMLTextAreaElement).value).toMatch(
+                /filler words/i,
+            ),
+        );
+    });
+
+    it('moves enabled cleanup to on-device when switching engines', async () => {
+        vi.mocked(db.getTranscriptCleanupApiKeyId).mockResolvedValueOnce('openai-personal');
+        const user = userEvent.setup();
+        render(<SettingsCleanup />);
+        const toggle = screen.getByLabelText(/enable text cleanup/i);
+        await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+
+        await user.click(onDeviceButton());
+
+        await waitFor(() => {
+            expect(db.setAppleIntelligenceCleanupEnabled).toHaveBeenCalledWith(true);
+            expect(onDeviceButton()).toHaveAttribute('aria-pressed', 'true');
+            expect(toggle).toHaveAttribute('aria-checked', 'true');
+        });
+    });
+
+    it('turns cleanup off when switching to OpenAI without a key selected', async () => {
+        vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockResolvedValueOnce(true);
+        const user = userEvent.setup();
+        render(<SettingsCleanup />);
+        const toggle = screen.getByLabelText(/enable text cleanup/i);
+        await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+
+        await user.click(openAiButton());
+
+        await waitFor(() => {
+            expect(db.setAppleIntelligenceCleanupEnabled).toHaveBeenCalledWith(false);
+            expect(openAiButton()).toHaveAttribute('aria-pressed', 'true');
+            expect(toggle).toHaveAttribute('aria-checked', 'false');
+        });
+        expect(screen.getByLabelText(/OpenAI API key/i)).toHaveValue('');
+    });
+
+    it('explains how to turn Apple Intelligence on and re-checks on request', async () => {
+        vi.mocked(vox.getAppleIntelligenceStatus).mockResolvedValueOnce({
+            status: 'unavailable',
+            reason: 'apple-intelligence-not-enabled',
+        });
+        const user = userEvent.setup();
+        render(<SettingsCleanup />);
+
+        expect(await screen.findByText(/turn on Apple Intelligence/i)).toBeInTheDocument();
+        expect(onDeviceButton()).toHaveAttribute('aria-pressed', 'true');
+        const toggle = screen.getByLabelText(/enable text cleanup/i);
+        expect(toggle).toBeDisabled();
+
+        await user.click(screen.getByRole('button', { name: /check again/i }));
+
+        await waitFor(() => expect(toggle).toBeEnabled());
+        expect(screen.queryByText(/turn on Apple Intelligence/i)).not.toBeInTheDocument();
+    });
+
+    it('lets people turn on-device cleanup off after Apple Intelligence becomes unavailable', async () => {
+        vi.mocked(vox.getAppleIntelligenceStatus).mockResolvedValueOnce({
+            status: 'unavailable',
+            reason: 'model-not-ready',
+        });
+        vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockResolvedValueOnce(true);
+        const user = userEvent.setup();
+        render(<SettingsCleanup />);
+        const toggle = screen.getByLabelText(/enable text cleanup/i);
+        await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+        expect(screen.getByText(/still getting ready/i)).toBeInTheDocument();
+
+        await user.click(toggle);
+
+        expect(db.setAppleIntelligenceCleanupEnabled).toHaveBeenCalledWith(false);
+    });
+
+    it('still shows the engines when on-device cleanup is on but this Mac can no longer run it', async () => {
+        vi.mocked(vox.getAppleIntelligenceStatus).mockResolvedValueOnce({
+            status: 'unavailable',
+            reason: 'unsupported-build',
+        });
+        vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockResolvedValueOnce(true);
+        render(<SettingsCleanup />);
+
+        await waitFor(() => expect(onDeviceButton()).toHaveAttribute('aria-pressed', 'true'));
+        expect(screen.getByLabelText(/enable text cleanup/i)).toHaveAttribute(
+            'aria-checked',
+            'true',
+        );
     });
 });
