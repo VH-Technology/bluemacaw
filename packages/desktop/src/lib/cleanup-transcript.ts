@@ -1,6 +1,11 @@
 import { type OpenAILanguageModelResponsesOptions, createOpenAI } from '@ai-sdk/openai';
 import { generateText } from 'ai';
-import { getTranscriptCleanupApiKeyId, getTranscriptCleanupOptions } from './db';
+import {
+    getAppleIntelligenceCleanupEnabled,
+    getAppleIntelligenceCleanupPrompt,
+    getTranscriptCleanupApiKeyId,
+    getTranscriptCleanupOptions,
+} from './db';
 import { vox } from './invoke';
 
 const CLEANUP_TIMEOUT_MS = 10_000;
@@ -12,6 +17,9 @@ const WRAPPING_QUOTES = new Map([
     ['‘', '’'],
 ]);
 
+// Echo of the delimiters `cleanupWithAppleIntelligence` wraps transcripts in.
+const TRANSCRIPT_TAGS = /^\s*<transcript>\s*([\s\S]*?)\s*<\/transcript>\s*$/i;
+
 function stripWrappingQuotes(text: string): string {
     const trimmed = text.trim();
     if (trimmed.length < 2) return text;
@@ -20,9 +28,36 @@ function stripWrappingQuotes(text: string): string {
     return trimmed.slice(1, -1).trim();
 }
 
+function finalize(output: string, original: string): string {
+    const cleaned = stripWrappingQuotes(output);
+    return cleaned.trim() ? cleaned : original;
+}
+
+/**
+ * Post-process a finished transcript with whichever cleanup engine is on.
+ * Returns the text unchanged when cleanup is off; rejects when the engine
+ * fails, so the caller can fall back to the raw transcript.
+ */
 export async function cleanupTranscript(text: string): Promise<string> {
     if (!text.trim()) return text;
+    if (await getAppleIntelligenceCleanupEnabled()) {
+        return cleanupWithAppleIntelligence(text);
+    }
+    return cleanupWithOpenAI(text);
+}
 
+async function cleanupWithAppleIntelligence(text: string): Promise<string> {
+    const instructions = await getAppleIntelligenceCleanupPrompt();
+    // Delimiting the transcript keeps the small on-device model editing
+    // dictated questions and requests instead of answering them.
+    const reply = await vox.generateWithAppleIntelligence(
+        instructions,
+        `<transcript>\n${text}\n</transcript>`,
+    );
+    return finalize(reply.replace(TRANSCRIPT_TAGS, '$1'), text);
+}
+
+async function cleanupWithOpenAI(text: string): Promise<string> {
     const apiKeyId = await getTranscriptCleanupApiKeyId();
     if (!apiKeyId) return text;
 
@@ -47,6 +82,5 @@ export async function cleanupTranscript(text: string): Promise<string> {
         },
     });
 
-    const cleaned = stripWrappingQuotes(result.text);
-    return cleaned.trim() ? cleaned : text;
+    return finalize(result.text, text);
 }

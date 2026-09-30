@@ -37,6 +37,25 @@ export interface PlatformInfo {
     isWayland: boolean;
 }
 
+/**
+ * Why Apple's on-device model can't be used. The first four can't change
+ * while the app runs (not macOS, macOS < 27, a build compiled without
+ * FoundationModels, a Mac that can't run Apple Intelligence); the rest can
+ * clear up on a supported Mac.
+ */
+export type AppleIntelligenceUnavailableReason =
+    | 'unsupported-platform'
+    | 'unsupported-os'
+    | 'unsupported-build'
+    | 'device-not-eligible'
+    | 'apple-intelligence-not-enabled'
+    | 'model-not-ready'
+    | 'unknown';
+
+export type AppleIntelligenceStatus =
+    | { status: 'available' }
+    | { status: 'unavailable'; reason: AppleIntelligenceUnavailableReason };
+
 export const vox = {
     checkMicrophonePermission: () => invoke<PermissionState>('check_microphone_permission'),
     requestMicrophonePermission: () => invoke<PermissionState>('request_microphone_permission'),
@@ -162,6 +181,21 @@ export const vox = {
     listLocalModels: () =>
         invoke<Array<{ modelId: string; fileSizeBytes: number }>>('list_local_models'),
     deleteLocalModel: (modelId: string) => invoke<void>('delete_local_model', { modelId }),
+
+    /**
+     * Whether Apple's on-device model (macOS 27+) can post-process
+     * transcripts. Resolves on every platform; off macOS it reports
+     * `unsupported-platform`.
+     */
+    getAppleIntelligenceStatus: () =>
+        invoke<AppleIntelligenceStatus>('get_apple_intelligence_status'),
+    /**
+     * Run `prompt` through Apple's on-device model with `instructions` as the
+     * session instructions. Rejects when the model is unavailable, errors,
+     * or takes longer than 30 s.
+     */
+    generateWithAppleIntelligence: (instructions: string, prompt: string) =>
+        invoke<string>('generate_with_apple_intelligence', { instructions, prompt }),
 };
 
 /**

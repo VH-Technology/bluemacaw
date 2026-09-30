@@ -1,3 +1,4 @@
+use crate::apple_intelligence::AppleIntelligenceStatus;
 use crate::audio::{AudioDeviceInfo, AudioSource, CaptureSession, PermissionState, microphone::MicrophoneSource, resampler::Resampler};
 use crate::markers::{ERR_ACCESSIBILITY_REQUIRED, EVT_AUDIO_CHUNK, EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_TOGGLE};
 #[cfg(target_os = "macos")]
@@ -470,6 +471,25 @@ pub async fn transcribe_local(
     tokio::task::spawn_blocking(move || crate::local_model::transcribe_wav_file(&mp, &audio))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// Whether Apple's on-device model can post-process transcripts on this Mac
+/// (macOS 27+ with Apple Intelligence on). Never errors: the webview only
+/// needs to know whether to offer the engine and, if not, why.
+#[tauri::command]
+pub async fn get_apple_intelligence_status() -> AppleIntelligenceStatus {
+    crate::apple_intelligence::status().await
+}
+
+/// Run `prompt` through Apple's on-device model with `instructions` as the
+/// session instructions. Transcript cleanup fails open to the raw text when
+/// this errors.
+#[tauri::command]
+pub async fn generate_with_apple_intelligence(
+    instructions: String,
+    prompt: String,
+) -> Result<String, String> {
+    crate::apple_intelligence::generate(&instructions, &prompt).await
 }
 
 /// Returns metadata for every .gguf file in the models directory.

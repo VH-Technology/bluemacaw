@@ -8,6 +8,7 @@ Until then:
 - **Dev loop:** `/dev-desktop` (Vite + cargo watch).
 - **CI release workflow:** `.github/workflows/release.yml`. Currently builds the macOS and Windows bundles on tag pushes.
 - **macOS deployment target:** 10.15, set by `bundle.macOS.minimumSystemVersion` in `tauri.conf.json`. Tauri propagates this to `MACOSX_DEPLOYMENT_TARGET`; `whisper-rs`/`ggml` requires 10.15 for C++ `std::filesystem`.
+- **Apple Intelligence sidecar (macOS):** `build.rs` compiles `swift/apple-intelligence/main.swift` with `xcrun swiftc` into `binaries/bluemacaw-apple-intelligence-<target-triple>` (plus a `-universal-apple-darwin` copy for universal builds). `tauri.macos.conf.json` bundles it via `bundle.externalBin`, and the bundler signs it with the app. `binaries/` is generated and git-ignored. The on-device model needs the `FoundationModels` framework from **Xcode 26 or newer**. With an older SDK the sidecar compiles to a stub, the build prints a cargo warning, and the app hides the On-device cleanup engine. Set `BLUEMACAW_REQUIRE_FOUNDATION_MODELS=1` to make that a hard build error; `release.yml` does this so a release can't ship the stub, and builds macOS on `macos-26` for that reason.
 
 The Plan D rewrite of this doc will cover:
 
@@ -101,5 +102,6 @@ Because of step 3, **key rotation requires a manual installer path for affected 
 | Updater never offers an update despite a newer release    | `tauri.conf.json` `version` field on the running build is `>=` the manifest `version`.             |
 | In-app install hangs at 0%                                | Bundle URL in `update.json` is wrong — re-run the manifest job after fixing the asset name.        |
 | macOS build reports `std::filesystem` APIs unavailable    | The deployment target fell below 10.15; check `bundle.macOS.minimumSystemVersion`.                  |
+| macOS build fails with "no FoundationModels framework"  | `BLUEMACAW_REQUIRE_FOUNDATION_MODELS=1` is set and the active Xcode is older than 26; select Xcode 26+ (`sudo xcode-select -s …`). |
 
 For architecture, see [`architecture.md`](./architecture.md). For macOS permissions wired into the bundle, see [`permissions.md`](./permissions.md).
