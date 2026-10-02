@@ -370,6 +370,7 @@ dependencies = [
  "futures-util",
  "hound",
  "keyring",
+ "libc",
  "log",
  "num_cpus",
  "objc2 0.6.4",

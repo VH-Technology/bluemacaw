@@ -121,16 +121,21 @@ function InstallMacOS() {
                 <code>brew install --cask vh-technology/tap/bluemacaw</code>
             </pre>
             <p>
+                bluemacaw ships from our own tap, which Homebrew does not trust by default.
+                Installing by the full <code>vh-technology/tap/bluemacaw</code> name makes Homebrew
+                trust the bluemacaw cask for you, so{' '}
+                <a href="https://github.com/VH-Technology/homebrew-tap/blob/main/Casks/bluemacaw.rb">
+                    read the cask
+                </a>{' '}
+                first and run the command only once you are satisfied with it. If you added the tap
+                with <code>brew tap</code> first, audit the cask and then trust it explicitly with{' '}
+                <code>brew trust --cask vh-technology/tap/bluemacaw</code>.
+            </p>
+            <p>
                 The cask installs the same signed and notarized DMG as the manual steps below.
                 bluemacaw updates itself in-app, so <code>brew upgrade</code> only reinstalls when
                 the app on disk is older than the cask. Remove the app and its data with{' '}
                 <code>brew uninstall --cask --zap bluemacaw</code>.
-            </p>
-            <p>
-                Use the full <code>vh-technology/tap/bluemacaw</code> name: Homebrew trusts the cask
-                as part of that install, so there is no extra step. If you added the tap with{' '}
-                <code>brew tap</code> first and Homebrew reports it as untrusted, run{' '}
-                <code>brew trust --cask vh-technology/tap/bluemacaw</code>.
             </p>
             <h3>Install from the DMG</h3>
             <ol>

@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -89,7 +89,11 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
 }));
 
 vi.mock('@tauri-apps/api/window', () => ({
-    getCurrentWindow: vi.fn(() => ({ setTheme: vi.fn(async () => undefined) })),
+    getCurrentWindow: vi.fn(() => ({
+        setTheme: vi.fn(async () => undefined),
+        show: vi.fn(async () => undefined),
+        setFocus: vi.fn(async () => undefined),
+    })),
 }));
 
 // useUpdater pulls in @tauri-apps/plugin-updater, which throws under jsdom
@@ -107,6 +111,7 @@ vi.mock('@/lib/use-onboarding-gate', () => ({
 }));
 
 import { useOnboardingGate } from '@/lib/use-onboarding-gate';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { check } from '@tauri-apps/plugin-updater';
 import { MainWindow } from './MainWindow';
 
@@ -173,6 +178,47 @@ describe('<MainWindow />', () => {
         });
         render(<MainWindow />);
         expect(screen.getByTestId('onboarding-screen')).toBeInTheDocument();
+    });
+
+    describe('window visibility (the window is created hidden)', () => {
+        function mockWindow() {
+            const show = vi.fn(async () => undefined);
+            const setFocus = vi.fn(async () => undefined);
+            vi.mocked(getCurrentWindow).mockReturnValue({
+                setTheme: vi.fn(async () => undefined),
+                show,
+                setFocus,
+            } as unknown as ReturnType<typeof getCurrentWindow>);
+            return { show, setFocus };
+        }
+
+        it('shows and focuses the window when onboarding is required', async () => {
+            const { show, setFocus } = mockWindow();
+            vi.mocked(useOnboardingGate).mockReturnValueOnce({
+                state: 'show-onboarding',
+                complete: vi.fn(),
+            });
+            render(<MainWindow />);
+            await waitFor(() => expect(setFocus).toHaveBeenCalledTimes(1));
+            expect(show).toHaveBeenCalledTimes(1);
+        });
+
+        it('leaves visibility to the backend once onboarding is done, so a login launch stays in the tray', async () => {
+            const { show } = mockWindow();
+            render(<MainWindow />);
+            await screen.findByTestId('panel-dashboard');
+            expect(show).not.toHaveBeenCalled();
+        });
+
+        it('does not show the window while the gate is still loading', () => {
+            const { show } = mockWindow();
+            vi.mocked(useOnboardingGate).mockReturnValueOnce({
+                state: 'loading',
+                complete: vi.fn(),
+            });
+            render(<MainWindow />);
+            expect(show).not.toHaveBeenCalled();
+        });
     });
 
     it('surfaces a transient error toast (not a persistent banner) when the update check keeps failing', async () => {
