@@ -193,8 +193,21 @@ jobs:
         working-directory: packages/desktop
         run: ./scripts/notarize-staple-dmg.sh
 
+      # Dry-runs publish nothing, so keep the signed + notarized DMG as a
+      # workflow artifact. It carries the same signature as a release (macOS
+      # permissions carry over), which lets a fix be installed and tested on a
+      # real machine before a release is cut.
+      - name: Upload DMG as workflow artifact (dry-run)
+        if: github.event_name == 'workflow_dispatch' && runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bluemacaw-dry-run-dmg
+          path: packages/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 7
+
       # Upload all platform bundles to the GitHub release. Runs only on real
-      # `release` events; workflow_dispatch builds don't publish anywhere.
+      # `release` events; workflow_dispatch builds don't publish to a release.
       #
       # We deliberately upload each file with its own `gh release upload`
       # call. A previous incarnation passed the full array to a single call,
@@ -288,6 +301,21 @@ jobs:
       - name: Attach manifest to GitHub release
         run: gh release upload "$TAG" latest.json --clobber --repo "$GITHUB_REPOSITORY"
 
+      # Snapshot the full release list as changelog.json and attach it to the
+      # release. The landing's changelog page fetches the live GitHub API
+      # first, then falls back to this asset (via the
+      # releases/latest/download/ CDN redirect, which isn't subject to the
+      # 60 req/hr unauthenticated API rate limit). Shape matches the
+      # `Release` type in packages/landing/src/lib/github.ts.
+      - name: Build + attach changelog.json
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '[.[] | select(.draft | not) | {tag: .tag_name, name: .name, body: .body, publishedAt: .published_at, htmlUrl: .html_url}]' \
+            > changelog.json
+          echo "changelog.json: $(jq 'length' changelog.json) releases"
+          gh release upload "$TAG" changelog.json --clobber --repo "$GITHUB_REPOSITORY"
+
   # Bumps the Homebrew cask in VH-Technology/homebrew-tap to the version just
   # released, so `brew install --cask vh-technology/tap/bluemacaw` serves it.
   # The push needs write access to the tap repo via ONE of two secrets (see
@@ -355,21 +383,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "bluemacaw ${VERSION}"
           git push origin HEAD:main
-
-      # Snapshot the full release list as changelog.json and attach it to the
-      # release. The landing's changelog page fetches the live GitHub API
-      # first, then falls back to this asset (via the
-      # releases/latest/download/ CDN redirect, which isn't subject to the
-      # 60 req/hr unauthenticated API rate limit). Shape matches the
-      # `Release` type in packages/landing/src/lib/github.ts.
-      - name: Build + attach changelog.json
-        run: |
-          set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            --jq '[.[] | select(.draft | not) | {tag: .tag_name, name: .name, body: .body, publishedAt: .published_at, htmlUrl: .html_url}]' \
-            > changelog.json
-          echo "changelog.json: $(jq 'length' changelog.json) releases"
-          gh release upload "$TAG" changelog.json --clobber --repo "$GITHUB_REPOSITORY"
 
   # Generates the Tauri updater manifest (update.json) — distinct from
   # latest.json above:
