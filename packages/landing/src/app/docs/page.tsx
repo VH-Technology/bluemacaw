@@ -126,6 +126,12 @@ function InstallMacOS() {
                 the app on disk is older than the cask. Remove the app and its data with{' '}
                 <code>brew uninstall --cask --zap bluemacaw</code>.
             </p>
+            <p>
+                Use the full <code>vh-technology/tap/bluemacaw</code> name: Homebrew trusts the cask
+                as part of that install, so there is no extra step. If you added the tap with{' '}
+                <code>brew tap</code> first and Homebrew reports it as untrusted, run{' '}
+                <code>brew trust --cask vh-technology/tap/bluemacaw</code>.
+            </p>
             <h3>Install from the DMG</h3>
             <ol>
                 <li>

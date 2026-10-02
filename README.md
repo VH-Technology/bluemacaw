@@ -9,13 +9,47 @@ Cross-platform speech-to-text desktop app. Press a global shortcut, dictate, get
 
 ## Install
 
-- **macOS:** [Download DMG](https://bluemacaw.com) (signed + notarized), or with Homebrew:
-
-  ```sh
-  brew install --cask vh-technology/tap/bluemacaw
-  ```
-
+- **macOS:** [Download DMG](https://bluemacaw.com) (signed + notarized), or [with Homebrew](#install-with-homebrew-macos).
 - **Windows:** [Download installer](https://bluemacaw.com) (unsigned at v1; SmartScreen warning expected)
+
+### Install with Homebrew (macOS)
+
+bluemacaw ships from our own tap, `vh-technology/tap`, not from Homebrew's official taps. Homebrew does not trust third-party taps by default, because a tap is code that runs on your machine with your user's privileges. You have to trust it yourself.
+
+> [!IMPORTANT]
+> **Trust the cask only after you have audited it yourself.** Do not trust it because this README says so. Read the cask first, and the app source in this repo if you want to go further. If anything looks wrong, stop and do not run the trust or install commands.
+
+1. **Add the tap.** This only downloads it; Homebrew will not load anything from it until you trust it.
+
+   ```sh
+   brew tap vh-technology/tap
+   ```
+
+2. **Audit the cask.** It is one short file, also viewable [on GitHub](https://github.com/VH-Technology/homebrew-tap/blob/main/Casks/bluemacaw.rb).
+
+   ```sh
+   cat "$(brew --repository vh-technology/tap)/Casks/bluemacaw.rb"
+   ```
+
+   Check that the `url` points at a release of this repository (`github.com/VH-Technology/bluemacaw/releases`), that a `sha256` is pinned, and that the file only installs `bluemacaw.app` with no extra scripts.
+
+3. **Trust the cask — only once step 2 satisfied you.**
+
+   ```sh
+   brew trust --cask vh-technology/tap/bluemacaw
+   ```
+
+   This trusts the bluemacaw cask and nothing else. `brew trust vh-technology/tap` would trust the whole tap, including anything added to it later, so prefer the cask-only form.
+
+4. **Install.**
+
+   ```sh
+   brew install --cask bluemacaw
+   ```
+
+**One-line shortcut.** `brew install --cask vh-technology/tap/bluemacaw` does steps 1, 3 and 4 at once: installing by the full name makes Homebrew trust the cask for you. Run it only after auditing the cask on GitHub.
+
+To withdraw trust later, run `brew untrust --cask vh-technology/tap/bluemacaw`.
 
 ## Why bluemacaw
 

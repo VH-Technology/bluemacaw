@@ -120,6 +120,18 @@ Two stanzas matter because the app also updates itself with `tauri-plugin-update
 - `auto_updates true` — on `brew upgrade`, Homebrew compares the cask version with the installed app's `CFBundleShortVersionString` and skips the reinstall when the in-app updater already brought the app to the current version. Either update path ends in the same state.
 - `uninstall quit: "com.vhtechnology.bluemacaw"` — Homebrew quits the app before replacing or removing the bundle.
 
+### Tap trust
+
+Since Homebrew 6.0.0, non-official taps need explicit trust on each user's machine ([Tap Trust](https://docs.brew.sh/Tap-Trust)). A tap cannot pre-trust itself; only `homebrew/core` and `homebrew/cask` are trusted by default.
+
+Installing by the fully-qualified name trusts that one cask as part of the install, so every install instruction must use `vh-technology/tap/bluemacaw` — never `brew tap vh-technology/tap` followed by the short name. A user who tapped first sees "The following taps are not trusted" in `brew doctor` and fixes it with:
+
+```sh
+brew trust --cask vh-technology/tap/bluemacaw
+```
+
+Dropping the trust step entirely (`brew install --cask bluemacaw`) requires the cask to be accepted into the official `homebrew/cask` tap, which audits the GitHub repo for notability: any one of 225 stars, 90 forks or 90 watchers for a self-submission (75 / 30 / 30 when a third party submits), and a repo at least 30 days old.
+
 ### Automatic bump on release
 
 The `publish-homebrew` job in `release.yml` runs after the build matrix on every published, non-prerelease release. It downloads `bluemacaw_<version>_universal.dmg` from the release, computes its SHA-256, rewrites the `version` and `sha256` lines in the cask, and pushes the commit to the tap's `main`. Re-running it for a release the tap already has is a no-op.
