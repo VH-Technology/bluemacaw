@@ -42,6 +42,8 @@ const TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY = 'transcript_cleanup_openai_api_
 const TRANSCRIPT_CLEANUP_OPTIONS_KEY = 'transcript_cleanup_options';
 const APPLE_INTELLIGENCE_CLEANUP_ENABLED_KEY = 'transcript_cleanup_apple_intelligence_enabled';
 const APPLE_INTELLIGENCE_CLEANUP_PROMPT_KEY = 'transcript_cleanup_apple_intelligence_prompt';
+const APPLE_INTELLIGENCE_SPLIT_LONG_KEY = 'transcript_cleanup_apple_intelligence_split_long';
+const DEEPGRAM_SMART_FORMAT_KEY = 'deepgram_smart_format';
 const SOFT_DELETE_GRACE_DAYS = 30;
 
 export interface ApiKeyRow {
@@ -233,6 +235,47 @@ export async function setAppleIntelligenceCleanupEnabled(enabled: boolean): Prom
         'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
         [APPLE_INTELLIGENCE_CLEANUP_ENABLED_KEY, enabled ? 'true' : 'false'],
     );
+}
+
+/** Reads an on/off `app_state` flag that counts as on until it is turned off. */
+async function getFlagDefaultOn(key: string): Promise<boolean> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [key])) as {
+        value: string;
+    }[];
+    return rows[0]?.value !== 'false';
+}
+
+async function setFlag(key: string, enabled: boolean): Promise<void> {
+    const conn = await db();
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [key, enabled ? 'true' : 'false'],
+    );
+}
+
+/**
+ * Whether on-device cleanup handles a long transcript one group of sentences
+ * at a time (see `split-transcript.ts`). On unless the user turned it off.
+ */
+export function getAppleIntelligenceSplitLongEnabled(): Promise<boolean> {
+    return getFlagDefaultOn(APPLE_INTELLIGENCE_SPLIT_LONG_KEY);
+}
+
+export function setAppleIntelligenceSplitLongEnabled(enabled: boolean): Promise<void> {
+    return setFlag(APPLE_INTELLIGENCE_SPLIT_LONG_KEY, enabled);
+}
+
+/**
+ * Whether Deepgram is asked to punctuate and format its transcripts
+ * (`smart_format`). On unless the user turned it off.
+ */
+export function getDeepgramSmartFormatEnabled(): Promise<boolean> {
+    return getFlagDefaultOn(DEEPGRAM_SMART_FORMAT_KEY);
+}
+
+export function setDeepgramSmartFormatEnabled(enabled: boolean): Promise<void> {
+    return setFlag(DEEPGRAM_SMART_FORMAT_KEY, enabled);
 }
 
 export async function getAppleIntelligenceCleanupPrompt(): Promise<string> {

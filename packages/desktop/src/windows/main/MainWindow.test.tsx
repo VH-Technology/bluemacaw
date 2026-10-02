@@ -26,6 +26,8 @@ vi.mock('@/lib/db', () => ({
     })),
     setTranscriptCleanupApiKeyId: vi.fn(async () => undefined),
     setTranscriptCleanupOptions: vi.fn(async () => undefined),
+    getDeepgramSmartFormatEnabled: vi.fn(async () => true),
+    setDeepgramSmartFormatEnabled: vi.fn(async () => undefined),
     // Used by the predicate-driven onboarding wizard when the gate routes
     // to show-onboarding. False means "step 2 not yet seen by user."
     getHotkeysOnboarded: vi.fn(async () => false),

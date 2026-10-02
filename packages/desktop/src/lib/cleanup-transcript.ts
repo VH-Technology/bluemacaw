@@ -3,10 +3,12 @@ import { generateText } from 'ai';
 import {
     getAppleIntelligenceCleanupEnabled,
     getAppleIntelligenceCleanupPrompt,
+    getAppleIntelligenceSplitLongEnabled,
     getTranscriptCleanupApiKeyId,
     getTranscriptCleanupOptions,
 } from './db';
 import { vox } from './invoke';
+import { splitTranscript } from './split-transcript';
 
 const CLEANUP_TIMEOUT_MS = 10_000;
 
@@ -47,7 +49,35 @@ export async function cleanupTranscript(text: string): Promise<string> {
 }
 
 async function cleanupWithAppleIntelligence(text: string): Promise<string> {
-    const instructions = await getAppleIntelligenceCleanupPrompt();
+    const [instructions, splitLong] = await Promise.all([
+        getAppleIntelligenceCleanupPrompt(),
+        getAppleIntelligenceSplitLongEnabled(),
+    ]);
+    const pieces = splitLong ? splitTranscript(text) : [];
+    if (pieces.length < 2) return rewriteOnDevice(instructions, text);
+
+    // One request per group of sentences keeps a long dictation inside the
+    // model's context window and the per-request timeout. One at a time: the
+    // model serves requests in turn anyway, so running them together only
+    // makes the later ones time out while they queue. A group that fails keeps
+    // its raw text; cleanup only fails if all of them do.
+    let cleaned = '';
+    let failures = 0;
+    let firstFailure: unknown;
+    for (const piece of pieces) {
+        try {
+            cleaned += (await rewriteOnDevice(instructions, piece.text)) + piece.gap;
+        } catch (cause) {
+            if (failures === 0) firstFailure = cause;
+            failures += 1;
+            cleaned += piece.text + piece.gap;
+        }
+    }
+    if (failures === pieces.length) throw firstFailure;
+    return cleaned;
+}
+
+async function rewriteOnDevice(instructions: string, text: string): Promise<string> {
     // Delimiting the transcript keeps the small on-device model editing
     // dictated questions and requests instead of answering them.
     const reply = await vox.generateWithAppleIntelligence(

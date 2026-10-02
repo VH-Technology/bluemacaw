@@ -29,6 +29,15 @@ bluemacaw ships ten STT (speech-to-text) providers. The registry is data-driven 
 > `transcribeBatch` when present and skips `experimental_transcribe`. Its
 > `makeModel` throws and is never called.
 
+> **Per-request provider options.** A provider can implement the optional
+> `batchProviderOptions()` hook to add AI SDK `providerOptions` to every batch
+> request; `lib/transcribe.ts` resolves it per request so it can follow a user
+> setting. Deepgram uses it to send `smart_format` (punctuation, capital
+> letters, number formatting), which Deepgram leaves off by default. The switch
+> is **Settings → Models → Deepgram punctuation and formatting**, stored as
+> `deepgram_smart_format` in `app_state` and on unless turned off. It covers
+> the batch models only; `flux-general-en` uses its own realtime connection.
+
 ### Legacy model aliases
 
 A few providers translate retired model ids on the fly so persisted user configs keep working after the provider deprecates a model:

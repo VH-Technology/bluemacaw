@@ -25,6 +25,8 @@ import {
     getActiveModelConfigId,
     getAppleIntelligenceCleanupEnabled,
     getAppleIntelligenceCleanupPrompt,
+    getAppleIntelligenceSplitLongEnabled,
+    getDeepgramSmartFormatEnabled,
     getHistoryLastSweep,
     getHistoryStats,
     getHotkeyCombo,
@@ -49,6 +51,8 @@ import {
     setActiveModelConfigId,
     setAppleIntelligenceCleanupEnabled,
     setAppleIntelligenceCleanupPrompt,
+    setAppleIntelligenceSplitLongEnabled,
+    setDeepgramSmartFormatEnabled,
     setHistoryLastSweep,
     setHotkeyCombo,
     setOriginalFnUsageType,
@@ -515,6 +519,40 @@ describe('db.transcriptCleanupOptions', () => {
         await expect(
             setTranscriptCleanupOptions({ modelId: 'gpt-4o-mini', prompt: ' ' }),
         ).rejects.toThrow(/prompt/i);
+    });
+});
+
+describe('db.appleIntelligenceSplitLong', () => {
+    it('is on by default', async () => {
+        await expect(getAppleIntelligenceSplitLongEnabled()).resolves.toBe(true);
+    });
+
+    it('round-trips the flag', async () => {
+        await setAppleIntelligenceSplitLongEnabled(false);
+        await expect(getAppleIntelligenceSplitLongEnabled()).resolves.toBe(false);
+
+        await setAppleIntelligenceSplitLongEnabled(true);
+        await expect(getAppleIntelligenceSplitLongEnabled()).resolves.toBe(true);
+    });
+});
+
+describe('db.deepgramSmartFormat', () => {
+    it('is on by default', async () => {
+        await expect(getDeepgramSmartFormatEnabled()).resolves.toBe(true);
+    });
+
+    it('round-trips the flag', async () => {
+        await setDeepgramSmartFormatEnabled(false);
+        await expect(getDeepgramSmartFormatEnabled()).resolves.toBe(false);
+
+        await setDeepgramSmartFormatEnabled(true);
+        await expect(getDeepgramSmartFormatEnabled()).resolves.toBe(true);
+    });
+
+    it('is stored separately from the long-dictation flag', async () => {
+        await setDeepgramSmartFormatEnabled(false);
+
+        await expect(getAppleIntelligenceSplitLongEnabled()).resolves.toBe(true);
     });
 });
 
