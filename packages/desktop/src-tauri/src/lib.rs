@@ -3,6 +3,7 @@ pub mod audio;
 pub mod clipboard;
 pub mod commands;
 pub mod history;
+pub mod login_launch;
 pub mod markers;
 #[cfg(target_os = "macos")]
 pub mod overlay_panel;
@@ -44,10 +45,11 @@ pub fn run() {
             // Login Item path is cleaner and matches what the user sees
             // in System Settings → General → Login Items.
             tauri_plugin_autostart::MacosLauncher::AppleScript,
-            // No CLI args needed on relaunch; bluemacaw boots the same
-            // tray-resident process whether the user clicked the dock
-            // icon or the OS auto-launched it.
-            None,
+            // Windows and Linux forward this flag to the auto-launched
+            // process, which then keeps the main window hidden (see
+            // `login_launch`). A macOS Login Item cannot carry arguments;
+            // there the launch is recognised by its timing instead.
+            Some(vec![login_launch::AUTOSTART_FLAG]),
         ))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -124,6 +126,21 @@ pub fn run() {
 
             tray::build(app.handle())?;
 
+            // Autostart entries written before `--autostart` existed lack the
+            // flag, so rewrite an enabled entry on every start. Skipped on
+            // macOS: the Login Item carries no arguments, and re-adding it
+            // could duplicate the entry.
+            #[cfg(not(target_os = "macos"))]
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let autostart = app.autolaunch();
+                if autostart.is_enabled().unwrap_or(false) {
+                    if let Err(e) = autostart.enable() {
+                        log::warn!("refreshing the autostart entry failed: {e}");
+                    }
+                }
+            }
+
             // macOS: convert the overlay window to a non-activating NSPanel
             // so clicks on the Stop button / drag handle don't yank focus
             // away from whatever app the user is dictating into.
@@ -141,6 +158,15 @@ pub fn run() {
             // below, just like the tray's "Open bluemacaw". Quitting (tray
             // Quit / Cmd+Q) still exits the process.
             if let Some(main_window) = app.get_webview_window("main") {
+                // The main window is created hidden (`visible: false` in
+                // tauri.conf.json). A launch at login stays in the tray; every
+                // other launch shows the window right away. The webview shows
+                // it itself when onboarding is still pending (`MainWindow`).
+                if !login_launch::launched_at_login() {
+                    let _ = main_window.show();
+                    let _ = main_window.set_focus();
+                }
+
                 let main_window_for_close = main_window.clone();
                 main_window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {

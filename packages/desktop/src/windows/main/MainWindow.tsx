@@ -13,6 +13,7 @@ import { vox } from '@/lib/invoke';
 import { useOnboardingGate } from '@/lib/use-onboarding-gate';
 import { getVersion } from '@tauri-apps/api/app';
 import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/plugin-shell';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Dashboard } from './Dashboard';
@@ -62,6 +63,19 @@ const SETTINGS_SECTIONS = [
  */
 export function MainWindow() {
     const { state, complete } = useOnboardingGate();
+
+    // The main window is created hidden so a launch at login stays in the
+    // tray; the backend shows it for every other launch. Onboarding can't be
+    // finished from the tray, so surface the window whenever it is required.
+    useEffect(() => {
+        if (state !== 'show-onboarding') return;
+        const appWindow = getCurrentWindow();
+        void appWindow
+            .show()
+            .then(() => appWindow.setFocus())
+            .catch((e: unknown) => console.error('MainWindow: show for onboarding failed', e));
+    }, [state]);
+
     if (state === 'loading') {
         return (
             <main

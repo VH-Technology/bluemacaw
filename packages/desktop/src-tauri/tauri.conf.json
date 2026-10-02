@@ -20,7 +20,7 @@
         "minWidth": 720,
         "minHeight": 480,
         "resizable": true,
-        "visible": true,
+        "visible": false,
         "center": true
       },
       {

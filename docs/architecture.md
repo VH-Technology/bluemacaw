@@ -1,6 +1,6 @@
 # Architecture
 
-bluemacaw is a cross-platform desktop app built on **Tauri 2** (Rust + WebView). A global keyboard shortcut toggles recording; the captured audio is sent to one of nine pluggable STT providers via the Vercel AI SDK; the transcribed text is copied to the clipboard and pasted into the focused application via a synthetic `Cmd+V` (or `Ctrl+V`) keystroke.
+bluemacaw is a cross-platform desktop app built on **Tauri 2** (Rust + WebView). A global keyboard shortcut toggles recording; the captured audio is sent to one of ten pluggable STT providers via the Vercel AI SDK; the transcribed text is copied to the clipboard and pasted into the focused application via a synthetic `Cmd+V` (or `Ctrl+V`) keystroke.
 
 This document describes the *as-built* architecture. The original plan is `docs/superpowers/plans/2026-05-03-plan-b-desktop-app.md`, extended mid-flight by `docs/superpowers/plans/2026-05-10-recording-settings-and-history.md`. Where the as-built diverges from those plans, this doc is the source of truth.
 
@@ -19,11 +19,12 @@ There is no Node runtime in the renderer. There is no preload script. Tauri's ca
 
 | File | Role |
 |---|---|
-| `lib.rs` | Crate entry. Wires plugins (clipboard-manager, global-shortcut, sql, store, updater), constructs `AppState`, registers the `invoke_handler!`, builds the tray, converts the overlay window to a non-activating `NSPanel` on macOS, and installs the close-to-tray window handler. |
+| `lib.rs` | Crate entry. Wires plugins (clipboard-manager, global-shortcut, sql, store, updater), constructs `AppState`, registers the `invoke_handler!`, builds the tray, converts the overlay window to a non-activating `NSPanel` on macOS, shows the main window unless the launch came from login, and installs the close-to-tray window handler. |
 | `main.rs` | Thin binary entry that calls `bluemacaw_lib::run()`. |
 | `commands.rs` | Every `#[tauri::command]`. Defines `AppState` and `HostOs` / `PlatformInfo`. |
 | `markers.rs` | String constants for Tauri events (`bluemacaw://shortcut-toggle`, `bluemacaw://shortcut-cancel`) and error markers (`accessibility-required:`, `mic-denied:`, `wayland-paste-unsupported:`, `input-monitoring-required:`). Mirrored in `src/lib/markers.ts`; a contract test parses this file to enforce agreement. |
 | `platform/mod.rs` | `is_wayland_session()` helper (`XDG_SESSION_TYPE` / `WAYLAND_DISPLAY` probe). |
+| `login_launch.rs` | `launched_at_login()` — tells a launch at login from a manual one, so the main window (created hidden, `visible: false`) stays hidden and the app comes up in the tray only. Windows/Linux: the autostart entry passes `--autostart`. macOS: a Login Item cannot carry arguments, so a launch within two minutes of the console login (utmpx record) counts; this also covers the "reopen windows when logging back in" relaunch. While onboarding is pending, `MainWindow` shows the window regardless. |
 | `apple_intelligence/mod.rs` | On-device transcript cleanup (macOS 27+). Gates on the macOS version, then spawns the `bluemacaw-apple-intelligence` Swift sidecar (`swift/apple-intelligence/main.swift`, compiled by `build.rs`, bundled via `bundle.externalBin` in `tauri.macos.conf.json`) and speaks its one-shot stdin/stdout JSON protocol. |
 | `audio/mod.rs` | `AudioSource` trait, `PermissionState`, `AudioError`, `AudioDeviceInfo`, `CaptureSession`. |
 | `audio/microphone.rs` | `MicrophoneSource` — the cpal-backed production impl. Owns session bookkeeping and peak-level metering. |

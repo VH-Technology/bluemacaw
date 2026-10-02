@@ -16,6 +16,7 @@ Examples:
 - `secrets/mod.rs` — `InMemoryVault` get/set/delete semantics; `SecretKey::Debug` redaction.
 - `audio/microphone.rs` — WAV encoding (`encode_wav_pcm16`) round-trip; session bookkeeping; peak-level reset on read; poisoned-mutex behaviour.
 - `clipboard/mod.rs` — `InMemoryClipboard` read/write/overwrite + trait-object behaviour.
+- `login_launch.rs` — the login-launch decision (`--autostart` flag, the two-minute window after the console login, clock skew) and console-record selection, over literal inputs. The utmpx read itself and the real behaviour at login are not automated: verify by logging out and back in with "Start at login" on and confirming only the tray icon appears.
 - `paste/mod.rs` — `RecordingPaster` records calls and writes the test clipboard. `paste/macos.rs` tests the production shortcut sequencing with injected key-operation failures, including Command cleanup and permission-error mapping. Native event delivery is checked separately with the probe below.
 - `shortcut/macos_fn.rs` / `shortcut/macos_chord.rs` — synthetic paste events cannot retrigger or corrupt physical Fn/chord/double-tap state.
 - `shortcut/parse.rs` — combo parser / formatter round-trips, case insensitivity, alias normalisation (Option/Alt, Cmd/Meta), function/arrow keys, exhaustive modifier combinations.
