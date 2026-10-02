@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 vi.mock('./db', () => ({
     getAppleIntelligenceCleanupEnabled: vi.fn(),
     getAppleIntelligenceCleanupPrompt: vi.fn(),
+    getAppleIntelligenceSplitLongEnabled: vi.fn(),
     getTranscriptCleanupApiKeyId: vi.fn(),
     getTranscriptCleanupOptions: vi.fn(),
 }));
@@ -17,6 +18,7 @@ vi.mock('./invoke', () => ({
 import { cleanupTranscript } from './cleanup-transcript';
 import * as db from './db';
 import { vox } from './invoke';
+import { DEFAULT_SPLIT_OPTIONS } from './split-transcript';
 
 let responseText = 'This is ready.';
 let requestBody: Record<string, unknown> | null = null;
@@ -77,6 +79,7 @@ beforeEach(() => {
     vi.mocked(db.getAppleIntelligenceCleanupPrompt)
         .mockReset()
         .mockResolvedValue('On-device cleanup prompt');
+    vi.mocked(db.getAppleIntelligenceSplitLongEnabled).mockReset().mockResolvedValue(true);
     vi.mocked(vox.generateWithAppleIntelligence).mockReset();
     vi.mocked(db.getTranscriptCleanupApiKeyId).mockReset();
     vi.mocked(db.getTranscriptCleanupOptions).mockReset().mockResolvedValue({
@@ -239,5 +242,84 @@ describe('cleanupTranscript with Apple Intelligence', () => {
         await expect(cleanupTranscript('   ')).resolves.toBe('   ');
 
         expect(vox.generateWithAppleIntelligence).not.toHaveBeenCalled();
+    });
+});
+
+describe('cleanupTranscript with Apple Intelligence on long dictations', () => {
+    // Three sentences sized from the tuning values, so the fixture survives
+    // retuning: together they are over the split threshold, and each is long
+    // enough that no two of them fit in one piece.
+    const sentenceWords = Math.max(
+        DEFAULT_SPLIT_OPTIONS.splitAbove,
+        DEFAULT_SPLIT_OPTIONS.maxWords,
+    );
+    const sentence = (opening: string) =>
+        `${opening} ${Array(sentenceWords - 1)
+            .fill('word')
+            .join(' ')}.`;
+    const first = sentence('first');
+    const second = sentence('second');
+    const third = sentence('third');
+    const long = `${first} ${second}\n\n${third}`;
+
+    /** Stand-in for the model: upper-cases whatever transcript it is handed. */
+    function shoutingModel(failOn?: string) {
+        vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockResolvedValue(true);
+        vi.mocked(vox.generateWithAppleIntelligence).mockImplementation(async (_, prompt) => {
+            const transcript = prompt.replace(/^<transcript>\n|\n<\/transcript>$/g, '');
+            if (failOn && transcript.startsWith(failOn)) throw new Error('model busy');
+            return transcript.toUpperCase();
+        });
+    }
+
+    function transcriptsSentToTheModel(): string[] {
+        return vi
+            .mocked(vox.generateWithAppleIntelligence)
+            .mock.calls.map(([, prompt]) =>
+                prompt.replace(/^<transcript>\n|\n<\/transcript>$/g, ''),
+            );
+    }
+
+    it('cleans a long punctuated transcript one sentence group at a time and rejoins it', async () => {
+        shoutingModel();
+
+        await expect(cleanupTranscript(long)).resolves.toBe(long.toUpperCase());
+
+        expect(transcriptsSentToTheModel()).toEqual([first, second, third]);
+    });
+
+    it('sends a long transcript whole when it has no sentence punctuation', async () => {
+        shoutingModel();
+        const runOn = Array(sentenceWords * 3)
+            .fill('word')
+            .join(' ');
+
+        await cleanupTranscript(runOn);
+
+        expect(transcriptsSentToTheModel()).toEqual([runOn]);
+    });
+
+    it('sends a long transcript whole when splitting is switched off', async () => {
+        shoutingModel();
+        vi.mocked(db.getAppleIntelligenceSplitLongEnabled).mockResolvedValue(false);
+
+        await cleanupTranscript(long);
+
+        expect(transcriptsSentToTheModel()).toEqual([long]);
+    });
+
+    it('keeps the raw text of a piece the model fails on', async () => {
+        shoutingModel('second');
+
+        await expect(cleanupTranscript(long)).resolves.toBe(
+            `${first.toUpperCase()} ${second}\n\n${third.toUpperCase()}`,
+        );
+    });
+
+    it('rejects when the model fails on every piece so the caller can fall back', async () => {
+        vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockResolvedValue(true);
+        vi.mocked(vox.generateWithAppleIntelligence).mockRejectedValue(new Error('model busy'));
+
+        await expect(cleanupTranscript(long)).rejects.toThrow(/model busy/);
     });
 });

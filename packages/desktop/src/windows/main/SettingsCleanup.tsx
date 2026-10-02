@@ -15,11 +15,13 @@ import {
     type ApiKeyRow,
     getAppleIntelligenceCleanupEnabled,
     getAppleIntelligenceCleanupPrompt,
+    getAppleIntelligenceSplitLongEnabled,
     getTranscriptCleanupApiKeyId,
     getTranscriptCleanupOptions,
     listApiKeys,
     setAppleIntelligenceCleanupEnabled,
     setAppleIntelligenceCleanupPrompt,
+    setAppleIntelligenceSplitLongEnabled,
     setTranscriptCleanupApiKeyId,
     setTranscriptCleanupOptions,
 } from '@/lib/db';
@@ -94,6 +96,7 @@ export function SettingsCleanup({ refreshToken }: SettingsCleanupProps) {
     const keyId = useId();
     const modelIdInputId = useId();
     const promptId = useId();
+    const splitLongId = useId();
 
     const [keys, setKeys] = useState<ApiKeyRow[]>([]);
     const [openAiEnabled, setOpenAiEnabled] = useState(false);
@@ -114,6 +117,7 @@ export function SettingsCleanup({ refreshToken }: SettingsCleanupProps) {
     const [savedApplePrompt, setSavedApplePrompt] = useState(
         DEFAULT_APPLE_INTELLIGENCE_CLEANUP_PROMPT,
     );
+    const [splitLong, setSplitLong] = useState(true);
     const [appleLoaded, setAppleLoaded] = useState(false);
     const [appleLoadError, setAppleLoadError] = useState<string | null>(null);
 
@@ -185,11 +189,13 @@ export function SettingsCleanup({ refreshToken }: SettingsCleanupProps) {
         void (async () => {
             const status = probeAppleIntelligence();
             try {
-                const [savedEnabled, savedOnDevicePrompt] = await Promise.all([
+                const [savedEnabled, savedOnDevicePrompt, savedSplitLong] = await Promise.all([
                     getAppleIntelligenceCleanupEnabled(),
                     getAppleIntelligenceCleanupPrompt(),
+                    getAppleIntelligenceSplitLongEnabled(),
                 ]);
                 if (!cancelled) {
+                    setSplitLong(savedSplitLong);
                     setAppleEnabled(savedEnabled);
                     setApplePrompt(savedOnDevicePrompt);
                     setSavedApplePrompt(savedOnDevicePrompt);
@@ -300,6 +306,13 @@ export function SettingsCleanup({ refreshToken }: SettingsCleanupProps) {
         await persist(async () => {
             await setTranscriptCleanupApiKeyId(next);
             setSelectedKeyId(next);
+        });
+    }
+
+    async function handleSplitLongChange(next: boolean) {
+        await persist(async () => {
+            await setAppleIntelligenceSplitLongEnabled(next);
+            setSplitLong(next);
         });
     }
 
@@ -421,6 +434,23 @@ export function SettingsCleanup({ refreshToken }: SettingsCleanupProps) {
                             </div>
                         )}
                     </WarningBanner>
+                )}
+                {onDevice && (
+                    <div className="flex items-center justify-between gap-4">
+                        <div className="flex flex-col gap-1">
+                            <Label htmlFor={splitLongId}>Clean long dictations in parts</Label>
+                            <p className="text-xs text-muted-foreground">
+                                Cleans dictations over about 200 words one section at a time, which
+                                keeps long dictations within what the on-device model can handle.
+                            </p>
+                        </div>
+                        <Switch
+                            id={splitLongId}
+                            checked={splitLong}
+                            disabled={locked}
+                            onCheckedChange={(value) => void handleSplitLongChange(value)}
+                        />
+                    </div>
                 )}
                 {engine === 'openai' &&
                     (keys.length > 0 ? (

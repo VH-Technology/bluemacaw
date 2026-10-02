@@ -2,7 +2,11 @@
 import { experimental_transcribe as transcribe } from 'ai';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../lib/db', () => ({ getDeepgramSmartFormatEnabled: vi.fn(async () => true) }));
+
+import { getDeepgramSmartFormatEnabled } from '../lib/db';
 import { deepgramConfig as cfg } from './deepgram';
 
 describe('deepgram provider config', () => {
@@ -92,6 +96,37 @@ describe('deepgram transcription HTTP', () => {
         expect(captured.url?.pathname).toBe('/v1/listen');
         expect(captured.url?.searchParams.get('model')).toBe('nova-3');
         expect(captured.contentType).toBeTruthy();
+    });
+
+    async function smartFormatSentToDeepgram(): Promise<string | null> {
+        let smartFormat: string | null = null;
+        server.use(
+            http.post('https://api.deepgram.com/v1/listen', ({ request }) => {
+                smartFormat = new URL(request.url).searchParams.get('smart_format');
+                return HttpResponse.json({
+                    metadata: { duration: 1.5 },
+                    results: {
+                        channels: [{ alternatives: [{ transcript: 'Hello.', words: [] }] }],
+                    },
+                });
+            }),
+        );
+        const model = cfg.makeModel('nova-3', 'dg-test-key');
+        const providerOptions = await cfg.batchProviderOptions?.();
+        await transcribe({ model, audio: fakeAudio, maxRetries: 0, providerOptions });
+        return smartFormat;
+    }
+
+    it('asks Deepgram for punctuation and formatting when the setting is on', async () => {
+        vi.mocked(getDeepgramSmartFormatEnabled).mockResolvedValueOnce(true);
+
+        await expect(smartFormatSentToDeepgram()).resolves.toBe('true');
+    });
+
+    it('does not ask for formatting when the setting is off', async () => {
+        vi.mocked(getDeepgramSmartFormatEnabled).mockResolvedValueOnce(false);
+
+        await expect(smartFormatSentToDeepgram()).resolves.not.toBe('true');
     });
 
     it('propagates 401 unauthorized errors', async () => {

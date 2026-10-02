@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCallback, useState } from 'react';
+import { SettingsDeepgramFormatting } from './SettingsDeepgramFormatting';
 import { SettingsLocalModels } from './SettingsLocalModels';
 import { SettingsModelConfigs } from './SettingsModelConfigs';
 import type { LocalModelDownloadSheetState } from './local-model-download';
@@ -22,6 +23,7 @@ export function SettingsModels({ localDownload, onStartLocalDownload }: Settings
             </CardHeader>
             <CardContent className="flex flex-col gap-8">
                 <SettingsModelConfigs refreshToken={refreshToken} onActiveChange={bumpRefresh} />
+                <SettingsDeepgramFormatting />
                 <div className="border-t border-border/70 pt-6">
                     <SettingsLocalModels
                         refreshToken={refreshToken}

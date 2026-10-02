@@ -48,6 +48,18 @@ export function Download() {
                     href={macHref}
                     docsHref="/docs/#install-macos"
                     command="brew install --cask vh-technology/tap/bluemacaw"
+                    commandNote={
+                        <>
+                            Third-party tap:{' '}
+                            <a
+                                href="https://github.com/VH-Technology/homebrew-tap/blob/main/Casks/bluemacaw.rb"
+                                className="font-semibold text-main hover:underline"
+                            >
+                                read the cask
+                            </a>{' '}
+                            before you run it.
+                        </>
+                    }
                     icon={<MaskIcon src="/icons/macos.svg" className="h-7 w-7" />}
                 />
                 <PlatformCard
@@ -73,6 +85,8 @@ interface PlatformCardProps {
     altHref?: string | null;
     altLabel?: string;
     command?: string;
+    /** Shown under `command`, e.g. a caution about where it installs from. */
+    commandNote?: React.ReactNode;
 }
 
 function PlatformCard({
@@ -85,6 +99,7 @@ function PlatformCard({
     altHref,
     altLabel,
     command,
+    commandNote,
 }: PlatformCardProps) {
     const comingSoon = href === null;
     return (
@@ -147,6 +162,9 @@ function PlatformCard({
                         {command}
                     </code>
                 </div>
+            ) : null}
+            {!comingSoon && command && commandNote ? (
+                <p className="text-xs text-muted-foreground">{commandNote}</p>
             ) : null}
         </div>
     );

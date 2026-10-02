@@ -12,6 +12,8 @@ vi.mock('@/lib/db', () => ({
     setAppleIntelligenceCleanupEnabled: vi.fn(),
     getAppleIntelligenceCleanupPrompt: vi.fn(),
     setAppleIntelligenceCleanupPrompt: vi.fn(),
+    getAppleIntelligenceSplitLongEnabled: vi.fn(),
+    setAppleIntelligenceSplitLongEnabled: vi.fn(),
 }));
 
 vi.mock('@/lib/invoke', () => ({
@@ -54,6 +56,8 @@ beforeEach(() => {
         .mockReset()
         .mockResolvedValue('On-device cleanup prompt');
     vi.mocked(db.setAppleIntelligenceCleanupPrompt).mockReset().mockResolvedValue(undefined);
+    vi.mocked(db.getAppleIntelligenceSplitLongEnabled).mockReset().mockResolvedValue(true);
+    vi.mocked(db.setAppleIntelligenceSplitLongEnabled).mockReset().mockResolvedValue(undefined);
     // Not macOS 27: the card behaves as the OpenAI-only cleanup it always was.
     vi.mocked(vox.getAppleIntelligenceStatus)
         .mockReset()
@@ -303,6 +307,66 @@ describe('<SettingsCleanup /> with OpenAI', () => {
         await screen.findByLabelText(/OpenAI API key/i);
 
         expect(screen.queryByRole('button', { name: /^on-device/i })).not.toBeInTheDocument();
+    });
+
+    it('does not offer the long-dictation switch, which only applies on-device', async () => {
+        render(<SettingsCleanup />);
+        await screen.findByLabelText(/OpenAI API key/i);
+
+        expect(screen.queryByLabelText(/clean long dictations in parts/i)).not.toBeInTheDocument();
+    });
+});
+
+describe('<SettingsCleanup /> long-dictation switch', () => {
+    beforeEach(() => {
+        vi.mocked(vox.getAppleIntelligenceStatus).mockResolvedValue({ status: 'available' });
+        vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockResolvedValue(true);
+    });
+
+    function splitToggle() {
+        return screen.getByLabelText(/clean long dictations in parts/i);
+    }
+
+    it('shows the saved setting for the on-device engine', async () => {
+        vi.mocked(db.getAppleIntelligenceSplitLongEnabled).mockResolvedValue(false);
+        render(<SettingsCleanup />);
+
+        await waitFor(() => expect(splitToggle()).toBeEnabled());
+        expect(splitToggle()).toHaveAttribute('aria-checked', 'false');
+    });
+
+    it('saves the new value when switched off', async () => {
+        const user = userEvent.setup();
+        render(<SettingsCleanup />);
+        await waitFor(() => expect(splitToggle()).toBeEnabled());
+        expect(splitToggle()).toHaveAttribute('aria-checked', 'true');
+
+        await user.click(splitToggle());
+
+        await waitFor(() => expect(splitToggle()).toHaveAttribute('aria-checked', 'false'));
+        expect(db.setAppleIntelligenceSplitLongEnabled).toHaveBeenCalledWith(false);
+    });
+
+    it('is locked while cleanup is off, like the prompt', async () => {
+        vi.mocked(db.getAppleIntelligenceCleanupEnabled).mockResolvedValue(false);
+        render(<SettingsCleanup />);
+        await waitFor(() => expect(screen.getByLabelText(/enable text cleanup/i)).toBeEnabled());
+
+        expect(splitToggle()).toBeDisabled();
+    });
+
+    it('keeps the saved value and reports the error when saving fails', async () => {
+        vi.mocked(db.setAppleIntelligenceSplitLongEnabled).mockRejectedValue(
+            new Error('database busy'),
+        );
+        const user = userEvent.setup();
+        render(<SettingsCleanup />);
+        await waitFor(() => expect(splitToggle()).toBeEnabled());
+
+        await user.click(splitToggle());
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(/database busy/i);
+        expect(splitToggle()).toHaveAttribute('aria-checked', 'true');
     });
 });
 

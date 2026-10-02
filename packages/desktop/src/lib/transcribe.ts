@@ -42,9 +42,11 @@ export async function transcribe(audio: Blob): Promise<string> {
         );
     }
     const model = provider.makeModel(cfg.modelId, apiKey);
+    const providerOptions = await provider.batchProviderOptions?.();
     const { text } = await transcribeAi({
         model: model as TranscriptionModel,
         audio: new Uint8Array(await audio.arrayBuffer()),
+        ...(providerOptions && { providerOptions }),
     });
     return text;
 }
