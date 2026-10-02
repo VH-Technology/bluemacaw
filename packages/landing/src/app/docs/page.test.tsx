@@ -27,6 +27,14 @@ describe('Docs page', () => {
         );
     });
 
+    it('links to the cask so users can audit it before trusting it', () => {
+        render(<DocsPage />);
+        expect(screen.getByRole('link', { name: /read the cask/i })).toHaveAttribute(
+            'href',
+            'https://github.com/VH-Technology/homebrew-tap/blob/main/Casks/bluemacaw.rb',
+        );
+    });
+
     it('cross-links to the GitHub providers doc', () => {
         render(<DocsPage />);
         expect(screen.getByRole('link', { name: /docs\/providers\.md/i })).toHaveAttribute(
