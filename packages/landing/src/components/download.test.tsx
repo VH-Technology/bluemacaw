@@ -57,6 +57,14 @@ describe('Download', () => {
         );
     });
 
+    it('offers the Homebrew install command on the macOS card', () => {
+        vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})) as unknown as typeof fetch);
+        render(<Download />);
+        expect(
+            screen.getByText('brew install --cask vh-technology/tap/bluemacaw'),
+        ).toBeInTheDocument();
+    });
+
     it('renders coming-soon cards (no download link) for null platforms once resolved', async () => {
         vi.stubGlobal(
             'fetch',

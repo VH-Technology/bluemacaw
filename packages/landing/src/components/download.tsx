@@ -47,6 +47,7 @@ export function Download() {
                     detail="Signed + notarized DMG"
                     href={macHref}
                     docsHref="/docs/#install-macos"
+                    command="brew install --cask vh-technology/tap/bluemacaw"
                     icon={<MaskIcon src="/icons/macos.svg" className="h-7 w-7" />}
                 />
                 <PlatformCard
@@ -71,6 +72,7 @@ interface PlatformCardProps {
     tags?: readonly string[];
     altHref?: string | null;
     altLabel?: string;
+    command?: string;
 }
 
 function PlatformCard({
@@ -82,6 +84,7 @@ function PlatformCard({
     tags,
     altHref,
     altLabel,
+    command,
 }: PlatformCardProps) {
     const comingSoon = href === null;
     return (
@@ -137,6 +140,14 @@ function PlatformCard({
                     <span aria-hidden="true">→</span>
                 </a>
             </div>
+            {!comingSoon && command ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>or</span>
+                    <code className="rounded-lg bg-main/10 px-2 py-1 font-mono text-main">
+                        {command}
+                    </code>
+                </div>
+            ) : null}
         </div>
     );
 }

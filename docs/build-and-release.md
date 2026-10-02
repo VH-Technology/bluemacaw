@@ -103,5 +103,72 @@ Because of step 3, **key rotation requires a manual installer path for affected 
 | In-app install hangs at 0%                                | Bundle URL in `update.json` is wrong — re-run the manifest job after fixing the asset name.        |
 | macOS build reports `std::filesystem` APIs unavailable    | The deployment target fell below 10.15; check `bundle.macOS.minimumSystemVersion`.                  |
 | macOS build fails with "no FoundationModels framework"  | `BLUEMACAW_REQUIRE_FOUNDATION_MODELS=1` is set and the active Xcode is older than 26; select Xcode 26+ (`sudo xcode-select -s …`). |
+| Homebrew still offers the previous version after a release | `publish-homebrew` job failed — check the tap credential (`HOMEBREW_TAP_DEPLOY_KEY` or `HOMEBREW_TAP_TOKEN`), then bump by hand ([Homebrew tap](#homebrew-tap)). |
+
+## Homebrew tap
+
+macOS users can install with Homebrew instead of the DMG:
+
+```sh
+brew install --cask vh-technology/tap/bluemacaw
+```
+
+The cask lives in [`VH-Technology/homebrew-tap`](https://github.com/VH-Technology/homebrew-tap) at `Casks/bluemacaw.rb`. It points at the universal DMG of a GitHub release and pins its SHA-256, so Homebrew installs the exact signed + notarized bundle the release job produced.
+
+Two stanzas matter because the app also updates itself with `tauri-plugin-updater`:
+
+- `auto_updates true` — on `brew upgrade`, Homebrew compares the cask version with the installed app's `CFBundleShortVersionString` and skips the reinstall when the in-app updater already brought the app to the current version. Either update path ends in the same state.
+- `uninstall quit: "com.vhtechnology.bluemacaw"` — Homebrew quits the app before replacing or removing the bundle.
+
+### Tap trust
+
+Since Homebrew 6.0.0, non-official taps need explicit trust on each user's machine ([Tap Trust](https://docs.brew.sh/Tap-Trust)). A tap cannot pre-trust itself; only `homebrew/core` and `homebrew/cask` are trusted by default.
+
+Installing by the fully-qualified name trusts that one cask as part of the install, so every install instruction must use `vh-technology/tap/bluemacaw` — never `brew tap vh-technology/tap` followed by the short name. A user who tapped first sees "The following taps are not trusted" in `brew doctor` and fixes it with:
+
+```sh
+brew trust --cask vh-technology/tap/bluemacaw
+```
+
+Dropping the trust step entirely (`brew install --cask bluemacaw`) requires the cask to be accepted into the official `homebrew/cask` tap, which audits the GitHub repo for notability: any one of 225 stars, 90 forks or 90 watchers for a self-submission (75 / 30 / 30 when a third party submits), and a repo at least 30 days old.
+
+### Automatic bump on release
+
+The `publish-homebrew` job in `release.yml` runs after the build matrix on every published, non-prerelease release. It downloads `bluemacaw_<version>_universal.dmg` from the release, computes its SHA-256, rewrites the `version` and `sha256` lines in the cask, and pushes the commit to the tap's `main`. Re-running it for a release the tap already has is a no-op.
+
+The default `GITHUB_TOKEN` cannot push to another repository, so the job needs **one** of these two Actions secrets on the bluemacaw repo. It prefers the deploy key when both exist.
+
+**Option A — write-enabled deploy key** (`HOMEBREW_TAP_DEPLOY_KEY`). Scoped to the single tap repo and needs no personal account. The VH-Technology org currently has deploy keys **disabled** by policy (GitHub returns "Deploy keys are disabled for this repository"); an org owner can enable them under Organization settings → Member privileges → Deploy keys, after which:
+
+```sh
+ssh-keygen -t ed25519 -N "" -C "bluemacaw release.yml -> homebrew-tap" -f /tmp/homebrew-tap-deploy
+gh repo deploy-key add /tmp/homebrew-tap-deploy.pub --allow-write --title "bluemacaw release.yml" --repo VH-Technology/homebrew-tap
+gh secret set HOMEBREW_TAP_DEPLOY_KEY --repo VH-Technology/bluemacaw < /tmp/homebrew-tap-deploy
+rm /tmp/homebrew-tap-deploy /tmp/homebrew-tap-deploy.pub
+```
+
+**Option B — fine-grained personal access token** (`HOMEBREW_TAP_TOKEN`). Create it at GitHub → Settings → Developer settings → Fine-grained tokens with resource owner **VH-Technology**, repository access limited to **homebrew-tap**, and the single permission **Contents: Read and write**. Then:
+
+```sh
+gh secret set HOMEBREW_TAP_TOKEN --repo VH-Technology/bluemacaw
+```
+
+Fine-grained tokens expire (one year max), so put a reminder on the expiry date. To rotate either credential, store the new value under the same secret name and delete the old key or token.
+
+### Manual bump
+
+If the job fails (revoked key, renamed asset), bump by hand in a clone of the tap:
+
+```sh
+curl -fsSLO https://github.com/VH-Technology/bluemacaw/releases/download/v1.2.3/bluemacaw_1.2.3_universal.dmg
+shasum -a 256 bluemacaw_1.2.3_universal.dmg
+# edit the version + sha256 lines in Casks/bluemacaw.rb, then:
+brew style vh-technology/tap
+brew audit --cask --online vh-technology/tap/bluemacaw
+```
+
+### Graduating to homebrew-cask
+
+Once the repo clears Homebrew's notability bar for the main `homebrew-cask` tap, submit the same cask there at `Casks/b/bluemacaw.rb`. After it merges, delete the cask from this tap so the two never disagree, and switch the release job to `brew bump-cask-pr`.
 
 For architecture, see [`architecture.md`](./architecture.md). For macOS permissions wired into the bundle, see [`permissions.md`](./permissions.md).
