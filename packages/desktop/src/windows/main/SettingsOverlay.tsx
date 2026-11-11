@@ -14,6 +14,7 @@ import {
 } from '@/lib/overlay-bridge';
 import { listen } from '@tauri-apps/api/event';
 import { useEffect, useId, useState } from 'react';
+import { SettingsOverlaySensitivity } from './SettingsOverlaySensitivity';
 
 export function SettingsOverlay() {
     const enableId = useId();
@@ -89,6 +90,7 @@ export function SettingsOverlay() {
                         onCheckedChange={(v) => void handleEnableChange(v)}
                     />
                 </div>
+                <SettingsOverlaySensitivity />
                 <div className="flex flex-wrap items-center justify-end gap-2">
                     <Button
                         variant="outline"

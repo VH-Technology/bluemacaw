@@ -149,6 +149,9 @@ export const vox = {
      * permission row set and the Wayland paste-fallback info banner.
      */
     getPlatformInfo: () => invoke<PlatformInfo>('get_platform_info'),
+    /** macOS: whether closing the main window leaves the app in the Dock. */
+    getKeepInDock: () => invoke<boolean>('get_keep_in_dock'),
+    setKeepInDock: (enabled: boolean) => invoke<void>('set_keep_in_dock', { enabled }),
     /**
      * Restart the running bluemacaw process. Used by the onboarding screen
      * after the user grants Accessibility / Input Monitoring on macOS,

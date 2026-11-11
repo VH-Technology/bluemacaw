@@ -34,6 +34,7 @@ import {
     getOriginalFnUsageType,
     getOverlayEnabled,
     getOverlayPosition,
+    getOverlaySensitivity,
     getRetentionDays,
     getSelectedMicDeviceId,
     getTheme,
@@ -58,6 +59,7 @@ import {
     setOriginalFnUsageType,
     setOverlayEnabled,
     setOverlayPosition,
+    setOverlaySensitivity,
     setRetentionDays,
     setSelectedMicDeviceId,
     setTheme,
@@ -619,6 +621,36 @@ describe('db.appleIntelligenceCleanup', () => {
 
         await expect(getAppleIntelligenceCleanupPrompt()).resolves.toMatch(/filler words/i);
     });
+});
+
+describe('db.overlaySensitivity', () => {
+    it('defaults to the existing meter response and persists changes', async () => {
+        await expect(getOverlaySensitivity()).resolves.toBe(1);
+        await setOverlaySensitivity(0.3);
+        await expect(getOverlaySensitivity()).resolves.toBe(0.3);
+        await setOverlaySensitivity(2);
+        await expect(getOverlaySensitivity()).resolves.toBe(2);
+    });
+
+    it.each(['oops', '', 'NaN', 'Infinity', '0', '-1', '3'])(
+        'falls back to 100%% for invalid stored sensitivity %j',
+        async (value) => {
+            await getSharedHarness().execute('INSERT INTO app_state (key, value) VALUES (?, ?)', [
+                'overlay_sensitivity',
+                value,
+            ]);
+            await expect(getOverlaySensitivity()).resolves.toBe(1);
+        },
+    );
+
+    it.each([0, -1, 3, Number.NaN, Number.POSITIVE_INFINITY])(
+        'rejects invalid sensitivity %s without changing the saved preference',
+        async (value) => {
+            await setOverlaySensitivity(0.5);
+            await expect(setOverlaySensitivity(value)).rejects.toThrow(/sensitivity/i);
+            await expect(getOverlaySensitivity()).resolves.toBe(0.5);
+        },
+    );
 });
 
 describe('db.overlayPosition', () => {

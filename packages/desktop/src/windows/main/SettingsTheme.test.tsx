@@ -4,6 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const setPreference = vi.fn(async () => undefined);
 
+vi.mock('@/lib/use-platform', () => ({
+    usePlatform: () => ({ os: 'macos', isWayland: false }),
+}));
+vi.mock('@/lib/invoke', () => ({
+    vox: { getKeepInDock: vi.fn(async () => true) },
+}));
+
 vi.mock('@/lib/use-theme', () => ({
     useTheme: () => ({
         preference: 'system' as const,

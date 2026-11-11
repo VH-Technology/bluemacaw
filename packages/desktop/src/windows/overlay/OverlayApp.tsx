@@ -1,4 +1,9 @@
-import { type OverlayPosition, getOverlayPosition, setOverlayPosition } from '@/lib/db';
+import {
+    type OverlayPosition,
+    getOverlayPosition,
+    getOverlaySensitivity,
+    setOverlayPosition,
+} from '@/lib/db';
 import { vox } from '@/lib/invoke';
 import {
     OVERLAY_POSITION_SETUP_OFF_EVENT,
@@ -9,6 +14,10 @@ import {
     requestRecordingCancel,
     requestRecordingToggle,
 } from '@/lib/overlay-bridge';
+import {
+    DEFAULT_OVERLAY_SENSITIVITY,
+    OVERLAY_SENSITIVITY_CHANGED_EVENT,
+} from '@/lib/overlay-sensitivity';
 import type { RecordingState } from '@/lib/recording-controller';
 import { listen } from '@tauri-apps/api/event';
 import {
@@ -262,10 +271,45 @@ function useOverlayRecordingLevel(recordingState: RecordingState): number {
     return level;
 }
 
+function useOverlaySensitivity(recordingKind: RecordingState['kind']): number {
+    const [sensitivity, setSensitivity] = useState(DEFAULT_OVERLAY_SENSITIVITY);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: Recording transitions intentionally reload the setting as a fallback for missed notifications.
+    useEffect(() => {
+        let cancelled = false;
+        let revision = 0;
+        const reload = async () => {
+            const currentRevision = ++revision;
+            try {
+                const value = await getOverlaySensitivity();
+                if (!cancelled && currentRevision === revision) setSensitivity(value);
+            } catch (err) {
+                console.warn('OverlayApp: failed to load meter sensitivity', err);
+            }
+        };
+        const unlisten = listen(OVERLAY_SENSITIVITY_CHANGED_EVENT, () => void reload());
+        // Subscribe before loading, and refresh on each recording transition
+        // as a fallback for a missed cross-window notification.
+        void unlisten
+            .then(() => {
+                if (!cancelled) void reload();
+            })
+            .catch((err) => {
+                console.warn('OverlayApp: sensitivity listener failed', err);
+                if (!cancelled) void reload();
+            });
+        return () => {
+            cancelled = true;
+            void unlisten.then((fn) => fn()).catch(() => {});
+        };
+    }, [recordingKind]);
+    return sensitivity;
+}
+
 export function OverlayApp() {
     const recordingState = useOverlayRecordingState();
     const { setupActive } = useOverlayPositionSetup(recordingState);
     const level = useOverlayRecordingLevel(recordingState);
+    const sensitivity = useOverlaySensitivity(recordingState.kind);
     useOverlayInitialPosition();
     useOverlayPositionPersistence();
     useOverlayResetHandler();
@@ -275,6 +319,7 @@ export function OverlayApp() {
             onStop={() => void requestRecordingToggle()}
             onCancel={() => void requestRecordingCancel()}
             level={level}
+            sensitivity={sensitivity}
         />
     );
 }

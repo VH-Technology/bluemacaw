@@ -24,7 +24,7 @@ Three routes — all pre-rendered to static HTML:
 
 ## Commands
 
-Run from this package directory (or via `bun --cwd packages/landing run <cmd>` from repo root):
+Run from this package directory (or via `bun run --filter @bluemacaw/landing <cmd>` from repo root):
 
 ```bash
 bun run dev          # Next.js dev server on http://localhost:3000
@@ -63,6 +63,8 @@ Lives alongside source: `src/components/<x>.test.tsx`, `src/app/<route>/page.tes
 Three smoke specs at `tests/e2e/{home,privacy,changelog}.spec.ts`. The Playwright config spawns `bunx serve out -p 3000` so you must `bun run build` before `bun run test:e2e` runs.
 
 First-time setup (one-time): `bunx playwright install chromium`. CI installs browsers via `bunx playwright install chromium --with-deps`.
+
+The landing CI job is pinned to Ubuntu 24.04 because the installed Playwright 1.59 does not support Ubuntu 26.04. Its Bun scripts use an explicit `working-directory: packages/landing`; putting `--cwd` before `run` can print help and exit successfully without running the script. The browser cache includes the Ubuntu version and hashes `bun.lock` so dependency updates invalidate it.
 
 ## Deploy
 

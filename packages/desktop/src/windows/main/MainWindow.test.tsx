@@ -7,6 +7,7 @@ vi.mock('@/lib/db', () => ({
     listModelConfigs: vi.fn(async () => []),
     getActiveModelConfigId: vi.fn(async () => null),
     getOverlayEnabled: vi.fn(async () => true),
+    getOverlaySensitivity: vi.fn(async () => 1),
     setOverlayEnabled: vi.fn(async () => undefined),
     listTranscriptions: vi.fn(async () => []),
     softDeleteTranscription: vi.fn(async () => undefined),
@@ -55,6 +56,7 @@ vi.mock('@/lib/invoke', () => ({
         registerCancelHotkey: vi.fn(async () => 'Cmd+Esc'),
         unregisterCancelHotkey: vi.fn(async () => undefined),
         getPlatformInfo: vi.fn(async () => ({ os: 'macos', isWayland: false })),
+        getKeepInDock: vi.fn(async () => true),
         // OnboardingStepPermissions polls these via useOnboardingStatus
         // whenever the gate routes to show-onboarding. Stub them so the
         // poller doesn't spam errors during the show-onboarding case.
