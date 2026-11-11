@@ -78,7 +78,8 @@ jobs:
   test-landing:
     name: Test landing
     needs: [lint-typecheck]
-    runs-on: ubuntu-latest
+    # Playwright 1.59 does not support Ubuntu 26.04 (now ubuntu-latest).
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -91,25 +92,28 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Vitest (unit)
-        run: bun --cwd packages/landing run test:unit
+        working-directory: packages/landing
+        run: bun run test:unit
 
       - name: Build static export
-        run: bun --cwd packages/landing run build
+        working-directory: packages/landing
+        run: bun run build
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('packages/landing/package.json', 'bun.lockb') }}
+          key: ${{ runner.os }}-ubuntu-24.04-playwright-${{ hashFiles('packages/landing/package.json', 'bun.lock') }}
           restore-keys: |
-            ${{ runner.os }}-playwright-
+            ${{ runner.os }}-ubuntu-24.04-playwright-
 
       - name: Install Playwright (chromium)
         run: bunx playwright install chromium --with-deps
         working-directory: packages/landing
 
       - name: Playwright E2E
-        run: bun --cwd packages/landing run test:e2e
+        working-directory: packages/landing
+        run: bun run test:e2e
 
   build-desktop:
     name: Build desktop / ${{ matrix.os }}
