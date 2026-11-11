@@ -16,9 +16,12 @@ Examples:
 - `secrets/mod.rs` — `InMemoryVault` get/set/delete semantics; `SecretKey::Debug` redaction.
 - `audio/microphone.rs` — WAV encoding (`encode_wav_pcm16`) round-trip; session bookkeeping; peak-level reset on read; poisoned-mutex behaviour.
 - `clipboard/mod.rs` — `InMemoryClipboard` read/write/overwrite + trait-object behaviour.
-- `paste/mod.rs` — `RecordingPaster` records each call; `EnigoPaster` writes through to the trait object.
+- `login_launch.rs` — the login-launch decision (`--autostart` flag, the two-minute window after the console login, clock skew) and console-record selection, over literal inputs. The utmpx read itself and the real behaviour at login are not automated: verify by logging out and back in with "Start at login" on and confirming only the tray icon appears.
+- `paste/mod.rs` — `RecordingPaster` records calls and writes the test clipboard. `paste/macos.rs` tests the production shortcut sequencing with injected key-operation failures, including Command cleanup and permission-error mapping. Native event delivery is checked separately with the probe below.
+- `shortcut/macos_fn.rs` / `shortcut/macos_chord.rs` — synthetic paste events cannot retrigger or corrupt physical Fn/chord/double-tap state.
 - `shortcut/parse.rs` — combo parser / formatter round-trips, case insensitivity, alias normalisation (Option/Alt, Cmd/Meta), function/arrow keys, exhaustive modifier combinations.
 - `audio/permissions/mod.rs` — the platform module is wired up and returns *some* `PermissionState`. We deliberately do not assert which, because CI runners and dev machines differ.
+- `apple_intelligence/mod.rs` — the sidecar protocol, the macOS 27 gate, and process handling (stdin request, error/crash reporting, timeout kill), driven by `/bin/sh` scripts standing in for the Swift sidecar. `real_sidecar_cleans_up_a_transcript` is `#[ignore]`d. It runs the real sidecar against Apple's on-device model; on a macOS 27 Mac with Apple Intelligence on, run `cargo test --lib apple_intelligence -- --ignored`.
 
 History CRUD, retention, and stats live JS-side in `lib/db.ts` rather than in Rust (a divergence from Plan B). They are tested under the Vitest layer below — see `lib/db.test.ts` and the `__tests__/db-harness.ts` helper, which runs against an in-process `better-sqlite3` database with the migration SQL applied per test.
 
@@ -106,6 +109,37 @@ A missing-coverage failure is not a CI gate today — we surface the report and 
 - **Cross-module flow without OS dependencies** → Integration layer.
 - **End-to-end transcribe-style flow** → Functional layer with MSW.
 - **OS-level behavior** — `cpal` actually capturing audio, `keyring` actually writing the keychain — is exercised manually via `/dev-desktop` and `/build-clean`. There is no automated harness for OS-level behavior; that's a deliberate scope decision (the cost of CI runners with real mics + keychains exceeds the value at v1).
+
+## macOS native paste probe
+
+`packages/desktop/src-tauri/examples/paste_probe.rs` runs the production
+`EnigoPaster` on the main thread, with a `pbcopy`/`pbpaste` clipboard adapter and
+a listen-only event tap. It captures only this process's tagged paste events
+(keycodes, flags, source IDs, and timing), not unrelated typing or clipboard
+contents. It is an opt-in diagnostic, not part of the unattended test suite.
+
+From `packages/desktop/src-tauri`:
+
+```sh
+cargo run --example paste_probe -- --check-permissions
+cargo run --example paste_probe -- 100
+```
+
+The probe's host process needs Accessibility and Input Monitoring. After the
+five-second countdown it pastes numbered lines into the focused field and
+checks that both V events carry Command without other shortcut modifiers,
+the event source is private, and the final Command release is present.
+
+Focus a disposable text field before the countdown ends. Run once with the
+pointer stationary and again while moving the physical mouse. Also check
+physical hotkey releases near completion and held modifiers. Verify exactly
+one complete numbered line per request in the receiving field: observing
+events alone does not prove the application accepted the paste.
+
+Repeat in TextEdit, a browser text area, and an Electron editor, including
+selection replacement and non-US/Dvorak layouts. Test the actual app with Fn,
+modifier chords, and double-tap Command to confirm paste never toggles recording
+and physical modifiers continue working afterward.
 
 ## Spec cross-reference
 

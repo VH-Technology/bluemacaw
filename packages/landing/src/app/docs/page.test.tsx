@@ -13,6 +13,28 @@ describe('Docs page', () => {
         }
     });
 
+    it('documents the Homebrew install command in the macOS section', () => {
+        const { container } = render(<DocsPage />);
+        expect(container.querySelector('#install-macos')).toHaveTextContent(
+            'brew install --cask vh-technology/tap/bluemacaw',
+        );
+    });
+
+    it('documents how to trust the cask when the tap was added first', () => {
+        const { container } = render(<DocsPage />);
+        expect(container.querySelector('#install-macos')).toHaveTextContent(
+            'brew trust --cask vh-technology/tap/bluemacaw',
+        );
+    });
+
+    it('links to the cask so users can audit it before trusting it', () => {
+        render(<DocsPage />);
+        expect(screen.getByRole('link', { name: /read the cask/i })).toHaveAttribute(
+            'href',
+            'https://github.com/VH-Technology/homebrew-tap/blob/main/Casks/bluemacaw.rb',
+        );
+    });
+
     it('cross-links to the GitHub providers doc', () => {
         render(<DocsPage />);
         expect(screen.getByRole('link', { name: /docs\/providers\.md/i })).toHaveAttribute(

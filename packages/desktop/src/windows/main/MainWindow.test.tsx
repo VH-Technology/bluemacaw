@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -7,6 +7,7 @@ vi.mock('@/lib/db', () => ({
     listModelConfigs: vi.fn(async () => []),
     getActiveModelConfigId: vi.fn(async () => null),
     getOverlayEnabled: vi.fn(async () => true),
+    getOverlaySensitivity: vi.fn(async () => 1),
     setOverlayEnabled: vi.fn(async () => undefined),
     listTranscriptions: vi.fn(async () => []),
     softDeleteTranscription: vi.fn(async () => undefined),
@@ -19,6 +20,15 @@ vi.mock('@/lib/db', () => ({
     setCancelHotkeyCombo: vi.fn(async () => undefined),
     getTheme: vi.fn(async () => 'system'),
     setTheme: vi.fn(async () => undefined),
+    getTranscriptCleanupApiKeyId: vi.fn(async () => null),
+    getTranscriptCleanupOptions: vi.fn(async () => ({
+        modelId: 'gpt-4o-mini',
+        prompt: 'Default cleanup prompt',
+    })),
+    setTranscriptCleanupApiKeyId: vi.fn(async () => undefined),
+    setTranscriptCleanupOptions: vi.fn(async () => undefined),
+    getDeepgramSmartFormatEnabled: vi.fn(async () => true),
+    setDeepgramSmartFormatEnabled: vi.fn(async () => undefined),
     // Used by the predicate-driven onboarding wizard when the gate routes
     // to show-onboarding. False means "step 2 not yet seen by user."
     getHotkeysOnboarded: vi.fn(async () => false),
@@ -46,6 +56,7 @@ vi.mock('@/lib/invoke', () => ({
         registerCancelHotkey: vi.fn(async () => 'Cmd+Esc'),
         unregisterCancelHotkey: vi.fn(async () => undefined),
         getPlatformInfo: vi.fn(async () => ({ os: 'macos', isWayland: false })),
+        getKeepInDock: vi.fn(async () => true),
         // OnboardingStepPermissions polls these via useOnboardingStatus
         // whenever the gate routes to show-onboarding. Stub them so the
         // poller doesn't spam errors during the show-onboarding case.
@@ -82,7 +93,11 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
 }));
 
 vi.mock('@tauri-apps/api/window', () => ({
-    getCurrentWindow: vi.fn(() => ({ setTheme: vi.fn(async () => undefined) })),
+    getCurrentWindow: vi.fn(() => ({
+        setTheme: vi.fn(async () => undefined),
+        show: vi.fn(async () => undefined),
+        setFocus: vi.fn(async () => undefined),
+    })),
 }));
 
 // useUpdater pulls in @tauri-apps/plugin-updater, which throws under jsdom
@@ -100,6 +115,7 @@ vi.mock('@/lib/use-onboarding-gate', () => ({
 }));
 
 import { useOnboardingGate } from '@/lib/use-onboarding-gate';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { check } from '@tauri-apps/plugin-updater';
 import { MainWindow } from './MainWindow';
 
@@ -166,6 +182,47 @@ describe('<MainWindow />', () => {
         });
         render(<MainWindow />);
         expect(screen.getByTestId('onboarding-screen')).toBeInTheDocument();
+    });
+
+    describe('window visibility (the window is created hidden)', () => {
+        function mockWindow() {
+            const show = vi.fn(async () => undefined);
+            const setFocus = vi.fn(async () => undefined);
+            vi.mocked(getCurrentWindow).mockReturnValue({
+                setTheme: vi.fn(async () => undefined),
+                show,
+                setFocus,
+            } as unknown as ReturnType<typeof getCurrentWindow>);
+            return { show, setFocus };
+        }
+
+        it('shows and focuses the window when onboarding is required', async () => {
+            const { show, setFocus } = mockWindow();
+            vi.mocked(useOnboardingGate).mockReturnValueOnce({
+                state: 'show-onboarding',
+                complete: vi.fn(),
+            });
+            render(<MainWindow />);
+            await waitFor(() => expect(setFocus).toHaveBeenCalledTimes(1));
+            expect(show).toHaveBeenCalledTimes(1);
+        });
+
+        it('leaves visibility to the backend once onboarding is done, so a login launch stays in the tray', async () => {
+            const { show } = mockWindow();
+            render(<MainWindow />);
+            await screen.findByTestId('panel-dashboard');
+            expect(show).not.toHaveBeenCalled();
+        });
+
+        it('does not show the window while the gate is still loading', () => {
+            const { show } = mockWindow();
+            vi.mocked(useOnboardingGate).mockReturnValueOnce({
+                state: 'loading',
+                complete: vi.fn(),
+            });
+            render(<MainWindow />);
+            expect(show).not.toHaveBeenCalled();
+        });
     });
 
     it('surfaces a transient error toast (not a persistent banner) when the update check keeps failing', async () => {

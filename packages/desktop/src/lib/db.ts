@@ -1,13 +1,21 @@
 import { invoke } from '@tauri-apps/api/core';
 import Database from '@tauri-apps/plugin-sql';
 import { modelPricePerMinute } from '../providers/util';
+import {
+    DEFAULT_APPLE_INTELLIGENCE_CLEANUP_PROMPT,
+    type TranscriptCleanupOptions,
+    defaultTranscriptCleanupOptions,
+} from './cleanup-config';
 import { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_OTHER } from './defaults';
+import { DEFAULT_OVERLAY_SENSITIVITY, isValidOverlaySensitivity } from './overlay-sensitivity';
 import { getPlatform } from './use-platform';
 import type { Theme } from './use-theme';
 
 const DB_URL = 'sqlite:bluemacaw.db';
 const ACTIVE_MODEL_CONFIG_KEY = 'active_model_config_id';
+const ACTIVE_LOCAL_MODEL_ID_KEY = 'active_local_model_id';
 const OVERLAY_ENABLED_KEY = 'overlay_enabled';
+const OVERLAY_SENSITIVITY_KEY = 'overlay_sensitivity';
 const OVERLAY_X_KEY = 'overlay_x';
 const OVERLAY_Y_KEY = 'overlay_y';
 const SELECTED_MIC_DEVICE_KEY = 'selected_mic_device_id';
@@ -32,6 +40,12 @@ const FN_USAGE_TYPE_ORIGINAL_KEY = 'fn_usage_type_original';
 const RETENTION_DAYS_KEY = 'history_retention_days';
 const HISTORY_LAST_SWEEP_KEY = 'history_last_sweep';
 const THEME_KEY = 'theme';
+const TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY = 'transcript_cleanup_openai_api_key_id';
+const TRANSCRIPT_CLEANUP_OPTIONS_KEY = 'transcript_cleanup_options';
+const APPLE_INTELLIGENCE_CLEANUP_ENABLED_KEY = 'transcript_cleanup_apple_intelligence_enabled';
+const APPLE_INTELLIGENCE_CLEANUP_PROMPT_KEY = 'transcript_cleanup_apple_intelligence_prompt';
+const APPLE_INTELLIGENCE_SPLIT_LONG_KEY = 'transcript_cleanup_apple_intelligence_split_long';
+const DEEPGRAM_SMART_FORMAT_KEY = 'deepgram_smart_format';
 const SOFT_DELETE_GRACE_DAYS = 30;
 
 export interface ApiKeyRow {
@@ -153,10 +167,176 @@ export async function deleteApiKey(id: string): Promise<void> {
     const activeId = await getActiveModelConfigId();
     const dependents = await listModelConfigDependencies(id);
     await conn.execute('DELETE FROM api_keys WHERE id = ?', [id]);
+    await conn.execute('DELETE FROM app_state WHERE key = ? AND value = ?', [
+        TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY,
+        id,
+    ]);
     await invoke<void>('delete_secret', { secretId: id });
     if (activeId !== null && dependents.some((d) => d.id === activeId)) {
         await conn.execute('DELETE FROM app_state WHERE key = ?', [ACTIVE_MODEL_CONFIG_KEY]);
     }
+}
+
+export async function getTranscriptCleanupApiKeyId(): Promise<string | null> {
+    const conn = await db();
+    const rows = (await conn.select(
+        `SELECT app.value
+         FROM app_state app
+         JOIN api_keys key ON key.id = app.value
+         WHERE app.key = ? AND key.provider_id = 'openai'`,
+        [TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY],
+    )) as { value: string }[];
+    return rows[0]?.value ?? null;
+}
+
+export async function setTranscriptCleanupApiKeyId(id: string | null): Promise<void> {
+    const conn = await db();
+    if (id === null) {
+        await conn.execute('DELETE FROM app_state WHERE key = ?', [
+            TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY,
+        ]);
+        return;
+    }
+
+    const keys = (await conn.select('SELECT provider_id FROM api_keys WHERE id = ?', [id])) as {
+        provider_id: string;
+    }[];
+    if (keys[0]?.provider_id !== 'openai') {
+        throw new Error('Transcript cleanup requires an OpenAI API key');
+    }
+
+    // Only one cleanup engine runs. Turn the other one off first so a failed
+    // write leaves cleanup off rather than both engines on.
+    await setAppleIntelligenceCleanupEnabled(false);
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY, id],
+    );
+}
+
+export async function getAppleIntelligenceCleanupEnabled(): Promise<boolean> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        APPLE_INTELLIGENCE_CLEANUP_ENABLED_KEY,
+    ])) as { value: string }[];
+    return rows[0]?.value === 'true';
+}
+
+/**
+ * Turn on-device cleanup on or off. Enabling it turns OpenAI cleanup off
+ * (clears its key id), so at most one engine is ever active.
+ */
+export async function setAppleIntelligenceCleanupEnabled(enabled: boolean): Promise<void> {
+    const conn = await db();
+    if (enabled) {
+        await conn.execute('DELETE FROM app_state WHERE key = ?', [
+            TRANSCRIPT_CLEANUP_OPENAI_API_KEY_ID_KEY,
+        ]);
+    }
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [APPLE_INTELLIGENCE_CLEANUP_ENABLED_KEY, enabled ? 'true' : 'false'],
+    );
+}
+
+/** Reads an on/off `app_state` flag that counts as on until it is turned off. */
+async function getFlagDefaultOn(key: string): Promise<boolean> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [key])) as {
+        value: string;
+    }[];
+    return rows[0]?.value !== 'false';
+}
+
+async function setFlag(key: string, enabled: boolean): Promise<void> {
+    const conn = await db();
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [key, enabled ? 'true' : 'false'],
+    );
+}
+
+/**
+ * Whether on-device cleanup handles a long transcript one group of sentences
+ * at a time (see `split-transcript.ts`). On unless the user turned it off.
+ */
+export function getAppleIntelligenceSplitLongEnabled(): Promise<boolean> {
+    return getFlagDefaultOn(APPLE_INTELLIGENCE_SPLIT_LONG_KEY);
+}
+
+export function setAppleIntelligenceSplitLongEnabled(enabled: boolean): Promise<void> {
+    return setFlag(APPLE_INTELLIGENCE_SPLIT_LONG_KEY, enabled);
+}
+
+/**
+ * Whether Deepgram is asked to punctuate and format its transcripts
+ * (`smart_format`). On unless the user turned it off.
+ */
+export function getDeepgramSmartFormatEnabled(): Promise<boolean> {
+    return getFlagDefaultOn(DEEPGRAM_SMART_FORMAT_KEY);
+}
+
+export function setDeepgramSmartFormatEnabled(enabled: boolean): Promise<void> {
+    return setFlag(DEEPGRAM_SMART_FORMAT_KEY, enabled);
+}
+
+export async function getAppleIntelligenceCleanupPrompt(): Promise<string> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        APPLE_INTELLIGENCE_CLEANUP_PROMPT_KEY,
+    ])) as { value: string }[];
+    const prompt = rows[0]?.value.trim();
+    return prompt || DEFAULT_APPLE_INTELLIGENCE_CLEANUP_PROMPT;
+}
+
+export async function setAppleIntelligenceCleanupPrompt(prompt: string): Promise<void> {
+    const trimmed = prompt.trim();
+    if (!trimmed) throw new Error('Transcript cleanup prompt cannot be blank');
+
+    const conn = await db();
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [APPLE_INTELLIGENCE_CLEANUP_PROMPT_KEY, trimmed],
+    );
+}
+
+export async function getTranscriptCleanupOptions(): Promise<TranscriptCleanupOptions> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        TRANSCRIPT_CLEANUP_OPTIONS_KEY,
+    ])) as { value: string }[];
+    const raw = rows[0]?.value;
+    if (!raw) return defaultTranscriptCleanupOptions();
+
+    try {
+        const parsed = JSON.parse(raw) as Partial<TranscriptCleanupOptions>;
+        if (
+            typeof parsed.modelId !== 'string' ||
+            !parsed.modelId.trim() ||
+            typeof parsed.prompt !== 'string' ||
+            !parsed.prompt.trim()
+        ) {
+            return defaultTranscriptCleanupOptions();
+        }
+        return { modelId: parsed.modelId.trim(), prompt: parsed.prompt.trim() };
+    } catch {
+        return defaultTranscriptCleanupOptions();
+    }
+}
+
+export async function setTranscriptCleanupOptions(
+    options: TranscriptCleanupOptions,
+): Promise<void> {
+    const modelId = options.modelId.trim();
+    const prompt = options.prompt.trim();
+    if (!modelId) throw new Error('Transcript cleanup model cannot be blank');
+    if (!prompt) throw new Error('Transcript cleanup prompt cannot be blank');
+
+    const conn = await db();
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [TRANSCRIPT_CLEANUP_OPTIONS_KEY, JSON.stringify({ modelId, prompt })],
+    );
 }
 
 export async function listModelConfigs(): Promise<ModelConfigWithApiKey[]> {
@@ -195,9 +375,14 @@ export async function addModelConfig(input: {
     if (!row) throw new Error('Inserted model_config disappeared before read-back');
 
     // Promote first-ever config to active so the recording loop has a target
-    // without requiring the user to discover the click-to-activate UX.
-    const currentActive = await getActiveModelConfigId();
-    if (currentActive === null) {
+    // without requiring the user to discover the click-to-activate UX. Only do
+    // this when nothing else is active — never silently steal active status
+    // from a local model the user already set up.
+    const [currentActive, currentLocal] = await Promise.all([
+        getActiveModelConfigId(),
+        getActiveLocalModelId(),
+    ]);
+    if (currentActive === null && currentLocal === null) {
         await setActiveModelConfigId(id);
     }
 
@@ -223,6 +408,9 @@ export async function getActiveModelConfigId(): Promise<string | null> {
 
 export async function setActiveModelConfigId(id: string | null): Promise<void> {
     const conn = await db();
+    if (id !== null) {
+        await conn.execute('DELETE FROM app_state WHERE key = ?', [ACTIVE_LOCAL_MODEL_ID_KEY]);
+    }
     if (id === null) {
         await conn.execute('DELETE FROM app_state WHERE key = ?', [ACTIVE_MODEL_CONFIG_KEY]);
         return;
@@ -230,6 +418,29 @@ export async function setActiveModelConfigId(id: string | null): Promise<void> {
     await conn.execute(
         'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
         [ACTIVE_MODEL_CONFIG_KEY, id],
+    );
+}
+
+export async function getActiveLocalModelId(): Promise<string | null> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        ACTIVE_LOCAL_MODEL_ID_KEY,
+    ])) as { value: string }[];
+    return rows[0]?.value ?? null;
+}
+
+export async function setActiveLocalModelId(id: string | null): Promise<void> {
+    const conn = await db();
+    if (id !== null) {
+        await conn.execute('DELETE FROM app_state WHERE key = ?', [ACTIVE_MODEL_CONFIG_KEY]);
+    }
+    if (id === null) {
+        await conn.execute('DELETE FROM app_state WHERE key = ?', [ACTIVE_LOCAL_MODEL_ID_KEY]);
+        return;
+    }
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [ACTIVE_LOCAL_MODEL_ID_KEY, id],
     );
 }
 
@@ -247,6 +458,26 @@ export async function setOverlayEnabled(enabled: boolean): Promise<void> {
     await conn.execute(
         'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
         [OVERLAY_ENABLED_KEY, enabled ? 'true' : 'false'],
+    );
+}
+
+export async function getOverlaySensitivity(): Promise<number> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        OVERLAY_SENSITIVITY_KEY,
+    ])) as { value: string }[];
+    const value = Number(rows[0]?.value);
+    return isValidOverlaySensitivity(value) ? value : DEFAULT_OVERLAY_SENSITIVITY;
+}
+
+export async function setOverlaySensitivity(value: number): Promise<void> {
+    if (!isValidOverlaySensitivity(value)) {
+        throw new Error('Overlay sensitivity must be between 10% and 200%');
+    }
+    const conn = await db();
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [OVERLAY_SENSITIVITY_KEY, String(value)],
     );
 }
 

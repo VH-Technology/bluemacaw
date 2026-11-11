@@ -5,6 +5,7 @@ import { autostart } from '@/lib/autostart';
 import { type Theme, useTheme } from '@/lib/use-theme';
 import { cn } from '@/lib/utils';
 import { useEffect, useId, useState } from 'react';
+import { SettingsDock } from './SettingsDock';
 
 const OPTIONS: { value: Theme; label: string }[] = [
     { value: 'light', label: 'Light' },
@@ -169,6 +170,7 @@ export function SettingsTheme() {
                         {autostartError}
                     </p>
                 )}
+                <SettingsDock />
             </CardContent>
         </Card>
     );

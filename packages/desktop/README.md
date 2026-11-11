@@ -55,6 +55,9 @@ For a deeper walk-through, see [`docs/architecture.md`](../../docs/architecture.
 
 ## Run the dev app
 
+Use a current stable Rust toolchain; the macOS input backend (Enigo 0.6.1)
+requires Rust 1.85 or newer. Desktop releases target macOS and Windows.
+
 ```bash
 bun install                   # at repo root
 cd packages/desktop
@@ -102,8 +105,16 @@ Capability grants for each are listed in `src-tauri/capabilities/default.json`.
 
 ## Configuration
 
+### User preferences
+
+- **Settings → Overlay → Volume indicator sensitivity:** adjust the recording pill's meter from 10% to 200%. Lower values make it less reactive; 100% is the existing/default response. Changes apply live and persist across restarts. **Reset sensitivity** restores 100%. This changes visual feedback only, not recorded audio or transcription quality.
+- **Settings → General → Keep in Dock when the window is closed** (macOS): on by default. Turn it off to keep bluemacaw in the menu bar only after closing the window. The app and recording hotkeys keep running. Choose **Open bluemacaw** from the menu bar to restore the window and Dock icon. Hidden login launches follow this preference too; **Quit bluemacaw** exits the app.
+
+### Project configuration
+
 - `tauri.conf.json` — bundle id (`com.vhtechnology.bluemacaw`), windows config (main + overlay), CSP allowlist (provider hostnames), bundle metadata, updater endpoint placeholder.
 - `Cargo.toml` — Rust dependencies: `tauri`, `cpal`, `keyring`, `sqlx`, `enigo`, `objc2-av-foundation` on macOS, `windows` on Windows.
+- Paste uses target-specific Enigo versions: 0.6.1 on macOS for isolated modifier state, and 0.2.1 on Windows. The macOS-only [native paste probe](../../docs/testing.md#macos-native-paste-probe) verifies emitted shortcut flags independently of STT.
 - `package.json` — `@ai-sdk/*` for each provider, `@tauri-apps/plugin-*` for each tracked plugin.
 
 For secret storage, see [`docs/secrets.md`](../../docs/secrets.md). For permissions, see [`docs/permissions.md`](../../docs/permissions.md).

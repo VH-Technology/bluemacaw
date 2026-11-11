@@ -39,10 +39,10 @@ describe('onboarding store', () => {
         await expect(isOnboardingCompleted()).resolves.toBe(false);
     });
 
-    it('reads/writes under the v2 key so legacy v1 completion does not skip the new wizard', async () => {
+    it('reads/writes under the v3 key so legacy v1/v2 completion does not skip the new wizard', async () => {
         storeData.set('onboarding_v1_completed', true);
         await expect(isOnboardingCompleted()).resolves.toBe(false);
         await markOnboardingCompleted();
-        expect(storeData.get('onboarding_v2_completed')).toBe(true);
+        expect(storeData.get('onboarding_v3_completed')).toBe(true);
     });
 });

@@ -1,7 +1,10 @@
+pub mod apple_intelligence;
 pub mod audio;
 pub mod clipboard;
 pub mod commands;
+pub mod dock;
 pub mod history;
+pub mod login_launch;
 pub mod markers;
 #[cfg(target_os = "macos")]
 pub mod overlay_panel;
@@ -10,6 +13,7 @@ pub mod platform;
 pub mod secrets;
 pub mod shortcut;
 pub mod system_volume;
+pub mod local_model;
 pub mod tray;
 
 use std::sync::{Arc, Mutex};
@@ -42,10 +46,11 @@ pub fn run() {
             // Login Item path is cleaner and matches what the user sees
             // in System Settings → General → Login Items.
             tauri_plugin_autostart::MacosLauncher::AppleScript,
-            // No CLI args needed on relaunch; bluemacaw boots the same
-            // tray-resident process whether the user clicked the dock
-            // icon or the OS auto-launched it.
-            None,
+            // Windows and Linux forward this flag to the auto-launched
+            // process, which then keeps the main window hidden (see
+            // `login_launch`). A macOS Login Item cannot carry arguments;
+            // there the launch is recognised by its timing instead.
+            Some(vec![login_launch::AUTOSTART_FLAG]),
         ))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -86,7 +91,16 @@ pub fn run() {
             commands::get_fn_usage_type,
             commands::set_fn_usage_type,
             commands::get_platform_info,
+            commands::get_keep_in_dock,
+            commands::set_keep_in_dock,
             commands::restart_app,
+            commands::download_whisper_model,
+            commands::cancel_model_download,
+            commands::transcribe_local,
+            commands::list_local_models,
+            commands::delete_local_model,
+            commands::get_apple_intelligence_status,
+            commands::generate_with_apple_intelligence,
             commands::present_overlay,
             commands::duck_system_volume,
             commands::restore_system_volume,
@@ -107,10 +121,28 @@ pub fn run() {
                 fn_tap: Mutex::new(None),
                 #[cfg(target_os = "macos")]
                 chord_tap: Mutex::new(None),
+                download_cancel_tokens: std::sync::Mutex::new(
+                    std::collections::HashMap::new(),
+                ),
             };
             app.manage(app_state);
 
             tray::build(app.handle())?;
+
+            // Autostart entries written before `--autostart` existed lack the
+            // flag, so rewrite an enabled entry on every start. Skipped on
+            // macOS: the Login Item carries no arguments, and re-adding it
+            // could duplicate the entry.
+            #[cfg(not(target_os = "macos"))]
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let autostart = app.autolaunch();
+                if autostart.is_enabled().unwrap_or(false) {
+                    if let Err(e) = autostart.enable() {
+                        log::warn!("refreshing the autostart entry failed: {e}");
+                    }
+                }
+            }
 
             // macOS: convert the overlay window to a non-activating NSPanel
             // so clicks on the Stop button / drag handle don't yank focus
@@ -123,17 +155,31 @@ pub fn run() {
             }
 
             // Closing the main window hides it instead of quitting — the app
-            // keeps running (tray + global hotkey stay live). We deliberately
-            // keep the activation policy at `Regular` so the Dock icon stays
-            // put; clicking it re-opens the window via the `Reopen` handler
-            // below, just like the tray's "Open bluemacaw". Quitting (tray
-            // Quit / Cmd+Q) still exits the process.
+            // keeps running (tray + global hotkey stay live). The macOS Dock
+            // preference determines whether the hidden app stays Dock-resident.
+            // Quitting (tray Quit / Cmd+Q) still exits the process.
             if let Some(main_window) = app.get_webview_window("main") {
+                // The main window is created hidden (`visible: false` in
+                // tauri.conf.json). A launch at login stays in the tray; every
+                // other launch shows the window right away. The webview shows
+                // it itself when onboarding is still pending (`MainWindow`).
+                if !login_launch::launched_at_login() {
+                    dock::show_main_window(app.handle());
+                } else {
+                    dock::apply_for_main_visibility(app.handle(), false);
+                }
+
                 let main_window_for_close = main_window.clone();
                 main_window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
-                        let _ = main_window_for_close.hide();
+                        if main_window_for_close.hide().is_ok() {
+                            dock::apply_for_main_visibility(main_window_for_close.app_handle(), false);
+                        }
+                    } else if let tauri::WindowEvent::Focused(true) = event {
+                        // Includes onboarding, which can show the main window
+                        // from the webview after a hidden login launch.
+                        dock::apply_for_main_visibility(main_window_for_close.app_handle(), true);
                     }
                 });
             }
@@ -144,15 +190,11 @@ pub fn run() {
         .expect("error while building bluemacaw")
         .run(|_app_handle, _event| {
             // macOS: clicking the Dock icon while the window is hidden fires
-            // a Reopen event (the app stays Dock-resident because we never
-            // drop to Accessory). Re-show + focus the main window, mirroring
-            // the tray's "Open bluemacaw".
+            // a Reopen event. Opening from Finder also takes this path when
+            // the app is in menu-bar-only mode.
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = _event {
-                if let Some(window) = _app_handle.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+                dock::show_main_window(_app_handle);
             }
         });
 }

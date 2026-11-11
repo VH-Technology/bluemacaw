@@ -20,7 +20,7 @@
 #![cfg(target_os = "macos")]
 
 use objc2::msg_send;
-use objc2::runtime::AnyObject;
+use objc2::runtime::{AnyClass, AnyObject};
 use objc2::ClassType;
 use objc2_app_kit::{
     NSPanel, NSWindowCollectionBehavior, NSWindowLevel, NSWindowStyleMask,
@@ -67,12 +67,10 @@ pub fn make_overlay_nonactivating<R: Runtime>(
         // 1+2. Re-class to NSPanel via the ObjC runtime's object_setClass.
         //      NSObject does not expose a `setClass:` selector, so going
         //      through `msg_send!` would crash with unrecognized-selector.
-        //      `AnyObject::set_class` is objc2's safe wrapper around
-        //      `object_setClass`. After this call the same memory is
-        //      treated as an NSPanel by the runtime, which is valid because
-        //      NSPanel inherits NSWindow with the same layout.
-        let obj_ref: &AnyObject = &*any_obj;
-        let _ = AnyObject::set_class(obj_ref, NSPanel::class());
+        //      After this call the same memory is treated as an NSPanel by
+        //      the runtime, which is valid because NSPanel inherits NSWindow
+        //      and adds no ivars beyond the window's allocation.
+        reclass(any_obj, NSPanel::class());
 
         // 3. Add nonactivating-panel to the existing mask.
         let current_mask: NSWindowStyleMask = msg_send![any_obj, styleMask];
@@ -118,6 +116,27 @@ pub fn make_overlay_nonactivating<R: Runtime>(
     Ok(())
 }
 
+/// Point `object` at `class` with the ObjC runtime's `object_setClass`.
+///
+/// # Safety
+/// `object` must be a live Objective-C object and `class` a class whose
+/// methods are valid for it (here: `NSPanel` for an `NSWindow` subclass).
+unsafe fn reclass(object: *mut AnyObject, class: &AnyClass) {
+    // Not `AnyObject::set_class`: it debug-asserts that both classes have the
+    // same instance size, which aborts debug builds on macOS 27, where tao's
+    // window class is 8 bytes larger than `NSPanel`. Moving to a class that is
+    // no larger is sound, since all of its ivars fall inside the allocation.
+    let current_size = (*object).class().instance_size();
+    if class.instance_size() > current_size {
+        log::warn!(
+            "overlay_panel: {} ({} bytes) is larger than the window's class ({current_size} bytes)",
+            class.name().to_string_lossy(),
+            class.instance_size(),
+        );
+    }
+    let _ = objc2::ffi::object_setClass(object, class);
+}
+
 /// Bring the overlay panel onto the **currently-active** Space and re-assert
 /// its all-Spaces collection behavior.
 ///
@@ -144,4 +163,28 @@ pub fn present_on_active_space<R: Runtime>(window: &WebviewWindow<R>) -> tauri::
         let _: () = msg_send![any_obj, orderFrontRegardless];
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use objc2::runtime::{ClassBuilder, NSObject};
+
+    /// The overlay case on macOS 27: tao's window class is larger than
+    /// `NSPanel`, so the swap goes to a class with a smaller instance size.
+    #[test]
+    fn reclass_moves_an_object_to_a_class_with_a_smaller_instance_size() {
+        let mut builder = ClassBuilder::new(c"BluemacawReclassTestLarger", NSObject::class())
+            .expect("test class name is free");
+        builder.add_ivar::<[u8; 16]>(c"_padding");
+        let larger = builder.register();
+        assert!(larger.instance_size() > NSObject::class().instance_size());
+
+        unsafe {
+            let object: *mut AnyObject = msg_send![larger, new];
+            reclass(object, NSObject::class());
+            assert_eq!((*object).class().name().to_str(), Ok("NSObject"));
+            let _: () = msg_send![object, release];
+        }
+    }
 }

@@ -60,7 +60,8 @@ export function OnboardingStepFirstApiKey({
 }: OnboardingStepFirstApiKeyProps) {
     const nicknameId = useId();
     const keyId = useId();
-    const defaultProvider = PROVIDERS[0]?.id ?? '';
+    const cloudProviders = PROVIDERS.filter((provider) => provider.id !== 'local');
+    const defaultProvider = cloudProviders[0]?.id ?? '';
     const [provider, setProvider] = useState(defaultProvider);
     const [nickname, setNickname] = useState('Personal');
     const [key, setKey] = useState('');
@@ -82,7 +83,7 @@ export function OnboardingStepFirstApiKey({
         }
         setBusy(true);
         try {
-            const config = PROVIDERS.find((p) => p.id === provider);
+            const config = cloudProviders.find((p) => p.id === provider);
             if (!config) {
                 setError(`Unknown provider: ${provider}`);
                 return;
@@ -159,7 +160,7 @@ export function OnboardingStepFirstApiKey({
                 <div className="flex flex-col gap-2">
                     <Label>Provider</Label>
                     <ProviderPicker
-                        providers={PROVIDERS}
+                        providers={cloudProviders}
                         selectedProviderId={provider}
                         onSelect={setProvider}
                     />

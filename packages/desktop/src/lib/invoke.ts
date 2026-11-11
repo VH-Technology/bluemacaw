@@ -37,6 +37,25 @@ export interface PlatformInfo {
     isWayland: boolean;
 }
 
+/**
+ * Why Apple's on-device model can't be used. The first four can't change
+ * while the app runs (not macOS, macOS < 27, a build compiled without
+ * FoundationModels, a Mac that can't run Apple Intelligence); the rest can
+ * clear up on a supported Mac.
+ */
+export type AppleIntelligenceUnavailableReason =
+    | 'unsupported-platform'
+    | 'unsupported-os'
+    | 'unsupported-build'
+    | 'device-not-eligible'
+    | 'apple-intelligence-not-enabled'
+    | 'model-not-ready'
+    | 'unknown';
+
+export type AppleIntelligenceStatus =
+    | { status: 'available' }
+    | { status: 'unavailable'; reason: AppleIntelligenceUnavailableReason };
+
 export const vox = {
     checkMicrophonePermission: () => invoke<PermissionState>('check_microphone_permission'),
     requestMicrophonePermission: () => invoke<PermissionState>('request_microphone_permission'),
@@ -130,6 +149,9 @@ export const vox = {
      * permission row set and the Wayland paste-fallback info banner.
      */
     getPlatformInfo: () => invoke<PlatformInfo>('get_platform_info'),
+    /** macOS: whether closing the main window leaves the app in the Dock. */
+    getKeepInDock: () => invoke<boolean>('get_keep_in_dock'),
+    setKeepInDock: (enabled: boolean) => invoke<void>('set_keep_in_dock', { enabled }),
     /**
      * Restart the running bluemacaw process. Used by the onboarding screen
      * after the user grants Accessibility / Input Monitoring on macOS,
@@ -153,6 +175,30 @@ export const vox = {
     duckSystemVolume: () => invoke<void>('duck_system_volume'),
     /** Restore the volume saved by `duckSystemVolume` (exactly). */
     restoreSystemVolume: () => invoke<void>('restore_system_volume'),
+
+    downloadWhisperModel: (modelId: string, url?: string) =>
+        invoke<string>('download_whisper_model', { modelId, url }),
+    cancelModelDownload: (modelId: string) => invoke<void>('cancel_model_download', { modelId }),
+    transcribeLocal: (audio: Uint8Array, modelId: string) =>
+        invoke<string>('transcribe_local', { audio: Array.from(audio), modelId }),
+    listLocalModels: () =>
+        invoke<Array<{ modelId: string; fileSizeBytes: number }>>('list_local_models'),
+    deleteLocalModel: (modelId: string) => invoke<void>('delete_local_model', { modelId }),
+
+    /**
+     * Whether Apple's on-device model (macOS 27+) can post-process
+     * transcripts. Resolves on every platform; off macOS it reports
+     * `unsupported-platform`.
+     */
+    getAppleIntelligenceStatus: () =>
+        invoke<AppleIntelligenceStatus>('get_apple_intelligence_status'),
+    /**
+     * Run `prompt` through Apple's on-device model with `instructions` as the
+     * session instructions. Rejects when the model is unavailable, errors,
+     * or takes longer than 30 s.
+     */
+    generateWithAppleIntelligence: (instructions: string, prompt: string) =>
+        invoke<string>('generate_with_apple_intelligence', { instructions, prompt }),
 };
 
 /**

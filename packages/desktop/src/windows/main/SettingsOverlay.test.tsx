@@ -22,6 +22,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: listenMock }));
 vi.mock('@/lib/db', () => ({
     getOverlayEnabled: vi.fn(async () => true),
     setOverlayEnabled: vi.fn(async () => undefined),
+    getOverlaySensitivity: vi.fn(async () => 1),
 }));
 
 vi.mock('@/lib/overlay-bridge', () => ({

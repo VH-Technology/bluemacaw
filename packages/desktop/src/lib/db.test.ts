@@ -21,7 +21,12 @@ import {
     clearOriginalFnUsageType,
     deleteApiKey,
     deleteModelConfig,
+    getActiveLocalModelId,
     getActiveModelConfigId,
+    getAppleIntelligenceCleanupEnabled,
+    getAppleIntelligenceCleanupPrompt,
+    getAppleIntelligenceSplitLongEnabled,
+    getDeepgramSmartFormatEnabled,
     getHistoryLastSweep,
     getHistoryStats,
     getHotkeyCombo,
@@ -29,9 +34,12 @@ import {
     getOriginalFnUsageType,
     getOverlayEnabled,
     getOverlayPosition,
+    getOverlaySensitivity,
     getRetentionDays,
     getSelectedMicDeviceId,
     getTheme,
+    getTranscriptCleanupApiKeyId,
+    getTranscriptCleanupOptions,
     hardDeleteTranscription,
     listApiKeys,
     listModelConfigDependencies,
@@ -40,15 +48,23 @@ import {
     purgeOlderThan,
     restoreTranscription,
     saveTranscription,
+    setActiveLocalModelId,
     setActiveModelConfigId,
+    setAppleIntelligenceCleanupEnabled,
+    setAppleIntelligenceCleanupPrompt,
+    setAppleIntelligenceSplitLongEnabled,
+    setDeepgramSmartFormatEnabled,
     setHistoryLastSweep,
     setHotkeyCombo,
     setOriginalFnUsageType,
     setOverlayEnabled,
     setOverlayPosition,
+    setOverlaySensitivity,
     setRetentionDays,
     setSelectedMicDeviceId,
     setTheme,
+    setTranscriptCleanupApiKeyId,
+    setTranscriptCleanupOptions,
     softDeleteTranscription,
 } from './db';
 
@@ -275,6 +291,18 @@ describe('db.addModelConfig', () => {
         await addModelConfig({ apiKeyId: 'key-1', modelId: 'whisper-1' });
         await expect(getActiveModelConfigId()).resolves.toBe('mc-existing');
     });
+
+    it('does not auto-promote when a local model is already active', async () => {
+        const h = getSharedHarness();
+        await h.execute(
+            "INSERT INTO api_keys (id, provider_id, nickname) VALUES ('key-1', 'openai', 'Personal')",
+        );
+        await setActiveLocalModelId('ggml-medium.en');
+        const row = await addModelConfig({ apiKeyId: 'key-1', modelId: 'whisper-1' });
+        await expect(getActiveModelConfigId()).resolves.toBeNull();
+        await expect(getActiveLocalModelId()).resolves.toBe('ggml-medium.en');
+        expect(row.apiKeyId).toBe('key-1');
+    });
 });
 
 describe('db.deleteModelConfig', () => {
@@ -336,6 +364,35 @@ describe('db.activeModelConfigId', () => {
     });
 });
 
+describe('db.active model mutual exclusivity (cloud vs local)', () => {
+    it('activating a cloud config clears the active local model', async () => {
+        await setActiveLocalModelId('ggml-medium.en');
+        await setActiveModelConfigId('mc-1');
+        await expect(getActiveModelConfigId()).resolves.toBe('mc-1');
+        await expect(getActiveLocalModelId()).resolves.toBeNull();
+    });
+
+    it('activating a local model clears the active cloud config', async () => {
+        await setActiveModelConfigId('mc-1');
+        await setActiveLocalModelId('ggml-medium.en');
+        await expect(getActiveLocalModelId()).resolves.toBe('ggml-medium.en');
+        await expect(getActiveModelConfigId()).resolves.toBeNull();
+    });
+
+    it('setting the cloud config to null does not touch the local model', async () => {
+        await setActiveLocalModelId('ggml-tiny.en');
+        // Explicit null clear should only remove the cloud slot.
+        await setActiveModelConfigId(null);
+        await expect(getActiveLocalModelId()).resolves.toBe('ggml-tiny.en');
+    });
+
+    it('setting the local model to null does not touch the cloud config', async () => {
+        await setActiveModelConfigId('mc-9');
+        await setActiveLocalModelId(null);
+        await expect(getActiveModelConfigId()).resolves.toBe('mc-9');
+    });
+});
+
 describe('db.overlayEnabled', () => {
     it('returns true when no row exists (default)', async () => {
         await expect(getOverlayEnabled()).resolves.toBe(true);
@@ -362,6 +419,238 @@ describe('db.overlayEnabled', () => {
         expect(rows[0]?.count).toBe(1);
         await expect(getOverlayEnabled()).resolves.toBe(true);
     });
+});
+
+describe('db.transcriptCleanupApiKeyId', () => {
+    it('returns null when cleanup is disabled', async () => {
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+
+    it('round-trips an OpenAI API key id', async () => {
+        const key = await addApiKey({
+            providerId: 'openai',
+            nickname: 'Cleanup',
+            secret: 'sk-test',
+        });
+
+        await setTranscriptCleanupApiKeyId(key.id);
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBe(key.id);
+    });
+
+    it('rejects API keys from other providers', async () => {
+        const key = await addApiKey({
+            providerId: 'groq',
+            nickname: 'Not OpenAI',
+            secret: 'gsk-test',
+        });
+
+        await expect(setTranscriptCleanupApiKeyId(key.id)).rejects.toThrow(/OpenAI/);
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+
+    it('treats a dangling stored API key id as disabled', async () => {
+        await getSharedHarness().execute(
+            "INSERT INTO app_state (key, value) VALUES ('transcript_cleanup_openai_api_key_id', 'missing')",
+        );
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+
+    it('disables cleanup when its API key is deleted', async () => {
+        const key = await addApiKey({
+            providerId: 'openai',
+            nickname: 'Disposable',
+            secret: 'sk-test',
+        });
+        await setTranscriptCleanupApiKeyId(key.id);
+
+        await deleteApiKey(key.id);
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+
+    it('can be disabled explicitly', async () => {
+        const key = await addApiKey({
+            providerId: 'openai',
+            nickname: 'Cleanup',
+            secret: 'sk-test',
+        });
+        await setTranscriptCleanupApiKeyId(key.id);
+
+        await setTranscriptCleanupApiKeyId(null);
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+    });
+});
+
+describe('db.transcriptCleanupOptions', () => {
+    it('returns reasonable defaults when no options are stored', async () => {
+        await expect(getTranscriptCleanupOptions()).resolves.toMatchObject({
+            modelId: 'gpt-4o-mini',
+            prompt: expect.stringMatching(/speech-to-text transcripts/i),
+        });
+    });
+
+    it('round-trips a custom model and prompt atomically', async () => {
+        const options = {
+            modelId: 'gpt-4.1-mini',
+            prompt: 'Remove filler words and preserve everything else.',
+        };
+
+        await setTranscriptCleanupOptions(options);
+
+        await expect(getTranscriptCleanupOptions()).resolves.toEqual(options);
+    });
+
+    it('falls back to defaults when stored options are malformed', async () => {
+        await getSharedHarness().execute(
+            "INSERT INTO app_state (key, value) VALUES ('transcript_cleanup_options', '{not-json')",
+        );
+
+        await expect(getTranscriptCleanupOptions()).resolves.toMatchObject({
+            modelId: 'gpt-4o-mini',
+            prompt: expect.stringMatching(/speech-to-text transcripts/i),
+        });
+    });
+
+    it('rejects blank models and prompts', async () => {
+        await expect(
+            setTranscriptCleanupOptions({ modelId: ' ', prompt: 'valid' }),
+        ).rejects.toThrow(/model/i);
+        await expect(
+            setTranscriptCleanupOptions({ modelId: 'gpt-4o-mini', prompt: ' ' }),
+        ).rejects.toThrow(/prompt/i);
+    });
+});
+
+describe('db.appleIntelligenceSplitLong', () => {
+    it('is on by default', async () => {
+        await expect(getAppleIntelligenceSplitLongEnabled()).resolves.toBe(true);
+    });
+
+    it('round-trips the flag', async () => {
+        await setAppleIntelligenceSplitLongEnabled(false);
+        await expect(getAppleIntelligenceSplitLongEnabled()).resolves.toBe(false);
+
+        await setAppleIntelligenceSplitLongEnabled(true);
+        await expect(getAppleIntelligenceSplitLongEnabled()).resolves.toBe(true);
+    });
+});
+
+describe('db.deepgramSmartFormat', () => {
+    it('is on by default', async () => {
+        await expect(getDeepgramSmartFormatEnabled()).resolves.toBe(true);
+    });
+
+    it('round-trips the flag', async () => {
+        await setDeepgramSmartFormatEnabled(false);
+        await expect(getDeepgramSmartFormatEnabled()).resolves.toBe(false);
+
+        await setDeepgramSmartFormatEnabled(true);
+        await expect(getDeepgramSmartFormatEnabled()).resolves.toBe(true);
+    });
+
+    it('is stored separately from the long-dictation flag', async () => {
+        await setDeepgramSmartFormatEnabled(false);
+
+        await expect(getAppleIntelligenceSplitLongEnabled()).resolves.toBe(true);
+    });
+});
+
+describe('db.appleIntelligenceCleanup', () => {
+    it('is disabled by default', async () => {
+        await expect(getAppleIntelligenceCleanupEnabled()).resolves.toBe(false);
+    });
+
+    it('round-trips the enabled flag', async () => {
+        await setAppleIntelligenceCleanupEnabled(true);
+        await expect(getAppleIntelligenceCleanupEnabled()).resolves.toBe(true);
+
+        await setAppleIntelligenceCleanupEnabled(false);
+        await expect(getAppleIntelligenceCleanupEnabled()).resolves.toBe(false);
+    });
+
+    it('turns OpenAI cleanup off when enabled, so only one engine runs', async () => {
+        const key = await addApiKey({ providerId: 'openai', nickname: 'Cleanup', secret: 'sk' });
+        await setTranscriptCleanupApiKeyId(key.id);
+
+        await setAppleIntelligenceCleanupEnabled(true);
+
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBeNull();
+        await expect(getAppleIntelligenceCleanupEnabled()).resolves.toBe(true);
+    });
+
+    it('is turned off when OpenAI cleanup is enabled', async () => {
+        const key = await addApiKey({ providerId: 'openai', nickname: 'Cleanup', secret: 'sk' });
+        await setAppleIntelligenceCleanupEnabled(true);
+
+        await setTranscriptCleanupApiKeyId(key.id);
+
+        await expect(getAppleIntelligenceCleanupEnabled()).resolves.toBe(false);
+        await expect(getTranscriptCleanupApiKeyId()).resolves.toBe(key.id);
+    });
+
+    it('stays on when OpenAI cleanup is merely disabled', async () => {
+        await setAppleIntelligenceCleanupEnabled(true);
+
+        await setTranscriptCleanupApiKeyId(null);
+
+        await expect(getAppleIntelligenceCleanupEnabled()).resolves.toBe(true);
+    });
+
+    it('defaults to the grammar and filler cleanup prompt', async () => {
+        await expect(getAppleIntelligenceCleanupPrompt()).resolves.toMatch(/grammar/i);
+        await expect(getAppleIntelligenceCleanupPrompt()).resolves.toMatch(/filler words/i);
+    });
+
+    it('round-trips a trimmed custom prompt', async () => {
+        await setAppleIntelligenceCleanupPrompt('  Fix typos only.  ');
+
+        await expect(getAppleIntelligenceCleanupPrompt()).resolves.toBe('Fix typos only.');
+    });
+
+    it('rejects a blank prompt', async () => {
+        await expect(setAppleIntelligenceCleanupPrompt('   ')).rejects.toThrow(/prompt/i);
+    });
+
+    it('falls back to the default prompt when the stored one is blank', async () => {
+        await getSharedHarness().execute(
+            "INSERT INTO app_state (key, value) VALUES ('transcript_cleanup_apple_intelligence_prompt', '  ')",
+        );
+
+        await expect(getAppleIntelligenceCleanupPrompt()).resolves.toMatch(/filler words/i);
+    });
+});
+
+describe('db.overlaySensitivity', () => {
+    it('defaults to the existing meter response and persists changes', async () => {
+        await expect(getOverlaySensitivity()).resolves.toBe(1);
+        await setOverlaySensitivity(0.3);
+        await expect(getOverlaySensitivity()).resolves.toBe(0.3);
+        await setOverlaySensitivity(2);
+        await expect(getOverlaySensitivity()).resolves.toBe(2);
+    });
+
+    it.each(['oops', '', 'NaN', 'Infinity', '0', '-1', '3'])(
+        'falls back to 100%% for invalid stored sensitivity %j',
+        async (value) => {
+            await getSharedHarness().execute('INSERT INTO app_state (key, value) VALUES (?, ?)', [
+                'overlay_sensitivity',
+                value,
+            ]);
+            await expect(getOverlaySensitivity()).resolves.toBe(1);
+        },
+    );
+
+    it.each([0, -1, 3, Number.NaN, Number.POSITIVE_INFINITY])(
+        'rejects invalid sensitivity %s without changing the saved preference',
+        async (value) => {
+            await setOverlaySensitivity(0.5);
+            await expect(setOverlaySensitivity(value)).rejects.toThrow(/sensitivity/i);
+            await expect(getOverlaySensitivity()).resolves.toBe(0.5);
+        },
+    );
 });
 
 describe('db.overlayPosition', () => {

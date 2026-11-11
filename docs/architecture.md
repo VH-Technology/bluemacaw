@@ -1,6 +1,6 @@
 # Architecture
 
-bluemacaw is a cross-platform desktop app built on **Tauri 2** (Rust + WebView). A global keyboard shortcut toggles recording; the captured audio is sent to one of nine pluggable STT providers via the Vercel AI SDK; the transcribed text is copied to the clipboard and pasted into the focused application via a synthetic `Cmd+V` (or `Ctrl+V`) keystroke.
+bluemacaw is a cross-platform desktop app built on **Tauri 2** (Rust + WebView). A global keyboard shortcut toggles recording; the captured audio is sent to one of ten pluggable STT providers via the Vercel AI SDK; the transcribed text is copied to the clipboard and pasted into the focused application via a synthetic `Cmd+V` (or `Ctrl+V`) keystroke.
 
 This document describes the *as-built* architecture. The original plan is `docs/superpowers/plans/2026-05-03-plan-b-desktop-app.md`, extended mid-flight by `docs/superpowers/plans/2026-05-10-recording-settings-and-history.md`. Where the as-built diverges from those plans, this doc is the source of truth.
 
@@ -19,11 +19,14 @@ There is no Node runtime in the renderer. There is no preload script. Tauri's ca
 
 | File | Role |
 |---|---|
-| `lib.rs` | Crate entry. Wires plugins (clipboard-manager, global-shortcut, sql, store, updater), constructs `AppState`, registers the `invoke_handler!`, builds the tray, converts the overlay window to a non-activating `NSPanel` on macOS, and installs the close-to-tray window handler. |
+| `lib.rs` | Crate entry. Wires plugins (clipboard-manager, global-shortcut, sql, store, updater), constructs `AppState`, registers the `invoke_handler!`, builds the tray, converts the overlay window to a non-activating `NSPanel` on macOS, shows the main window unless the launch came from login, and installs the close-to-tray window handler. |
 | `main.rs` | Thin binary entry that calls `bluemacaw_lib::run()`. |
 | `commands.rs` | Every `#[tauri::command]`. Defines `AppState` and `HostOs` / `PlatformInfo`. |
+| `dock.rs` | Native-owned `keep_in_dock` preference and macOS activation policy. Persists in `desktop-preferences.json` via `tauri-plugin-store` so it is available before webview/SQLite startup. Centralizes reopening the main window from the tray or Dock. |
 | `markers.rs` | String constants for Tauri events (`bluemacaw://shortcut-toggle`, `bluemacaw://shortcut-cancel`) and error markers (`accessibility-required:`, `mic-denied:`, `wayland-paste-unsupported:`, `input-monitoring-required:`). Mirrored in `src/lib/markers.ts`; a contract test parses this file to enforce agreement. |
 | `platform/mod.rs` | `is_wayland_session()` helper (`XDG_SESSION_TYPE` / `WAYLAND_DISPLAY` probe). |
+| `login_launch.rs` | `launched_at_login()` — tells a launch at login from a manual one, so the main window (created hidden, `visible: false`) stays hidden and the app comes up in the tray only. Windows/Linux: the autostart entry passes `--autostart`. macOS: a Login Item cannot carry arguments, so a launch within two minutes of the console login (utmpx record) counts; this also covers the "reopen windows when logging back in" relaunch. While onboarding is pending, `MainWindow` shows the window regardless. |
+| `apple_intelligence/mod.rs` | On-device transcript cleanup (macOS 27+). Gates on the macOS version, then spawns the `bluemacaw-apple-intelligence` Swift sidecar (`swift/apple-intelligence/main.swift`, compiled by `build.rs`, bundled via `bundle.externalBin` in `tauri.macos.conf.json`) and speaks its one-shot stdin/stdout JSON protocol. |
 | `audio/mod.rs` | `AudioSource` trait, `PermissionState`, `AudioError`, `AudioDeviceInfo`, `CaptureSession`. |
 | `audio/microphone.rs` | `MicrophoneSource` — the cpal-backed production impl. Owns session bookkeeping and peak-level metering. |
 | `audio/permissions/mod.rs` | `SettingsPanel` enum + per-OS dispatch. |
@@ -36,9 +39,10 @@ There is no Node runtime in the renderer. There is no preload script. Tauri's ca
 | `shortcut/parse.rs` | `parse_combo` / `format_combo` for the `"Cmd+Shift+Space"` style strings used by the settings UI. |
 | `shortcut/macos_fn.rs` | macOS `CGEventTap`-based Fn-key listener. |
 | `tray/mod.rs` | Tray icon + menu (built programmatically; no PNG asset). Emits `TrayEvent::Open` / `Quit`. |
-| `overlay_panel.rs` | macOS-only. Converts the overlay `NSWindow` into a non-activating `NSPanel` so clicks on the recording pill don't steal focus from the app being dictated into. |
+| `overlay_panel.rs` | macOS-only. Converts the overlay `NSWindow` into a non-activating `NSPanel` so clicks on the recording pill don't steal focus from the app being dictated into. The class swap calls `object_setClass` directly: objc2's `set_class` debug-asserts equal instance sizes, which aborted debug builds on macOS 27, where tao's window class is larger than `NSPanel`. |
 | `clipboard/mod.rs` | `Clipboard` trait + `TauriClipboard` (production, via `tauri-plugin-clipboard-manager`) + `InMemoryClipboard` (test). |
 | `paste/mod.rs` | `Paster` trait + `EnigoPaster` (writes clipboard, posts `Cmd/Ctrl+V` via `enigo`). |
+| `paste/macos.rs` | macOS-only Enigo 0.6.1 sender: private CoreGraphics source, explicit Command flags, tagged events, and Command-release cleanup on failure. Windows uses Enigo 0.2.1. |
 
 Migration SQL lives in `packages/desktop/src-tauri/migrations/` (`0001_init.sql`, `0002_provider_configs.sql`).
 
@@ -53,7 +57,8 @@ Migration SQL lives in `packages/desktop/src-tauri/migrations/` (`0001_init.sql`
 | `lib/transcribe.ts` | End-to-end transcription orchestration. Resolves the active model config, fetches the API key via `vox.getSecret`, builds the `TranscriptionModel` via `provider.makeModel`, calls `experimental_transcribe` from `ai`. |
 | `lib/recording-controller.ts` | Pure state machine (`idle` / `recording` / `transcribing` / `error`) used by both window contexts. Gates microphone permission, calls `vox.startRecording` / `vox.stopRecording`, runs transcribe, attempts paste, saves to history. |
 | `lib/overlay-bridge.ts` | Listens for `EVT_SHORTCUT_TOGGLE` / `EVT_SHORTCUT_CANCEL` from Rust and drives the recording controller from either window. |
-| `lib/db.ts` | All SQL access (api_keys, model_configs, transcriptions, app_state). Settings (hotkey, cancel hotkey, retention days, selected mic device, overlay enabled/position, theme) live in `app_state` as key/value rows. |
+| `lib/db.ts` | All SQL access (api_keys, model_configs, transcriptions, app_state). Settings (hotkey, cancel hotkey, retention days, selected mic device, overlay enabled/position/sensitivity, theme) live in `app_state` as key/value rows. |
+| `lib/overlay-sensitivity.ts` | Visual meter gain bounds/default and the cross-window sensitivity-change event name. |
 | `lib/onboarding.ts`, `lib/use-onboarding-gate.ts`, `lib/use-onboarding-status.ts` | First-launch onboarding flag in `tauri-plugin-store` + polling hooks that surface the per-platform permission set. |
 | `lib/platform.ts`, `lib/use-platform.ts` | Maps `PlatformInfo` to the set of `PermissionKey`s the onboarding screen must render. |
 | `lib/export.ts` | TXT / Markdown export helpers for the History tab. |
@@ -64,6 +69,7 @@ Migration SQL lives in `packages/desktop/src-tauri/migrations/` (`0001_init.sql`
 | `windows/main/MainWindow.tsx` | Settings shell with seven tabs: Dashboard, History, API Keys, Model Configs, Recording, Overlay, Theme/Updates. |
 | `windows/main/OnboardingScreen.tsx` | First-launch permission walkthrough. |
 | `windows/main/{Dashboard,History,SettingsApiKeys,SettingsModelConfigs,SettingsRecording,SettingsOverlay,SettingsHistory,SettingsTheme,SettingsUpdates,RecordingStatusPill}.tsx` | Individual settings panels and dashboard widgets. |
+| `windows/main/{SettingsDock,SettingsOverlaySensitivity}.tsx` | macOS close-to-Dock preference in General, and visual meter sensitivity slider in Overlay. |
 | `windows/main/{AddApiKeyDialog,AddModelConfigDialog,DeleteApiKeyDialog}.tsx` | Dialogs for managing keychain-stored API keys and the model configs that pin a `{api_key, model_id}` pair. |
 | `windows/overlay/{OverlayApp,OverlayWindow}.tsx` | Transparent recording overlay with level meter and cancel button. |
 | `components/HotkeyInput.tsx`, `hooks/useHotkeyRecording.ts` | Capture-a-hotkey input used by Settings → Recording. |
@@ -99,7 +105,11 @@ Every webview-callable Rust function lives in `commands.rs` and is mirrored on `
 | `get_fn_usage_type` | — | `number \| null` | macOS only. Reads `AppleFnUsageType`. |
 | `set_fn_usage_type` | `value: number` | `()` | macOS only. Writes `AppleFnUsageType` and restarts cfprefsd. |
 | `get_platform_info` | — | `PlatformInfo` | `{ os: "macos"\|"windows", isWayland }`. Drives onboarding's per-platform permission rows. |
+| `get_keep_in_dock` | — | `boolean` | Reads the native-owned Dock preference; defaults to `true`. UI is macOS-only. |
+| `set_keep_in_dock` | `enabled: boolean` | `()` | Saves the Dock preference synchronously. Used on the next window close or hidden login launch; failed writes restore the previous in-memory value. No activation-policy changes on Windows/Linux. |
 | `restart_app` | — | `()` | Used after macOS Accessibility / Input Monitoring grants, since TCC doesn't propagate into a running process. |
+| `get_apple_intelligence_status` | — | `AppleIntelligenceStatus` | `{ status: "available" }` or `{ status: "unavailable", reason }`. Never errors; reports `unsupported-platform` off macOS and `unsupported-os` below macOS 27 without launching the sidecar. |
+| `generate_with_apple_intelligence` | `instructions: string, prompt: string` | `string` | Runs Apple's on-device model (via the sidecar) with `instructions` as session instructions. 30 s timeout; the sidecar is killed if it hangs. |
 
 ## Events (Rust → webview)
 
@@ -109,6 +119,12 @@ Rust emits two events the webview listens for via `@tauri-apps/api/event`:
 - `bluemacaw://shortcut-cancel` — cancel hotkey was pressed; controller transitions back to idle.
 
 Both names are defined in `markers.rs` / `markers.ts` and pinned by a contract test that parses the Rust file as text.
+
+## Window and meter preferences
+
+Closing the main window hides it; the process, tray menu, and recording hotkeys remain active. On macOS, **Settings → General → Keep in Dock when the window is closed** defaults to on (`Regular` activation policy). Turning it off switches the hidden app to `Accessory`, leaving it in the menu bar only. Hidden login launches honor the same preference. Reopening from the tray, Dock, or Finder restores `Regular` before showing/focusing the main window; onboarding also restores it when the main window gains focus. Showing the recording overlay does not change Dock presence. Tray Quit / Cmd+Q still quits the application.
+
+**Settings → Overlay → Volume indicator sensitivity** ranges from 10% to 200%, in 10% steps; 100% preserves the original calibration. `overlay_sensitivity` in SQLite `app_state` stores the multiplier (0.1–2). Missing/invalid values fall back to 1. Only `OverlayWindow` applies this multiplier, to the bars and recording dot; audio samples, microphone gain, and transcription input are unchanged. Saves are serialized, then `bluemacaw://overlay-sensitivity-changed` notifies the overlay to reload. The overlay also reloads at recording-state transitions, so a missed notification does not leave the next recording using a stale value.
 
 ## Recording flow (end-to-end)
 
@@ -120,6 +136,7 @@ sequenceDiagram
     participant Cmd as commands.rs (Rust)
     participant Audio as MicrophoneSource (cpal)
     participant Provider as STT Provider (AI SDK)
+    participant Cleanup as Cleanup engine (optional)
     participant Paster as EnigoPaster
     participant Focused as Focused App
 
@@ -137,13 +154,36 @@ sequenceDiagram
     Overlay->>Overlay: lib/transcribe.ts loads active model config + key
     Overlay->>Provider: experimental_transcribe({ model, audio })
     Provider-->>Overlay: { text }
+    opt Text cleanup enabled
+        alt On-device (Apple Intelligence, macOS 27+)
+            Overlay->>Cmd: invoke("generate_with_apple_intelligence", { instructions, prompt })
+            Cmd->>Cleanup: spawn sidecar, JSON on stdin
+            Cleanup-->>Cmd: { text }
+            Cmd-->>Overlay: cleaned text
+        else OpenAI
+            Overlay->>Cleanup: generateText({ transcript, store: false })
+            Cleanup-->>Overlay: cleaned text
+        end
+    end
     Overlay->>Cmd: invoke("paste_text", { text })
     Cmd->>Paster: paste_text(&text)
     Paster->>Focused: synthetic Cmd+V / Ctrl+V
     Overlay->>Overlay: db.saveTranscription(...)
 ```
 
-If paste fails (e.g. macOS Accessibility revoked, or Windows synthetic keystrokes fail), the text still lands on the clipboard and the history row is still saved. The error marker is translated into a UI-friendly message in `recording-controller.ts`.
+Text cleanup is disabled by default. When enabled in Settings, `cleanup-transcript.ts` resolves the selected OpenAI key just in time, removes speech fillers, and strips a matching pair of quotes only when they wrap the entire result. Cleanup errors and timeouts fail open to the raw transcript. Both paste and history use the resulting final text. The nullable OpenAI key id is stored in the generic `app_state` table under `transcript_cleanup_openai_api_key_id`; the configurable model and prompt are stored together under `transcript_cleanup_options`, with `gpt-4o-mini` and the built-in safe cleanup prompt used when that row is absent or malformed. No API key material is stored in SQLite.
+
+On macOS 27 and later, Settings → Cleanup also offers an **On-device** engine that runs Apple's on-device foundation model (the model behind Apple Intelligence). At most one engine is on at a time: `transcript_cleanup_apple_intelligence_enabled` in `app_state` turns it on, and enabling either engine turns the other off in `db.ts`. Its prompt lives under `transcript_cleanup_apple_intelligence_prompt`. The default prompt, tuned for the small on-device model, fixes grammar and removes fillers, and ends with worked examples. `cleanup-transcript.ts` sends that prompt as session instructions and wraps the transcript in `<transcript>` tags, so the model edits dictated questions and requests instead of answering them. The prompt field is editable only while cleanup is on.
+
+Long dictations are cleaned in sections. `split-transcript.ts` cuts a transcript of more than 200 words into groups of whole sentences of up to 150 words, and `cleanup-transcript.ts` sends the groups to the model one at a time and rejoins them with their original spacing. That keeps each request inside the model's context window and the 30 s timeout. A group that fails keeps its raw text; cleanup as a whole fails only when every group does. Cuts fall only on sentence breaks, so a transcript without sentence punctuation is sent whole. The values were tuned against the real model and are recorded with `DEFAULT_SPLIT_OPTIONS`. `transcript_cleanup_apple_intelligence_split_long` in `app_state` turns this off (Settings → Cleanup → Clean long dictations in parts); it is on by default.
+
+The on-device model is weak on transcripts that arrive without punctuation. The default prompt ends with a run-on example for that reason: without it the model returns unpunctuated dictations of 60+ words unchanged; with it, it punctuates them up to roughly 180 words. Beyond that it still returns them unchanged, and they can't be split because there are no sentence breaks to cut at. That is also why Deepgram is asked for `smart_format` by default (see [`providers.md`](./providers.md)). A prompt the user saved before this example existed keeps working as it did; **Reset defaults** picks it up.
+
+`FoundationModels` is Swift-only, and linking Swift into the main binary (deployment target 10.15) would require back-deploying the Swift concurrency runtime. So `build.rs` compiles a small sidecar executable against the macOS SDK instead, targeting macOS 26 and arm64 (macOS 27 is Apple silicon only). Tauri bundles it next to the main binary. `apple_intelligence/mod.rs` never launches it below macOS 27. The transcript goes over stdin, never argv, so it doesn't appear in `ps`. When built with an SDK that lacks `FoundationModels` (Xcode < 26), the sidecar compiles to a stub that reports `unsupported-build`, and Settings hides the engine.
+
+If paste fails (e.g. macOS Accessibility revoked, or Windows synthetic keystrokes fail), the history row is still saved. Text already written to the clipboard remains available for manual paste; the macOS Accessibility preflight can fail before the clipboard write. The error marker is translated into a UI-friendly message in `recording-controller.ts`.
+
+On macOS, paste uses a private CoreGraphics event source and explicit Command flags on V-down/V-up, so physical mouse/key input cannot clear the shortcut's synthetic modifier. `PASTE_EVENT_MARKER` tags these events; the Fn/chord/double-tap listeners ignore them before updating their state. The sender attempts Command release even when V fails and does not retry a potentially completed paste. The Tauri command remains synchronous for HIToolbox keyboard-layout lookup, and the 80 ms clipboard-settle delay is independent of modifier handling. See the native paste probe in [`testing.md`](./testing.md) for OS-level validation.
 
 For *why* each privileged step is gated, see [`permissions.md`](./permissions.md). For how the key reaches `experimental_transcribe`, see [`secrets.md`](./secrets.md). For adding a tenth provider, see [`providers.md`](./providers.md).
 

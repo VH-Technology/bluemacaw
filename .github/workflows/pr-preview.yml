@@ -30,7 +30,8 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build landing
-        run: bun --cwd packages/landing run build
+        working-directory: packages/landing
+        run: bun run build
 
       # Deploy step is a no-op until Plan D provisions AWS infrastructure
       # (S3 bucket + IAM role/secrets). When AWS_PR_PREVIEW_ROLE secret is

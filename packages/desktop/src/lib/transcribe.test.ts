@@ -5,11 +5,14 @@ vi.mock('ai', () => ({
     experimental_transcribe: vi.fn(async () => ({ text: 'hello world' })),
 }));
 vi.mock('./db', () => ({
+    getActiveLocalModelId: vi.fn(),
     getActiveModelConfigId: vi.fn(),
     getModelConfigWithApiKey: vi.fn(),
+    getDeepgramSmartFormatEnabled: vi.fn(async () => true),
 }));
 
 import * as core from '@tauri-apps/api/core';
+import { experimental_transcribe } from 'ai';
 import { PROVIDERS } from '../providers';
 import * as db from './db';
 import { transcribe } from './transcribe';
@@ -64,6 +67,43 @@ describe('transcribe orchestration', () => {
         expect(core.invoke).toHaveBeenCalledWith('get_secret', { secretId: 'key-1' });
     });
 
+    it("sends the provider's batch options with the request", async () => {
+        vi.mocked(db.getActiveModelConfigId).mockResolvedValueOnce('mc-1');
+        vi.mocked(db.getModelConfigWithApiKey).mockResolvedValueOnce({
+            id: 'mc-1',
+            apiKeyId: 'key-1',
+            modelId: 'nova-3',
+            providerId: 'deepgram',
+            apiKeyNickname: 'Personal',
+        });
+        vi.mocked(core.invoke).mockResolvedValueOnce('dg-test');
+        vi.mocked(db.getDeepgramSmartFormatEnabled).mockResolvedValueOnce(false);
+
+        await transcribe(new Blob([new Uint8Array([1])]));
+
+        expect(vi.mocked(experimental_transcribe).mock.lastCall?.[0]).toMatchObject({
+            providerOptions: { deepgram: { smartFormat: false } },
+        });
+    });
+
+    it('sends no provider options for providers that define none', async () => {
+        vi.mocked(db.getActiveModelConfigId).mockResolvedValueOnce('mc-1');
+        vi.mocked(db.getModelConfigWithApiKey).mockResolvedValueOnce({
+            id: 'mc-1',
+            apiKeyId: 'key-1',
+            modelId: 'whisper-1',
+            providerId: 'openai',
+            apiKeyNickname: 'Personal',
+        });
+        vi.mocked(core.invoke).mockResolvedValueOnce('sk-test');
+
+        await transcribe(new Blob([new Uint8Array([1])]));
+
+        expect(
+            vi.mocked(experimental_transcribe).mock.lastCall?.[0].providerOptions,
+        ).toBeUndefined();
+    });
+
     it('throws on unknown provider id', async () => {
         vi.mocked(db.getActiveModelConfigId).mockResolvedValueOnce('mc-1');
         vi.mocked(db.getModelConfigWithApiKey).mockResolvedValueOnce({
@@ -88,6 +128,7 @@ describe('transcribe orchestration', () => {
             'fal',
             'gladia',
             'groq',
+            'local',
             'openai',
             'revai',
             'xai',

@@ -5,37 +5,42 @@ import {
     hasAllPermissionsSet,
     hasApiKeySet,
     hasHotkeysConfigured,
+    hasLocalModelSet,
     hasModelConfigSet,
 } from '@/lib/onboarding-silent-skip';
 import { cn } from '@/lib/utils';
 import { useCallback, useEffect, useState } from 'react';
+import { OnboardingStepChooseModelSource } from './onboarding/OnboardingStepChooseModelSource';
 import { OnboardingStepFirstApiKey } from './onboarding/OnboardingStepFirstApiKey';
 import { OnboardingStepFirstModel } from './onboarding/OnboardingStepFirstModel';
 import { OnboardingStepHotkeys } from './onboarding/OnboardingStepHotkeys';
+import { OnboardingStepLocalModel } from './onboarding/OnboardingStepLocalModel';
 import { OnboardingStepPermissions } from './onboarding/OnboardingStepPermissions';
 
 interface OnboardingScreenProps {
-    /** Called when the user completes (or explicitly opts out of the
-     * optional final step). Parent should route to the main UI. */
     onComplete: () => void;
 }
 
-type Step = 1 | 2 | '3a' | '3b';
+type Step = 1 | 2 | '3a' | '3b' | '3c';
 
 interface Predicates {
     permissions: boolean;
     hotkeys: boolean;
+    modelSource: boolean;
     apiKey: boolean;
     modelConfig: boolean;
+    localModel: boolean;
 }
 
-const STEP_ORDER: ReadonlyArray<Step> = [1, 2, '3a', '3b'];
+const STEP_ORDER: ReadonlyArray<Step> = [1, 2, '3a', '3b', '3c'];
 
 function predicateForStep(s: Step, p: Predicates): boolean {
     if (s === 1) return p.permissions;
     if (s === 2) return p.hotkeys;
-    if (s === '3a') return p.apiKey;
-    return p.modelConfig;
+    if (s === '3a') return p.modelSource;
+    if (s === '3b') return p.apiKey || p.localModel;
+    if (s === '3c') return p.localModel || (p.apiKey && p.modelConfig);
+    return false;
 }
 
 function firstUnsatisfied(p: Predicates): Step | null {
@@ -67,7 +72,7 @@ interface IndicatorItem {
 const INDICATOR_KEYS: ReadonlyArray<{ key: string; label: string; step: Step }> = [
     { key: 'permissions', label: 'Permissions', step: 1 },
     { key: 'hotkeys', label: 'Hotkeys', step: 2 },
-    { key: 'api-key', label: 'API key', step: '3a' },
+    { key: 'model-source', label: 'Source', step: '3a' },
     { key: 'model', label: 'Model', step: '3b' },
 ];
 
@@ -86,34 +91,18 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     const [predicates, setPredicates] = useState<Predicates>({
         permissions: false,
         hotkeys: false,
+        modelSource: false,
         apiKey: false,
         modelConfig: false,
+        localModel: false,
     });
-    /**
-     * The API key 3b should attach a new model config to. Populated either
-     * (a) from an existing `api_keys` row when the wizard lands directly
-     * on 3b, or (b) from the user's freshly-saved key when they completed
-     * 3a. Cleared otherwise; the wizard must never mount 3b without it.
-     */
     const [keyForModelStep, setKeyForModelStep] = useState<{
         apiKeyId: string;
         providerId: string;
     } | null>(null);
-    /**
-     * All API keys the user has on this machine, surfaced to sub-step 3a
-     * so they can see what's already configured (and decide whether to add
-     * another or just continue with what they have). Populated on initial
-     * probe and appended to after a successful save in 3a.
-     */
     const [existingApiKeys, setExistingApiKeys] = useState<ApiKeyRow[]>([]);
-    /**
-     * Flipped to true the first time the user clicks Back. Once set, `Next`
-     * advances to the immediate next step instead of skipping satisfied
-     * ones — backtracking is a signal that the user wants to walk through
-     * the wizard, not have it whisk them past steps they were about to
-     * revisit. Never flipped back.
-     */
     const [userBacktracked, setUserBacktracked] = useState(false);
+    const [choseLocalPath, setChoseLocalPath] = useState(false);
 
     const finish = useCallback(async () => {
         try {
@@ -124,25 +113,26 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         onComplete();
     }, [onComplete]);
 
-    // Probe all four predicates on mount and pick the first not-yet-satisfied
-    // step. If everything has flipped to true between the gate's decision and
-    // the wizard mounting (race), defensively finish without rendering steps.
     useEffect(() => {
         let cancelled = false;
         void (async () => {
-            const [permissions, hotkeys, apiKey, modelConfig] = await Promise.all([
+            const [permissions, hotkeys, apiKey, modelConfig, localModel] = await Promise.all([
                 hasAllPermissionsSet(),
                 hasHotkeysConfigured(),
                 hasApiKeySet(),
                 hasModelConfigSet(),
+                hasLocalModelSet(),
             ]);
             if (cancelled) return;
-            const next: Predicates = { permissions, hotkeys, apiKey, modelConfig };
+            const next: Predicates = {
+                permissions,
+                hotkeys,
+                modelSource: localModel || apiKey,
+                apiKey,
+                modelConfig,
+                localModel,
+            };
             setPredicates(next);
-            // Fetch the full list of existing keys whenever 3a's predicate
-            // is already true. The list seeds (a) the keyForModelStep target
-            // for a direct 3b landing, and (b) the read-only "you've already
-            // added these keys" panel inside 3a if the user navigates there.
             if (apiKey) {
                 try {
                     const keys = await listApiKeys();
@@ -165,6 +155,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                 void finish();
                 return;
             }
+            if (target === '3b') {
+                setChoseLocalPath(!!localModel);
+            }
             setStep(target);
         })();
         return () => {
@@ -180,6 +173,9 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             if (target === null) {
                 void finish();
                 return;
+            }
+            if (target === '3b' && completed !== '3a') {
+                setChoseLocalPath(!!nextPredicates.localModel);
             }
             setStep(target);
         },
@@ -198,13 +194,27 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
         advanceAfter(2, next);
     }, [predicates, advanceAfter]);
 
+    const handleChooseCloud = useCallback(() => {
+        const next: Predicates = { ...predicates, modelSource: true };
+        setPredicates(next);
+        setChoseLocalPath(false);
+        advanceAfter('3a', next);
+    }, [predicates, advanceAfter]);
+
+    const handleChooseLocal = useCallback(() => {
+        const next: Predicates = { ...predicates, modelSource: true };
+        setPredicates(next);
+        setChoseLocalPath(true);
+        advanceAfter('3a', next);
+    }, [predicates, advanceAfter]);
+
     const handleApiKeySaved = useCallback(
         (saved: ApiKeyRow) => {
             setKeyForModelStep({ apiKeyId: saved.id, providerId: saved.providerId });
             setExistingApiKeys((prev) => [...prev, saved]);
             const next: Predicates = { ...predicates, apiKey: true };
             setPredicates(next);
-            advanceAfter('3a', next);
+            advanceAfter('3b', next);
         },
         [predicates, advanceAfter],
     );
@@ -223,18 +233,13 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
     }
 
     const indicators = buildIndicators(step);
-    // Every step past the first exposes Back to its immediate predecessor
-    // — 2 → 1, 3a → 2, 3b → 3a — even when the preceding step's predicate
-    // is already satisfied. Revisiting permissions, hotkeys, or existing
-    // keys mid-onboarding is a normal thing to want; only step 1 has
-    // nothing to go back to.
     const goBack = (target: Step) => {
         setUserBacktracked(true);
         setStep(target);
     };
     const goBackToPermissions = () => goBack(1);
-    const goBackToHotkeys = () => goBack(2);
-    const goBackToApiKey = () => goBack('3a');
+    const goBackToModelSource = () => goBack('3a');
+    const goBackToApiKey = () => goBack('3b');
 
     return (
         <main className="min-h-screen bg-bg px-6 py-10 text-fg" data-testid="onboarding-screen">
@@ -257,8 +262,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                     </span>
                     <h1 className="text-2xl font-extrabold tracking-tight">Welcome to bluemacaw</h1>
                     <p className="max-w-sm text-sm text-muted-foreground">
-                        Four quick steps and you're set: permissions, hotkeys, your first API key,
-                        and a model.
+                        Four quick steps: permissions, hotkeys, choose your model source, and
+                        configure it.
                     </p>
                     <ol
                         className="flex flex-row items-center gap-2 pt-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
@@ -304,15 +309,40 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                         />
                     )}
                     {step === '3a' && (
-                        <OnboardingStepFirstApiKey
-                            onBack={goBackToHotkeys}
-                            existingKeys={existingApiKeys}
-                            onSaved={handleApiKeySaved}
-                            onContinueExisting={keyForModelStep ? () => setStep('3b') : undefined}
+                        <OnboardingStepChooseModelSource
+                            onChooseCloud={handleChooseCloud}
+                            onChooseLocal={handleChooseLocal}
                             onSkipFinish={() => void finish()}
                         />
                     )}
-                    {step === '3b' &&
+                    {step === '3b' && !choseLocalPath && (
+                        <OnboardingStepFirstApiKey
+                            onBack={goBackToModelSource}
+                            existingKeys={existingApiKeys}
+                            onSaved={handleApiKeySaved}
+                            onContinueExisting={
+                                keyForModelStep
+                                    ? () => {
+                                          const next: Predicates = {
+                                              ...predicates,
+                                              apiKey: true,
+                                          };
+                                          setPredicates(next);
+                                          advanceAfter('3b', next);
+                                      }
+                                    : undefined
+                            }
+                            onSkipFinish={() => void finish()}
+                        />
+                    )}
+                    {step === '3b' && choseLocalPath && (
+                        <OnboardingStepLocalModel
+                            onBack={goBackToModelSource}
+                            onSkipFinish={() => void finish()}
+                            onFinish={() => void finish()}
+                        />
+                    )}
+                    {step === '3c' &&
                         (keyForModelStep ? (
                             <OnboardingStepFirstModel
                                 apiKeyId={keyForModelStep.apiKeyId}
@@ -321,11 +351,6 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
                                 onFinish={() => void finish()}
                             />
                         ) : (
-                            // Defensive: we should always have a key by the time
-                            // step 3b mounts — either fetched on initial probe
-                            // (existing key + no model config) or set by 3a's
-                            // save. If we somehow don't, finishing is the
-                            // least-broken option.
                             <Card className="p-4">
                                 <p className="text-sm text-muted-foreground">
                                     No API key available; finishing onboarding.

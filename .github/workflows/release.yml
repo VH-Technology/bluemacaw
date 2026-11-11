@@ -80,7 +80,9 @@ jobs:
         # them with MSRV walls from `darling` and others.
         platform:
           - name: macos-universal
-            os: macos-14
+            # Xcode 26+ is required for FoundationModels (on-device Apple
+            # Intelligence cleanup). macos-14 images top out below that.
+            os: macos-26
             args: --target universal-apple-darwin
             rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
             rust-toolchain: stable
@@ -111,10 +113,12 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             packages/desktop/src-tauri/target
-          key: ${{ matrix.platform.name }}-cargo-release-${{ hashFiles('packages/desktop/src-tauri/Cargo.lock', 'packages/desktop/src-tauri/Cargo.toml') }}
+          # Keyed on the runner image too: a target/ cached on another image
+          # carries CMake builds (whisper.cpp) pointing at that image's Xcode.
+          key: ${{ matrix.platform.name }}-${{ matrix.platform.os }}-cargo-release-${{ hashFiles('packages/desktop/src-tauri/Cargo.lock', 'packages/desktop/src-tauri/Cargo.toml') }}
           restore-keys: |
-            ${{ matrix.platform.name }}-cargo-release-
-            ${{ matrix.platform.name }}-cargo-
+            ${{ matrix.platform.name }}-${{ matrix.platform.os }}-cargo-release-
+            ${{ matrix.platform.name }}-${{ matrix.platform.os }}-cargo-
 
       # The cache above restores `target/` to speed up builds. That includes
       # `target/.../bundle/`, which holds artifacts from the previous run —
@@ -140,7 +144,7 @@ jobs:
       # and export the env vars notarytool needs. tauri-action picks up
       # APPLE_API_ISSUER/KEY/KEY_PATH from the env automatically.
       - name: Set up notarization API key (macOS)
-        if: matrix.platform.os == 'macos-14'
+        if: runner.os == 'macOS'
         env:
           KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
@@ -174,6 +178,10 @@ jobs:
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS builds fail instead of silently bundling the stub Apple
+          # Intelligence sidecar when the SDK lacks FoundationModels (see
+          # src-tauri/build.rs). Ignored by the Windows build.
+          BLUEMACAW_REQUIRE_FOUNDATION_MODELS: '1'
         with:
           projectPath: packages/desktop
           args: ${{ matrix.platform.args }}
@@ -181,12 +189,25 @@ jobs:
       # Tauri's bundler doesn't notarize the DMG wrapper (only the inner .app).
       # This script submits the DMG to Apple, staples the ticket, and verifies.
       - name: Notarize and staple DMG (macOS)
-        if: matrix.platform.os == 'macos-14'
+        if: runner.os == 'macOS'
         working-directory: packages/desktop
         run: ./scripts/notarize-staple-dmg.sh
 
+      # Dry-runs publish nothing, so keep the signed + notarized DMG as a
+      # workflow artifact. It carries the same signature as a release (macOS
+      # permissions carry over), which lets a fix be installed and tested on a
+      # real machine before a release is cut.
+      - name: Upload DMG as workflow artifact (dry-run)
+        if: github.event_name == 'workflow_dispatch' && runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bluemacaw-dry-run-dmg
+          path: packages/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 7
+
       # Upload all platform bundles to the GitHub release. Runs only on real
-      # `release` events; workflow_dispatch builds don't publish anywhere.
+      # `release` events; workflow_dispatch builds don't publish to a release.
       #
       # We deliberately upload each file with its own `gh release upload`
       # call. A previous incarnation passed the full array to a single call,
@@ -294,6 +315,74 @@ jobs:
             > changelog.json
           echo "changelog.json: $(jq 'length' changelog.json) releases"
           gh release upload "$TAG" changelog.json --clobber --repo "$GITHUB_REPOSITORY"
+
+  # Bumps the Homebrew cask in VH-Technology/homebrew-tap to the version just
+  # released, so `brew install --cask vh-technology/tap/bluemacaw` serves it.
+  # The push needs write access to the tap repo via ONE of two secrets (see
+  # docs/build-and-release.md § Homebrew tap):
+  #   HOMEBREW_TAP_DEPLOY_KEY — SSH private key of a write-enabled deploy key
+  #   HOMEBREW_TAP_TOKEN      — fine-grained PAT scoped to homebrew-tap
+  publish-homebrew:
+    name: Bump Homebrew cask
+    needs: build
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ github.event.release.tag_name }}
+      CASK: Casks/bluemacaw.rb
+    steps:
+      - name: Download DMG and compute sha256
+        id: dmg
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          asset="bluemacaw_${version}_universal.dmg"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$asset"
+          sha="$(sha256sum "$asset" | cut -d' ' -f1)"
+          echo "$asset sha256=$sha"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      # actions/checkout uses ssh-key when it is non-empty, otherwise token.
+      # With neither secret set, github.token can read the public tap but the
+      # push below fails with a permissions error — by design, not silently.
+      - name: Check out homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: VH-Technology/homebrew-tap
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN || github.token }}
+          path: tap
+
+      - name: Update cask version + sha256
+        working-directory: tap
+        env:
+          VERSION: ${{ steps.dmg.outputs.version }}
+          SHA: ${{ steps.dmg.outputs.sha }}
+        run: |
+          set -euo pipefail
+          sed -i -E "s|^(  version \").*(\")$|\1${VERSION}\2|" "$CASK"
+          sed -i -E "s|^(  sha256 \").*(\")$|\1${SHA}\2|" "$CASK"
+          grep -E '^  (version|sha256) ' "$CASK"
+          # Fail loudly if either substitution didn't land.
+          grep -q "^  version \"${VERSION}\"$" "$CASK"
+          grep -q "^  sha256 \"${SHA}\"$" "$CASK"
+
+      - name: Commit and push
+        working-directory: tap
+        env:
+          VERSION: ${{ steps.dmg.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "cask already at ${VERSION}; nothing to push"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "bluemacaw ${VERSION}"
+          git push origin HEAD:main
 
   # Generates the Tauri updater manifest (update.json) — distinct from
   # latest.json above:

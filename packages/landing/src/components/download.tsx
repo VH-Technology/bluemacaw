@@ -47,6 +47,19 @@ export function Download() {
                     detail="Signed + notarized DMG"
                     href={macHref}
                     docsHref="/docs/#install-macos"
+                    command="brew install --cask vh-technology/tap/bluemacaw"
+                    commandNote={
+                        <>
+                            Third-party tap:{' '}
+                            <a
+                                href="https://github.com/VH-Technology/homebrew-tap/blob/main/Casks/bluemacaw.rb"
+                                className="font-semibold text-main hover:underline"
+                            >
+                                read the cask
+                            </a>{' '}
+                            before you run it.
+                        </>
+                    }
                     icon={<MaskIcon src="/icons/macos.svg" className="h-7 w-7" />}
                 />
                 <PlatformCard
@@ -71,6 +84,9 @@ interface PlatformCardProps {
     tags?: readonly string[];
     altHref?: string | null;
     altLabel?: string;
+    command?: string;
+    /** Shown under `command`, e.g. a caution about where it installs from. */
+    commandNote?: React.ReactNode;
 }
 
 function PlatformCard({
@@ -82,6 +98,8 @@ function PlatformCard({
     tags,
     altHref,
     altLabel,
+    command,
+    commandNote,
 }: PlatformCardProps) {
     const comingSoon = href === null;
     return (
@@ -137,6 +155,17 @@ function PlatformCard({
                     <span aria-hidden="true">→</span>
                 </a>
             </div>
+            {!comingSoon && command ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>or</span>
+                    <code className="rounded-lg bg-main/10 px-2 py-1 font-mono text-main">
+                        {command}
+                    </code>
+                </div>
+            ) : null}
+            {!comingSoon && command && commandNote ? (
+                <p className="text-xs text-muted-foreground">{commandNote}</p>
+            ) : null}
         </div>
     );
 }

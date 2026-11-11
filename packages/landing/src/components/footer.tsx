@@ -44,6 +44,35 @@ export function Footer({ version }: FooterProps) {
                     </a>
                 </nav>
             </div>
+            <div className="mx-auto mt-8 max-w-6xl px-6">
+                <div className="border-t border-border pt-6">
+                    <p className="text-sm text-muted-foreground">
+                        Built and run by{' '}
+                        <a
+                            href="https://www.programow.com"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-semibold text-fg transition-colors hover:text-fg/80"
+                        >
+                            Programow
+                        </a>{' '}
+                        and{' '}
+                        <a
+                            href="https://avinu.tech"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-semibold text-fg transition-colors hover:text-fg/80"
+                        >
+                            Avinu
+                        </a>
+                    </p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                        Programow LTDA · CNPJ 43.397.150/0001-93
+                        <span className="mx-2 opacity-60">·</span>
+                        Morya Servicos de Tecnologia LTDA (Avinu) · CNPJ 42.184.742/0001-64
+                    </p>
+                </div>
+            </div>
         </footer>
     );
 }

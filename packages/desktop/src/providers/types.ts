@@ -1,4 +1,9 @@
-import type { TranscriptionModel } from 'ai';
+import type { TranscriptionModel, experimental_transcribe } from 'ai';
+
+/** The AI SDK's per-request `providerOptions` for a transcription call. */
+export type BatchProviderOptions = NonNullable<
+    Parameters<typeof experimental_transcribe>[0]['providerOptions']
+>;
 
 export type TranscriptionMode = 'batch' | 'realtime';
 
@@ -49,6 +54,11 @@ export interface ProviderConfig {
      * the final transcript text.
      */
     transcribeBatch?: (audio: Uint8Array, modelId: string, apiKey: string) => Promise<string>;
+    /**
+     * Extra AI SDK `providerOptions` for the batch path. Resolved on every
+     * request so they follow the user's settings (e.g. Deepgram formatting).
+     */
+    batchProviderOptions?: () => Promise<BatchProviderOptions>;
     /**
      * Optional factory for realtime/streaming models. Providers that
      * expose at least one model with `mode: 'realtime'` must implement

@@ -67,6 +67,7 @@ vi.mock('@/lib/onboarding-silent-skip', () => ({
     hasHotkeysConfigured: vi.fn(async () => false),
     hasApiKeySet: vi.fn(async () => false),
     hasModelConfigSet: vi.fn(async () => false),
+    hasLocalModelSet: vi.fn(async () => false),
 }));
 
 vi.mock('@/lib/use-platform', () => ({
@@ -81,6 +82,7 @@ import {
     hasAllPermissionsSet,
     hasApiKeySet,
     hasHotkeysConfigured,
+    hasLocalModelSet,
     hasModelConfigSet,
 } from '@/lib/onboarding-silent-skip';
 import { OnboardingScreen } from './OnboardingScreen';
@@ -136,10 +138,11 @@ function resetAllMocks() {
     vi.mocked(hasAllPermissionsSet).mockReset();
     vi.mocked(hasHotkeysConfigured).mockReset();
     vi.mocked(hasApiKeySet).mockReset();
+    vi.mocked(hasLocalModelSet).mockReset();
     vi.mocked(hasModelConfigSet).mockReset();
 }
 
-/** Set the four predicate mocks; defaults to "nothing satisfied" so the
+/** Set the predicate mocks; defaults to "nothing satisfied" so the
  * wizard walks the full sequence from step 1. */
 function mockPredicates(
     p: Partial<{
@@ -147,12 +150,14 @@ function mockPredicates(
         hotkeys: boolean;
         apiKey: boolean;
         modelConfig: boolean;
+        localModel: boolean;
     }> = {},
 ) {
     vi.mocked(hasAllPermissionsSet).mockResolvedValue(p.permissions ?? false);
     vi.mocked(hasHotkeysConfigured).mockResolvedValue(p.hotkeys ?? false);
     vi.mocked(hasApiKeySet).mockResolvedValue(p.apiKey ?? false);
     vi.mocked(hasModelConfigSet).mockResolvedValue(p.modelConfig ?? false);
+    vi.mocked(hasLocalModelSet).mockResolvedValue(p.localModel ?? false);
 }
 
 function mockAllPermissionsGranted(os: 'macos' | 'windows' | 'linux' = 'macos') {
@@ -269,7 +274,7 @@ describe('<OnboardingScreen /> — wizard navigation (full flow)', () => {
         );
     });
 
-    it('Step 2 → 3a: Next persists + registers both hotkeys, writes hotkeys_onboarded, and advances', async () => {
+    it('Step 2 → 3a: Next persists + registers both hotkeys, writes hotkeys_onboarded, and advances to model source', async () => {
         mockPredicates();
         const user = userEvent.setup();
         mockAllPermissionsGranted('windows');
@@ -284,14 +289,12 @@ describe('<OnboardingScreen /> — wizard navigation (full flow)', () => {
         await waitFor(() => expect(db.setHotkeyCombo).toHaveBeenCalledWith('Cmd+Shift+Space'));
         expect(vox.registerHotkey).toHaveBeenCalledWith('Cmd+Shift+Space');
         expect(db.setCancelHotkeyCombo).toHaveBeenCalledWith('Escape');
-        // Cancel hotkey is validated (parse-only) at onboarding time; its
-        // global registration happens later, when a recording starts.
         expect(vox.validateCancelHotkey).toHaveBeenCalledWith('Escape');
         expect(vox.registerCancelHotkey).not.toHaveBeenCalled();
         expect(db.setHotkeysOnboarded).toHaveBeenCalledWith(true);
 
         await waitFor(() =>
-            expect(screen.getByTestId('onboarding-step-first-api-key')).toBeInTheDocument(),
+            expect(screen.getByTestId('onboarding-step-choose-model-source')).toBeInTheDocument(),
         );
     });
 
@@ -307,8 +310,8 @@ describe('<OnboardingScreen /> — wizard navigation (full flow)', () => {
         await user.click(screen.getByTestId('perm-continue'));
         await waitFor(() => expect(screen.getByTestId('hotkeys-next')).toBeEnabled());
         await user.click(screen.getByTestId('hotkeys-next'));
-        await waitFor(() => expect(screen.getByTestId('first-api-key-skip')).toBeInTheDocument());
-        await user.click(screen.getByTestId('first-api-key-skip'));
+        await waitFor(() => expect(screen.getByTestId('choose-source-skip')).toBeInTheDocument());
+        await user.click(screen.getByTestId('choose-source-skip'));
 
         await waitFor(() => expect(markOnboardingCompleted).toHaveBeenCalledTimes(1));
         expect(onComplete).toHaveBeenCalledTimes(1);
@@ -316,7 +319,7 @@ describe('<OnboardingScreen /> — wizard navigation (full flow)', () => {
         expect(db.addModelConfig).not.toHaveBeenCalled();
     });
 
-    it('Step 3a → 3b: saving the key advances to the model picker', async () => {
+    it('Step 3a choose cloud → 3b (API key), then → 3c (model picker)', async () => {
         mockPredicates();
         const user = userEvent.setup();
         mockAllPermissionsGranted('windows');
@@ -327,7 +330,11 @@ describe('<OnboardingScreen /> — wizard navigation (full flow)', () => {
         await user.click(screen.getByTestId('perm-continue'));
         await waitFor(() => expect(screen.getByTestId('hotkeys-next')).toBeEnabled());
         await user.click(screen.getByTestId('hotkeys-next'));
-        await waitFor(() => expect(screen.getByTestId('first-api-key-next')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByTestId('choose-cloud')).toBeInTheDocument());
+        await user.click(screen.getByTestId('choose-cloud'));
+        await waitFor(() =>
+            expect(screen.getByTestId('onboarding-step-first-api-key')).toBeInTheDocument(),
+        );
         await user.type(screen.getByTestId('onboarding-key-input'), 'sk-test');
         await user.click(screen.getByTestId('first-api-key-next'));
 
@@ -337,7 +344,7 @@ describe('<OnboardingScreen /> — wizard navigation (full flow)', () => {
         );
     });
 
-    it('Step 3b Save & finish inserts model config and finishes', async () => {
+    it('Step 3c Save & finish inserts model config and finishes', async () => {
         mockPredicates();
         const user = userEvent.setup();
         const onComplete = vi.fn();
@@ -349,7 +356,9 @@ describe('<OnboardingScreen /> — wizard navigation (full flow)', () => {
         await user.click(screen.getByTestId('perm-continue'));
         await waitFor(() => expect(screen.getByTestId('hotkeys-next')).toBeEnabled());
         await user.click(screen.getByTestId('hotkeys-next'));
-        await waitFor(() => expect(screen.getByTestId('first-api-key-next')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByTestId('choose-cloud')).toBeInTheDocument());
+        await user.click(screen.getByTestId('choose-cloud'));
+        await waitFor(() => expect(screen.getByTestId('onboarding-key-input')).toBeInTheDocument());
         await user.type(screen.getByTestId('onboarding-key-input'), 'sk-test');
         await user.click(screen.getByTestId('first-api-key-next'));
         await waitFor(() => expect(screen.getByTestId('first-model-finish')).toBeInTheDocument());
@@ -361,10 +370,29 @@ describe('<OnboardingScreen /> — wizard navigation (full flow)', () => {
         expect(markOnboardingCompleted).toHaveBeenCalledTimes(1);
         expect(onComplete).toHaveBeenCalledTimes(1);
     });
+
+    it('Step 3a choose local → 3b (OnboardingStepLocalModel)', async () => {
+        mockPredicates();
+        const user = userEvent.setup();
+        mockAllPermissionsGranted('windows');
+
+        render(<OnboardingScreen onComplete={vi.fn()} />);
+
+        await waitFor(() => expect(screen.getByTestId('perm-continue')).toBeEnabled());
+        await user.click(screen.getByTestId('perm-continue'));
+        await waitFor(() => expect(screen.getByTestId('hotkeys-next')).toBeEnabled());
+        await user.click(screen.getByTestId('hotkeys-next'));
+        await waitFor(() => expect(screen.getByTestId('choose-local')).toBeInTheDocument());
+        await user.click(screen.getByTestId('choose-local'));
+
+        await waitFor(() =>
+            expect(screen.getByTestId('onboarding-step-local-model')).toBeInTheDocument(),
+        );
+    });
 });
 
 describe('<OnboardingScreen /> — predicate-driven step skipping', () => {
-    it('mounts directly on sub-step 3b when only the model config is missing, and exposes Back to 3a within step 3', async () => {
+    it('mounts directly on step 3c (model picker) when only the model config is missing', async () => {
         mockPredicates({
             permissions: true,
             hotkeys: true,
@@ -386,12 +414,10 @@ describe('<OnboardingScreen /> — predicate-driven step skipping', () => {
         await waitFor(() =>
             expect(screen.getByTestId('onboarding-step-first-model')).toBeInTheDocument(),
         );
-        // Step 3's two sub-screens are always navigable; Back on 3b returns
-        // to 3a even when 3a's predicate is satisfied.
         expect(screen.getByTestId('first-model-back')).toBeInTheDocument();
     });
 
-    it('Step 3b Back → 3a, then Next with empty form → back to 3b without adding a new key', async () => {
+    it('Step 3c Back → 3b, then Next with empty form → back to 3c without adding a new key', async () => {
         const user = userEvent.setup();
         mockPredicates({
             permissions: true,
@@ -416,7 +442,6 @@ describe('<OnboardingScreen /> — predicate-driven step skipping', () => {
         await waitFor(() =>
             expect(screen.getByTestId('onboarding-step-first-api-key')).toBeInTheDocument(),
         );
-        // Form is empty; Next should use the existing key path (no addApiKey call).
         await user.click(screen.getByTestId('first-api-key-next'));
         await waitFor(() =>
             expect(screen.getByTestId('onboarding-step-first-model')).toBeInTheDocument(),
@@ -424,32 +449,25 @@ describe('<OnboardingScreen /> — predicate-driven step skipping', () => {
         expect(db.addApiKey).not.toHaveBeenCalled();
     });
 
-    it('mounts directly on sub-step 3a when only api key + model config are missing, and Back returns to the Hotkeys step', async () => {
-        const user = userEvent.setup();
+    it('mounts directly on step 3a (choose model source) when model source + api key + model config are all missing, and exposes no Back button', async () => {
         mockPredicates({
             permissions: true,
             hotkeys: true,
             apiKey: false,
             modelConfig: false,
+            localModel: false,
         });
         mockAllPermissionsGranted('macos');
 
         render(<OnboardingScreen onComplete={vi.fn()} />);
 
         await waitFor(() =>
-            expect(screen.getByTestId('onboarding-step-first-api-key')).toBeInTheDocument(),
+            expect(screen.getByTestId('onboarding-step-choose-model-source')).toBeInTheDocument(),
         );
-        // Within step 3, Back is always available and returns to step 2 so
-        // the user can tweak hotkeys mid-onboarding without abandoning the
-        // wizard.
-        const back = screen.getByTestId('first-api-key-back');
-        await user.click(back);
-        await waitFor(() =>
-            expect(screen.getByTestId('onboarding-step-hotkeys')).toBeInTheDocument(),
-        );
+        expect(screen.queryByTestId('first-api-key-back')).toBeNull();
     });
 
-    it('skips sub-step 3a when an api key already exists but the model config is missing (3a → 3b directly after step 2)', async () => {
+    it('skips steps 3a and 3b when an api key already exists but the model config is missing (3a/3b → 3c directly after step 2)', async () => {
         mockPredicates({
             permissions: false,
             hotkeys: false,
@@ -468,54 +486,65 @@ describe('<OnboardingScreen /> — predicate-driven step skipping', () => {
 
         render(<OnboardingScreen onComplete={vi.fn()} />);
 
-        // Mount on step 1
         await waitFor(() => expect(screen.getByTestId('perm-continue')).toBeEnabled());
         await user(userEvent.setup()).click(screen.getByTestId('perm-continue'));
         await waitFor(() => expect(screen.getByTestId('hotkeys-next')).toBeEnabled());
         await user(userEvent.setup()).click(screen.getByTestId('hotkeys-next'));
-        // 3a is satisfied, so we land directly on 3b
         await waitFor(() =>
             expect(screen.getByTestId('onboarding-step-first-model')).toBeInTheDocument(),
         );
+        expect(screen.queryByTestId('onboarding-step-choose-model-source')).toBeNull();
         expect(screen.queryByTestId('onboarding-step-first-api-key')).toBeNull();
         expect(db.addApiKey).not.toHaveBeenCalled();
     });
 
-    it('after manual Back, subsequent Next advances linearly through satisfied steps', async () => {
+    it('skips steps 3a and 3b when a local model is already set (3a/3b → complete after step 2)', async () => {
+        mockPredicates({
+            permissions: false,
+            hotkeys: false,
+            apiKey: false,
+            modelConfig: false,
+            localModel: true,
+        });
+        mockAllPermissionsGranted('windows');
+
+        render(<OnboardingScreen onComplete={vi.fn()} />);
+
+        await waitFor(() => expect(screen.getByTestId('perm-continue')).toBeEnabled());
+        await user(userEvent.setup()).click(screen.getByTestId('perm-continue'));
+        await waitFor(() => expect(screen.getByTestId('hotkeys-next')).toBeEnabled());
+        await user(userEvent.setup()).click(screen.getByTestId('hotkeys-next'));
+        // 3a satisfied (modelSource=true via localModel), 3b satisfied (localModel),
+        // 3c satisfied (localModel=true) → finish
+        await waitFor(() => expect(markOnboardingCompleted).toHaveBeenCalledTimes(1));
+    });
+
+    it('after manual Back from step 2, subsequent Next advances linearly (does not skip)', async () => {
         const user = userEvent.setup();
         mockPredicates({
             permissions: true,
-            hotkeys: true,
-            apiKey: false,
-            modelConfig: false,
+            hotkeys: false,
+            apiKey: true,
+            modelConfig: true,
+            localModel: false,
         });
         mockAllPermissionsGranted('macos');
 
         render(<OnboardingScreen onComplete={vi.fn()} />);
 
         await waitFor(() =>
-            expect(screen.getByTestId('onboarding-step-first-api-key')).toBeInTheDocument(),
-        );
-
-        await user.click(screen.getByTestId('first-api-key-back'));
-        await waitFor(() =>
             expect(screen.getByTestId('onboarding-step-hotkeys')).toBeInTheDocument(),
         );
+
         await user.click(screen.getByTestId('hotkeys-back'));
         await waitFor(() =>
             expect(screen.getByTestId('onboarding-step-permissions')).toBeInTheDocument(),
         );
 
-        // From here Next must walk linearly: 1 → 2 → 3a (no skipping past
-        // the already-satisfied permissions / hotkeys steps).
         await waitFor(() => expect(screen.getByTestId('perm-continue')).toBeEnabled());
         await user.click(screen.getByTestId('perm-continue'));
         await waitFor(() =>
             expect(screen.getByTestId('onboarding-step-hotkeys')).toBeInTheDocument(),
-        );
-        await user.click(screen.getByTestId('hotkeys-next'));
-        await waitFor(() =>
-            expect(screen.getByTestId('onboarding-step-first-api-key')).toBeInTheDocument(),
         );
     });
 
@@ -525,6 +554,7 @@ describe('<OnboardingScreen /> — predicate-driven step skipping', () => {
             hotkeys: true,
             apiKey: true,
             modelConfig: true,
+            localModel: false,
         });
         const onComplete = vi.fn();
 

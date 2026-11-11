@@ -46,7 +46,8 @@ async function validateAgainstProvider(
 export function AddApiKeyDialog({ open, onClose, onAdded }: AddApiKeyDialogProps) {
     const nicknameId = useId();
     const keyId = useId();
-    const defaultProvider = PROVIDERS[0]?.id ?? '';
+    const cloudProviders = PROVIDERS.filter((provider) => provider.id !== 'local');
+    const defaultProvider = cloudProviders[0]?.id ?? '';
     const [provider, setProvider] = useState(defaultProvider);
     const [nickname, setNickname] = useState('');
     const [key, setKey] = useState('');
@@ -65,7 +66,7 @@ export function AddApiKeyDialog({ open, onClose, onAdded }: AddApiKeyDialogProps
         setError(null);
         setBusy(true);
         try {
-            const config = PROVIDERS.find((p) => p.id === provider);
+            const config = cloudProviders.find((p) => p.id === provider);
             if (!config) throw new Error(`Unknown provider: ${provider}`);
             const trimmedNickname = nickname.trim();
             const trimmedKey = key.trim();
@@ -117,7 +118,7 @@ export function AddApiKeyDialog({ open, onClose, onAdded }: AddApiKeyDialogProps
                     <div className="flex flex-col gap-2">
                         <Label>Provider</Label>
                         <ProviderPicker
-                            providers={PROVIDERS}
+                            providers={cloudProviders}
                             selectedProviderId={provider}
                             onSelect={setProvider}
                         />

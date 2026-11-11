@@ -1,4 +1,5 @@
 import { createDeepgram } from '@ai-sdk/deepgram';
+import { getDeepgramSmartFormatEnabled } from '../lib/db';
 import { httpFetch } from '../lib/http';
 import { makeFluxRealtimeModel } from './deepgram-flux-realtime';
 import type { Model, ProviderConfig } from './types';
@@ -37,6 +38,11 @@ export const deepgramConfig: ProviderConfig = {
     // dies at the preflight. The Rust-side request has no such restriction.
     makeModel: (modelId, apiKey) =>
         createDeepgram({ apiKey, fetch: httpFetch }).transcription(modelId),
+    // Without `smart_format` Deepgram returns bare lowercase words with no
+    // punctuation. Batch models only; Flux has its own connection.
+    batchProviderOptions: async () => ({
+        deepgram: { smartFormat: await getDeepgramSmartFormatEnabled() },
+    }),
     makeRealtimeModel: (modelId, apiKey) => makeFluxRealtimeModel(modelId, apiKey),
     listModels: null,
     defaultModels: DEFAULT_MODELS,

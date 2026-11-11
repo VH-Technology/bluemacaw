@@ -57,6 +57,23 @@ describe('Download', () => {
         );
     });
 
+    it('offers the Homebrew install command on the macOS card', () => {
+        vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})) as unknown as typeof fetch);
+        render(<Download />);
+        expect(
+            screen.getByText('brew install --cask vh-technology/tap/bluemacaw'),
+        ).toBeInTheDocument();
+    });
+
+    it('links to the cask next to the Homebrew command so it can be audited first', () => {
+        vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})) as unknown as typeof fetch);
+        render(<Download />);
+        expect(screen.getByRole('link', { name: /read the cask/i })).toHaveAttribute(
+            'href',
+            'https://github.com/VH-Technology/homebrew-tap/blob/main/Casks/bluemacaw.rb',
+        );
+    });
+
     it('renders coming-soon cards (no download link) for null platforms once resolved', async () => {
         vi.stubGlobal(
             'fetch',

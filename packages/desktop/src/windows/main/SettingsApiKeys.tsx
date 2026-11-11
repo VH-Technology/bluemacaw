@@ -7,7 +7,11 @@ import { AddApiKeyDialog } from './AddApiKeyDialog';
 import { DeleteApiKeyDialog } from './DeleteApiKeyDialog';
 import { ProviderLogo } from './ProviderPicker';
 
-export function SettingsApiKeys() {
+interface SettingsApiKeysProps {
+    onKeysChanged?: () => void;
+}
+
+export function SettingsApiKeys({ onKeysChanged }: SettingsApiKeysProps) {
     const [keys, setKeys] = useState<ApiKeyRow[]>([]);
     const [adding, setAdding] = useState(false);
     const [deleting, setDeleting] = useState<ApiKeyRow | null>(null);
@@ -79,6 +83,7 @@ export function SettingsApiKeys() {
                 onAdded={() => {
                     setAdding(false);
                     void reload();
+                    onKeysChanged?.();
                 }}
             />
             {deleting && (
@@ -88,6 +93,7 @@ export function SettingsApiKeys() {
                     onDeleted={() => {
                         setDeleting(null);
                         void reload();
+                        onKeysChanged?.();
                     }}
                 />
             )}
