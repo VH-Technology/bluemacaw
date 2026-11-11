@@ -1,3 +1,4 @@
+import { DEFAULT_OVERLAY_SENSITIVITY, isValidOverlaySensitivity } from '@/lib/overlay-sensitivity';
 import { cn } from '@/lib/utils';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
@@ -24,6 +25,8 @@ export interface OverlayWindowProps {
      * sensible static pill.
      */
     level?: number;
+    /** Visual gain applied to the meter only, with 1 preserving the default response. */
+    sensitivity?: number;
 }
 
 const PILL = cn(
@@ -205,15 +208,25 @@ function TranscribingDots() {
     );
 }
 
-export function OverlayWindow({ state, onStop, onCancel, level = 0 }: OverlayWindowProps) {
+export function OverlayWindow({
+    state,
+    onStop,
+    onCancel,
+    level = 0,
+    sensitivity = DEFAULT_OVERLAY_SENSITIVITY,
+}: OverlayWindowProps) {
     if (state.kind === 'hidden') return null;
 
     if (state.kind === 'recording') {
+        const gain = isValidOverlaySensitivity(sensitivity)
+            ? sensitivity
+            : DEFAULT_OVERLAY_SENSITIVITY;
+        const displayLevel = clampLevel(level) * gain;
         return (
             <div className={PILL} data-testid="overlay-pill" data-state="recording">
                 <DragHandle />
-                <RecordingDot level={level} />
-                <Waveform level={level} />
+                <RecordingDot level={displayLevel} />
+                <Waveform level={displayLevel} />
                 <span className="pointer-events-none text-[11px] font-semibold tracking-wide">
                     Recording
                 </span>

@@ -119,6 +119,17 @@ pub fn get_platform_info() -> PlatformInfo {
     }
 }
 
+/// Native-owned preference, available before webview / SQLite startup.
+#[tauri::command]
+pub fn get_keep_in_dock(app: AppHandle) -> Result<bool, String> {
+    crate::dock::get_keep_in_dock(&app)
+}
+
+#[tauri::command]
+pub fn set_keep_in_dock(app: AppHandle, enabled: bool) -> Result<(), String> {
+    crate::dock::set_keep_in_dock(&app, enabled)
+}
+
 /// Restart the running bluemacaw process. Called from the onboarding screen
 /// after the user grants Accessibility / Input Monitoring on macOS, since
 /// TCC doesn't propagate authorisation changes into a running process.

@@ -12,6 +12,7 @@ const {
     setOverlayPositionMock,
     exitOverlayPositionSetupMock,
     getRecordingLevelMock,
+    getOverlaySensitivityMock,
 } = vi.hoisted(() => {
     type Handler = (event: { payload: unknown }) => void;
     const handlers = new Map<string, Handler>();
@@ -20,7 +21,7 @@ const {
         listenMock: vi.fn(async (name: string, h: Handler) => {
             handlers.set(name, h);
             return () => {
-                handlers.delete(name);
+                if (handlers.get(name) === h) handlers.delete(name);
             };
         }),
         fireEvent: (name: string, payload: unknown) => handlers.get(name)?.({ payload }),
@@ -47,6 +48,7 @@ const {
             async () => undefined,
         ),
         getRecordingLevelMock: vi.fn<(sessionId: string) => Promise<number>>(async () => 0),
+        getOverlaySensitivityMock: vi.fn(async () => 1),
     };
 });
 
@@ -68,6 +70,7 @@ vi.mock('@tauri-apps/api/window', () => ({
 vi.mock('@/lib/db', () => ({
     getOverlayPosition: getOverlayPositionMock,
     setOverlayPosition: setOverlayPositionMock,
+    getOverlaySensitivity: getOverlaySensitivityMock,
 }));
 vi.mock('@/lib/overlay-bridge', () => ({
     RECORDING_STATE_EVENT: 'bluemacaw://recording-state',
@@ -96,6 +99,7 @@ beforeEach(() => {
     setOverlayPositionMock.mockReset().mockResolvedValue(undefined);
     exitOverlayPositionSetupMock.mockReset().mockResolvedValue(undefined);
     getRecordingLevelMock.mockReset().mockResolvedValue(0);
+    getOverlaySensitivityMock.mockReset().mockResolvedValue(1);
     vi.useRealTimers();
 });
 
@@ -371,6 +375,23 @@ describe('<OverlayApp /> setup mode', () => {
 });
 
 describe('<OverlayApp /> level polling', () => {
+    it('loads saved sensitivity and responds to changes from the settings window', async () => {
+        getOverlaySensitivityMock.mockResolvedValue(0.2);
+        getRecordingLevelMock.mockResolvedValue(0.12);
+        render(<OverlayApp />);
+        await waitFor(() => expect(getOverlaySensitivityMock).toHaveBeenCalled());
+        await act(async () => {
+            fireEvent(RECORDING_EVENT, { kind: 'recording', sessionId: 'session-1' });
+        });
+        const bar = await screen.findByTestId('overlay-waveform-bar-3');
+        expect(bar).toHaveAttribute('data-active', 'false');
+        getOverlaySensitivityMock.mockResolvedValue(2);
+        await act(async () => {
+            fireEvent('bluemacaw://overlay-sensitivity-changed', null);
+        });
+        await waitFor(() => expect(bar).toHaveAttribute('data-active', 'true'));
+    });
+
     it('polls getRecordingLevel while recording and forwards the level to the pill', async () => {
         getRecordingLevelMock.mockResolvedValue(0.8);
         render(<OverlayApp />);

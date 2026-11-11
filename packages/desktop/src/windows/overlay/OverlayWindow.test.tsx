@@ -150,4 +150,26 @@ describe('<OverlayWindow />', () => {
         const dotAtMax = screen.getByTestId('overlay-recording-dot');
         expect(dotAtMax.getAttribute('style')).toMatch(/scale\(1\.400\)/);
     });
+
+    it('adjusts both bars and dot with sensitivity while preserving the default response', () => {
+        const { rerender } = render(<OverlayWindow state={{ kind: 'recording' }} level={0.12} />);
+        const bar = screen.getByTestId('overlay-waveform-bar-3');
+        const dot = screen.getByTestId('overlay-recording-dot');
+        const defaultHeight = bar.style.height;
+        const defaultScale = dot.style.transform;
+        expect(bar).toHaveAttribute('data-active', 'true');
+
+        rerender(<OverlayWindow state={{ kind: 'recording' }} level={0.12} sensitivity={0.2} />);
+        expect(bar).toHaveAttribute('data-active', 'false');
+        expect(Number.parseFloat(bar.style.height)).toBeLessThan(Number.parseFloat(defaultHeight));
+        expect(dot.style.transform).not.toBe(defaultScale);
+
+        rerender(<OverlayWindow state={{ kind: 'recording' }} level={0.12} sensitivity={2} />);
+        expect(bar.style.height).toBe('14px');
+        expect(dot.style.transform).toBe('scale(1.400)');
+
+        rerender(<OverlayWindow state={{ kind: 'recording' }} level={0.12} sensitivity={1} />);
+        expect(bar.style.height).toBe(defaultHeight);
+        expect(dot.style.transform).toBe(defaultScale);
+    });
 });

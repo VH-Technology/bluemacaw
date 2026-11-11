@@ -7,6 +7,7 @@ import {
     defaultTranscriptCleanupOptions,
 } from './cleanup-config';
 import { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_OTHER } from './defaults';
+import { DEFAULT_OVERLAY_SENSITIVITY, isValidOverlaySensitivity } from './overlay-sensitivity';
 import { getPlatform } from './use-platform';
 import type { Theme } from './use-theme';
 
@@ -14,6 +15,7 @@ const DB_URL = 'sqlite:bluemacaw.db';
 const ACTIVE_MODEL_CONFIG_KEY = 'active_model_config_id';
 const ACTIVE_LOCAL_MODEL_ID_KEY = 'active_local_model_id';
 const OVERLAY_ENABLED_KEY = 'overlay_enabled';
+const OVERLAY_SENSITIVITY_KEY = 'overlay_sensitivity';
 const OVERLAY_X_KEY = 'overlay_x';
 const OVERLAY_Y_KEY = 'overlay_y';
 const SELECTED_MIC_DEVICE_KEY = 'selected_mic_device_id';
@@ -456,6 +458,26 @@ export async function setOverlayEnabled(enabled: boolean): Promise<void> {
     await conn.execute(
         'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
         [OVERLAY_ENABLED_KEY, enabled ? 'true' : 'false'],
+    );
+}
+
+export async function getOverlaySensitivity(): Promise<number> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        OVERLAY_SENSITIVITY_KEY,
+    ])) as { value: string }[];
+    const value = Number(rows[0]?.value);
+    return isValidOverlaySensitivity(value) ? value : DEFAULT_OVERLAY_SENSITIVITY;
+}
+
+export async function setOverlaySensitivity(value: number): Promise<void> {
+    if (!isValidOverlaySensitivity(value)) {
+        throw new Error('Overlay sensitivity must be between 10% and 200%');
+    }
+    const conn = await db();
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [OVERLAY_SENSITIVITY_KEY, String(value)],
     );
 }
 

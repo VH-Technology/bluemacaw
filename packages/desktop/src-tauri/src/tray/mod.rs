@@ -13,7 +13,7 @@
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager, Runtime,
+    AppHandle, Runtime,
 };
 
 /// Stable identifiers for the tray menu items. Kept in one place so callers
@@ -77,14 +77,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match dispatch_event(event.id.as_ref()) {
             Some(TrayEvent::OpenMain) => {
-                #[cfg(target_os = "macos")]
-                {
-                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
-                }
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+                crate::dock::show_main_window(app);
             }
             Some(TrayEvent::Quit) => {
                 app.exit(0);

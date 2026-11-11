@@ -22,6 +22,7 @@ There is no Node runtime in the renderer. There is no preload script. Tauri's ca
 | `lib.rs` | Crate entry. Wires plugins (clipboard-manager, global-shortcut, sql, store, updater), constructs `AppState`, registers the `invoke_handler!`, builds the tray, converts the overlay window to a non-activating `NSPanel` on macOS, shows the main window unless the launch came from login, and installs the close-to-tray window handler. |
 | `main.rs` | Thin binary entry that calls `bluemacaw_lib::run()`. |
 | `commands.rs` | Every `#[tauri::command]`. Defines `AppState` and `HostOs` / `PlatformInfo`. |
+| `dock.rs` | Native-owned `keep_in_dock` preference and macOS activation policy. Persists in `desktop-preferences.json` via `tauri-plugin-store` so it is available before webview/SQLite startup. Centralizes reopening the main window from the tray or Dock. |
 | `markers.rs` | String constants for Tauri events (`bluemacaw://shortcut-toggle`, `bluemacaw://shortcut-cancel`) and error markers (`accessibility-required:`, `mic-denied:`, `wayland-paste-unsupported:`, `input-monitoring-required:`). Mirrored in `src/lib/markers.ts`; a contract test parses this file to enforce agreement. |
 | `platform/mod.rs` | `is_wayland_session()` helper (`XDG_SESSION_TYPE` / `WAYLAND_DISPLAY` probe). |
 | `login_launch.rs` | `launched_at_login()` — tells a launch at login from a manual one, so the main window (created hidden, `visible: false`) stays hidden and the app comes up in the tray only. Windows/Linux: the autostart entry passes `--autostart`. macOS: a Login Item cannot carry arguments, so a launch within two minutes of the console login (utmpx record) counts; this also covers the "reopen windows when logging back in" relaunch. While onboarding is pending, `MainWindow` shows the window regardless. |
@@ -56,7 +57,8 @@ Migration SQL lives in `packages/desktop/src-tauri/migrations/` (`0001_init.sql`
 | `lib/transcribe.ts` | End-to-end transcription orchestration. Resolves the active model config, fetches the API key via `vox.getSecret`, builds the `TranscriptionModel` via `provider.makeModel`, calls `experimental_transcribe` from `ai`. |
 | `lib/recording-controller.ts` | Pure state machine (`idle` / `recording` / `transcribing` / `error`) used by both window contexts. Gates microphone permission, calls `vox.startRecording` / `vox.stopRecording`, runs transcribe, attempts paste, saves to history. |
 | `lib/overlay-bridge.ts` | Listens for `EVT_SHORTCUT_TOGGLE` / `EVT_SHORTCUT_CANCEL` from Rust and drives the recording controller from either window. |
-| `lib/db.ts` | All SQL access (api_keys, model_configs, transcriptions, app_state). Settings (hotkey, cancel hotkey, retention days, selected mic device, overlay enabled/position, theme) live in `app_state` as key/value rows. |
+| `lib/db.ts` | All SQL access (api_keys, model_configs, transcriptions, app_state). Settings (hotkey, cancel hotkey, retention days, selected mic device, overlay enabled/position/sensitivity, theme) live in `app_state` as key/value rows. |
+| `lib/overlay-sensitivity.ts` | Visual meter gain bounds/default and the cross-window sensitivity-change event name. |
 | `lib/onboarding.ts`, `lib/use-onboarding-gate.ts`, `lib/use-onboarding-status.ts` | First-launch onboarding flag in `tauri-plugin-store` + polling hooks that surface the per-platform permission set. |
 | `lib/platform.ts`, `lib/use-platform.ts` | Maps `PlatformInfo` to the set of `PermissionKey`s the onboarding screen must render. |
 | `lib/export.ts` | TXT / Markdown export helpers for the History tab. |
@@ -67,6 +69,7 @@ Migration SQL lives in `packages/desktop/src-tauri/migrations/` (`0001_init.sql`
 | `windows/main/MainWindow.tsx` | Settings shell with seven tabs: Dashboard, History, API Keys, Model Configs, Recording, Overlay, Theme/Updates. |
 | `windows/main/OnboardingScreen.tsx` | First-launch permission walkthrough. |
 | `windows/main/{Dashboard,History,SettingsApiKeys,SettingsModelConfigs,SettingsRecording,SettingsOverlay,SettingsHistory,SettingsTheme,SettingsUpdates,RecordingStatusPill}.tsx` | Individual settings panels and dashboard widgets. |
+| `windows/main/{SettingsDock,SettingsOverlaySensitivity}.tsx` | macOS close-to-Dock preference in General, and visual meter sensitivity slider in Overlay. |
 | `windows/main/{AddApiKeyDialog,AddModelConfigDialog,DeleteApiKeyDialog}.tsx` | Dialogs for managing keychain-stored API keys and the model configs that pin a `{api_key, model_id}` pair. |
 | `windows/overlay/{OverlayApp,OverlayWindow}.tsx` | Transparent recording overlay with level meter and cancel button. |
 | `components/HotkeyInput.tsx`, `hooks/useHotkeyRecording.ts` | Capture-a-hotkey input used by Settings → Recording. |
@@ -102,6 +105,8 @@ Every webview-callable Rust function lives in `commands.rs` and is mirrored on `
 | `get_fn_usage_type` | — | `number \| null` | macOS only. Reads `AppleFnUsageType`. |
 | `set_fn_usage_type` | `value: number` | `()` | macOS only. Writes `AppleFnUsageType` and restarts cfprefsd. |
 | `get_platform_info` | — | `PlatformInfo` | `{ os: "macos"\|"windows", isWayland }`. Drives onboarding's per-platform permission rows. |
+| `get_keep_in_dock` | — | `boolean` | Reads the native-owned Dock preference; defaults to `true`. UI is macOS-only. |
+| `set_keep_in_dock` | `enabled: boolean` | `()` | Saves the Dock preference synchronously. Used on the next window close or hidden login launch; failed writes restore the previous in-memory value. No activation-policy changes on Windows/Linux. |
 | `restart_app` | — | `()` | Used after macOS Accessibility / Input Monitoring grants, since TCC doesn't propagate into a running process. |
 | `get_apple_intelligence_status` | — | `AppleIntelligenceStatus` | `{ status: "available" }` or `{ status: "unavailable", reason }`. Never errors; reports `unsupported-platform` off macOS and `unsupported-os` below macOS 27 without launching the sidecar. |
 | `generate_with_apple_intelligence` | `instructions: string, prompt: string` | `string` | Runs Apple's on-device model (via the sidecar) with `instructions` as session instructions. 30 s timeout; the sidecar is killed if it hangs. |
@@ -114,6 +119,12 @@ Rust emits two events the webview listens for via `@tauri-apps/api/event`:
 - `bluemacaw://shortcut-cancel` — cancel hotkey was pressed; controller transitions back to idle.
 
 Both names are defined in `markers.rs` / `markers.ts` and pinned by a contract test that parses the Rust file as text.
+
+## Window and meter preferences
+
+Closing the main window hides it; the process, tray menu, and recording hotkeys remain active. On macOS, **Settings → General → Keep in Dock when the window is closed** defaults to on (`Regular` activation policy). Turning it off switches the hidden app to `Accessory`, leaving it in the menu bar only. Hidden login launches honor the same preference. Reopening from the tray, Dock, or Finder restores `Regular` before showing/focusing the main window; onboarding also restores it when the main window gains focus. Showing the recording overlay does not change Dock presence. Tray Quit / Cmd+Q still quits the application.
+
+**Settings → Overlay → Volume indicator sensitivity** ranges from 10% to 200%, in 10% steps; 100% preserves the original calibration. `overlay_sensitivity` in SQLite `app_state` stores the multiplier (0.1–2). Missing/invalid values fall back to 1. Only `OverlayWindow` applies this multiplier, to the bars and recording dot; audio samples, microphone gain, and transcription input are unchanged. Saves are serialized, then `bluemacaw://overlay-sensitivity-changed` notifies the overlay to reload. The overlay also reloads at recording-state transitions, so a missed notification does not leave the next recording using a stale value.
 
 ## Recording flow (end-to-end)
 
