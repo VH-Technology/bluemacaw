@@ -1,37 +1,25 @@
-import {
-    type OverlayPosition,
-    getOverlayPosition,
-    getOverlaySensitivity,
-    setOverlayPosition,
-} from '@/lib/db';
+import { getOverlaySensitivity, setOverlayPlacement } from '@/lib/db';
 import { vox } from '@/lib/invoke';
 import {
     OVERLAY_POSITION_SETUP_OFF_EVENT,
     OVERLAY_POSITION_SETUP_ON_EVENT,
-    OVERLAY_RESET_POSITION_EVENT,
     RECORDING_STATE_EVENT,
     exitOverlayPositionSetup,
     requestRecordingCancel,
     requestRecordingToggle,
 } from '@/lib/overlay-bridge';
+import { coordinateSpaceFor, placementFromWindow } from '@/lib/overlay-placement';
 import {
     DEFAULT_OVERLAY_SENSITIVITY,
     OVERLAY_SENSITIVITY_CHANGED_EVENT,
 } from '@/lib/overlay-sensitivity';
 import type { RecordingState } from '@/lib/recording-controller';
+import { getPlatform } from '@/lib/use-platform';
 import { listen } from '@tauri-apps/api/event';
-import {
-    PhysicalPosition,
-    availableMonitors,
-    currentMonitor,
-    getCurrentWindow,
-} from '@tauri-apps/api/window';
-import { useEffect, useRef, useState } from 'react';
+import { availableMonitors, getCurrentWindow } from '@tauri-apps/api/window';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { type OverlayState, OverlayWindow } from './OverlayWindow';
 
-const OVERLAY_WIDTH = 280;
-const OVERLAY_HEIGHT = 64;
-const BOTTOM_MARGIN_PX = 80;
 const POSITION_SAVE_DEBOUNCE_MS = 400;
 const SETUP_IDLE_EXIT_MS = 3000;
 // 12 Hz — smooth enough that the human eye reads it as continuous motion,
@@ -60,84 +48,53 @@ function useOverlayRecordingState(): RecordingState {
     return state;
 }
 
-async function defaultBottomCenter(): Promise<OverlayPosition | null> {
-    const monitor = await currentMonitor();
-    if (!monitor) return null;
-    const x = Math.round((monitor.size.width - OVERLAY_WIDTH) / 2);
-    const y = monitor.size.height - OVERLAY_HEIGHT - BOTTOM_MARGIN_PX;
-    return { x, y };
-}
-
-async function applyDefaultPosition(): Promise<void> {
-    const target = await defaultBottomCenter();
-    if (!target) return;
-    await getCurrentWindow().setPosition(new PhysicalPosition(target.x, target.y));
+/** Save the window position the user dragged the chip to as a placement. */
+async function saveDroppedPosition(position: { x: number; y: number }): Promise<void> {
+    const [windowScaleFactor, monitors, platform] = await Promise.all([
+        getCurrentWindow().scaleFactor(),
+        availableMonitors(),
+        getPlatform(),
+    ]);
+    const placement = placementFromWindow({
+        position,
+        windowScaleFactor,
+        monitors,
+        space: coordinateSpaceFor(platform.os),
+    });
+    if (placement) await setOverlayPlacement(placement);
 }
 
 /**
- * Check whether the entire pill rect fits inside at least one currently
- * connected monitor. Used to discard stale saved positions after monitor
- * unplug, rearrangement, or resolution changes — without it, `setPosition`
- * silently parks the window at unreachable coords (e.g. a 4K external that
- * isn't there anymore) and the pill becomes invisible.
+ * Remember where the user drags the chip.
+ *
+ * Only moves that follow a press on the drag handle are saved. The window
+ * also moves without the user: the OS relocates it whenever the display
+ * layout changes (a DisplayLink monitor attaching after login, waking from
+ * sleep, undocking), and the bridge repositions it before each show. Saving
+ * those would overwrite the user's choice with wherever the window happened
+ * to land. The chip can only be dragged while it is on screen, so a drag
+ * ends, at the latest, when the chip hides.
  */
-async function isSavedPositionVisible(pos: OverlayPosition): Promise<boolean> {
-    try {
-        const monitors = await availableMonitors();
-        return monitors.some((m) => {
-            const left = m.position.x;
-            const top = m.position.y;
-            const right = m.position.x + m.size.width;
-            const bottom = m.position.y + m.size.height;
-            return (
-                pos.x >= left &&
-                pos.y >= top &&
-                pos.x + OVERLAY_WIDTH <= right &&
-                pos.y + OVERLAY_HEIGHT <= bottom
-            );
-        });
-    } catch (e) {
-        console.warn('OverlayApp: availableMonitors failed; treating saved position as valid', e);
-        return true;
-    }
-}
+function useOverlayPositionPersistence(visible: boolean): { onDragStart: () => void } {
+    const draggingRef = useRef(false);
 
-function useOverlayInitialPosition(): void {
     useEffect(() => {
-        let cancelled = false;
-        void (async () => {
-            try {
-                const saved = await getOverlayPosition();
-                if (cancelled) return;
-                const usableSaved = saved && (await isSavedPositionVisible(saved)) ? saved : null;
-                const target = usableSaved ?? (await defaultBottomCenter());
-                if (cancelled || !target) return;
-                await getCurrentWindow().setPosition(new PhysicalPosition(target.x, target.y));
-            } catch (e) {
-                console.warn('OverlayApp: setPosition failed', e);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, []);
-}
+        if (!visible) draggingRef.current = false;
+    }, [visible]);
 
-function useOverlayPositionPersistence(): void {
     useEffect(() => {
         let cancelled = false;
         let timer: ReturnType<typeof setTimeout> | null = null;
-        let pending: OverlayPosition | null = null;
+        let pending: { x: number; y: number } | null = null;
 
         const unlistenPromise = getCurrentWindow().onMoved(({ payload }) => {
-            if (cancelled) return;
+            if (cancelled || !draggingRef.current) return;
             pending = { x: payload.x, y: payload.y };
             if (timer) clearTimeout(timer);
             timer = setTimeout(() => {
                 if (cancelled || !pending) return;
-                const next = pending;
-                void setOverlayPosition(next).catch((e) => {
-                    console.warn('OverlayApp: setOverlayPosition failed', e);
+                void saveDroppedPosition(pending).catch((e) => {
+                    console.warn('OverlayApp: saving the overlay position failed', e);
                 });
             }, POSITION_SAVE_DEBOUNCE_MS);
         });
@@ -148,22 +105,11 @@ function useOverlayPositionPersistence(): void {
             void unlistenPromise.then((fn) => fn());
         };
     }, []);
-}
 
-function useOverlayResetHandler(): void {
-    useEffect(() => {
-        let cancelled = false;
-        const unlistenP = listen(OVERLAY_RESET_POSITION_EVENT, () => {
-            if (cancelled) return;
-            void applyDefaultPosition().catch((e) => {
-                console.warn('OverlayApp: applyDefaultPosition failed', e);
-            });
-        });
-        return () => {
-            cancelled = true;
-            void unlistenP.then((fn) => fn());
-        };
+    const onDragStart = useCallback(() => {
+        draggingRef.current = true;
     }, []);
+    return { onDragStart };
 }
 
 /**
@@ -310,16 +256,16 @@ export function OverlayApp() {
     const { setupActive } = useOverlayPositionSetup(recordingState);
     const level = useOverlayRecordingLevel(recordingState);
     const sensitivity = useOverlaySensitivity(recordingState.kind);
-    useOverlayInitialPosition();
-    useOverlayPositionPersistence();
-    useOverlayResetHandler();
+    const overlayState = determineOverlayState(recordingState, setupActive);
+    const { onDragStart } = useOverlayPositionPersistence(overlayState.kind !== 'hidden');
     return (
         <OverlayWindow
-            state={determineOverlayState(recordingState, setupActive)}
+            state={overlayState}
             onStop={() => void requestRecordingToggle()}
             onCancel={() => void requestRecordingCancel()}
             level={level}
             sensitivity={sensitivity}
+            onDragStart={onDragStart}
         />
     );
 }

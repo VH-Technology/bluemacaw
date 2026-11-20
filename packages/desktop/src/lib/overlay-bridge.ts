@@ -1,15 +1,30 @@
 import { emit } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { currentMonitor } from '@tauri-apps/api/window';
-import { getOverlayEnabled, setOverlayPosition } from './db';
+import {
+    LogicalPosition,
+    PhysicalPosition,
+    availableMonitors,
+    primaryMonitor,
+} from '@tauri-apps/api/window';
+import {
+    clearOverlayPlacement,
+    getOverlayEnabled,
+    getOverlayPlacement,
+    getOverlayPosition,
+} from './db';
 import { vox } from './invoke';
 import { EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_TOGGLE } from './markers';
+import {
+    coordinateSpaceFor,
+    placementFromLegacyPosition,
+    resolveOverlayTarget,
+} from './overlay-placement';
 import type { RecordingState } from './recording-controller';
+import { getPlatform } from './use-platform';
 
 export const RECORDING_STATE_EVENT = 'bluemacaw://recording-state';
 export const OVERLAY_POSITION_SETUP_ON_EVENT = 'bluemacaw://overlay-position-setup-on';
 export const OVERLAY_POSITION_SETUP_OFF_EVENT = 'bluemacaw://overlay-position-setup-off';
-export const OVERLAY_RESET_POSITION_EVENT = 'bluemacaw://overlay-reset-position';
 
 const OVERLAY_LABEL = 'overlay';
 
@@ -23,6 +38,68 @@ async function shouldShowOverlay(state: RecordingState): Promise<boolean> {
         console.warn('overlay-bridge: getOverlayEnabled failed, defaulting to true', e);
         return true;
     }
+}
+
+type OverlayHandle = NonNullable<Awaited<ReturnType<typeof WebviewWindow.getByLabel>>>;
+
+/**
+ * Move the (hidden) chip to where it belongs for the display layout that
+ * exists right now: the monitor and offset the user last dragged it to, or
+ * the bottom-center of the primary monitor when nothing is saved or that
+ * monitor is not connected.
+ *
+ * This runs before every show rather than once at startup because the
+ * layout at startup is not the layout the chip will be shown on. A
+ * DisplayLink monitor attaches seconds after login, in a placeholder mode
+ * first, and re-attaches after every wake; a position resolved once is
+ * wrong as soon as that happens. The fallback is deliberately not saved, so
+ * the chip returns to the user's spot as soon as its monitor is back.
+ *
+ * Never throws: a chip in the wrong place beats no chip.
+ */
+async function placeOverlay(overlay: OverlayHandle): Promise<void> {
+    try {
+        const [monitors, primary, platform, placement] = await Promise.all([
+            availableMonitors(),
+            primaryMonitor(),
+            getPlatform(),
+            getOverlayPlacement(),
+        ]);
+        let saved = placement;
+        if (!saved) {
+            const legacy = await getOverlayPosition();
+            saved = legacy ? placementFromLegacyPosition(legacy, monitors) : null;
+        }
+        const target = resolveOverlayTarget({
+            saved,
+            monitors,
+            primary,
+            space: coordinateSpaceFor(platform.os),
+        });
+        if (!target) return;
+        await overlay.setPosition(
+            target.space === 'logical'
+                ? new LogicalPosition(target.x, target.y)
+                : new PhysicalPosition(target.x, target.y),
+        );
+    } catch (e) {
+        console.warn('overlay-bridge: placeOverlay failed', e);
+    }
+}
+
+/**
+ * Place the chip unless it is already on screen. A visible chip stays put:
+ * the user may be mid-drag, or have just dropped it somewhere that has not
+ * been saved yet.
+ */
+async function placeOverlayIfHidden(overlay: OverlayHandle): Promise<void> {
+    let visible = false;
+    try {
+        visible = await overlay.isVisible();
+    } catch (e) {
+        console.warn('overlay-bridge: isVisible failed', e);
+    }
+    if (!visible) await placeOverlay(overlay);
 }
 
 /**
@@ -88,6 +165,8 @@ export async function publishRecordingState(state: RecordingState): Promise<void
 
     try {
         if (show) {
+            await placeOverlayIfHidden(overlay);
+            if (isStale()) return;
             // Present via the Rust command so the pill lands on the active
             // macOS Space instead of staying pinned to its original one.
             await vox.presentOverlay();
@@ -133,6 +212,8 @@ export async function enterOverlayPositionSetup(): Promise<void> {
         console.warn('overlay-bridge: enterOverlayPositionSetup emit failed', e);
     }
     try {
+        const overlay = await WebviewWindow.getByLabel(OVERLAY_LABEL);
+        if (overlay) await placeOverlayIfHidden(overlay);
         await vox.presentOverlay();
     } catch (e) {
         console.warn('overlay-bridge: enterOverlayPositionSetup show failed', e);
@@ -172,38 +253,17 @@ export async function exitOverlayPositionSetup(
 }
 
 /**
- * Trigger the overlay to recompute its default bottom-center position. The
- * overlay listens for this event and calls `setPosition`; its existing
- * onMoved-debounce save will then write the default coords to db.
+ * Forget where the user put the chip, so it goes back to the bottom-center
+ * of the primary monitor. A chip that is on screen right now (position
+ * setup) moves immediately; a hidden one is placed on its next show.
  */
-const OVERLAY_WIDTH_PX = 280;
-const OVERLAY_HEIGHT_PX = 64;
-const OVERLAY_BOTTOM_MARGIN_PX = 80;
-
 export async function resetOverlayPosition(): Promise<void> {
-    // Compute a sane default in physical pixels for the current monitor and
-    // write it to the DB ourselves before emitting. Previously we only
-    // emitted the reset event and relied on the overlay's onMoved-debounce
-    // to persist — if a corrupted DB value parked the window off-screen,
-    // setPosition wouldn't necessarily trigger an onMoved, so the bad value
-    // survived the reset.
     try {
-        const monitor = await currentMonitor();
-        if (monitor) {
-            const target = {
-                x: Math.round((monitor.size.width - OVERLAY_WIDTH_PX) / 2),
-                y: monitor.size.height - OVERLAY_HEIGHT_PX - OVERLAY_BOTTOM_MARGIN_PX,
-            };
-            await setOverlayPosition(target);
-        }
+        await clearOverlayPlacement();
+        const overlay = await WebviewWindow.getByLabel(OVERLAY_LABEL);
+        if (overlay && (await overlay.isVisible())) await placeOverlay(overlay);
     } catch (e) {
-        console.warn('overlay-bridge: resetOverlayPosition DB rewrite failed', e);
-    }
-
-    try {
-        await emit(OVERLAY_RESET_POSITION_EVENT, null);
-    } catch (e) {
-        console.warn('overlay-bridge: resetOverlayPosition emit failed', e);
+        console.warn('overlay-bridge: resetOverlayPosition failed', e);
     }
 }
 

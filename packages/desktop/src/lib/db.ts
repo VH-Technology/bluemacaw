@@ -7,6 +7,7 @@ import {
     defaultTranscriptCleanupOptions,
 } from './cleanup-config';
 import { DEFAULT_HOTKEY_MAC, DEFAULT_HOTKEY_OTHER } from './defaults';
+import type { OverlayPlacement } from './overlay-placement';
 import { DEFAULT_OVERLAY_SENSITIVITY, isValidOverlaySensitivity } from './overlay-sensitivity';
 import { getPlatform } from './use-platform';
 import type { Theme } from './use-theme';
@@ -18,6 +19,7 @@ const OVERLAY_ENABLED_KEY = 'overlay_enabled';
 const OVERLAY_SENSITIVITY_KEY = 'overlay_sensitivity';
 const OVERLAY_X_KEY = 'overlay_x';
 const OVERLAY_Y_KEY = 'overlay_y';
+const OVERLAY_PLACEMENT_KEY = 'overlay_placement';
 const SELECTED_MIC_DEVICE_KEY = 'selected_mic_device_id';
 const HOTKEY_COMBO_KEY = 'hotkey_combo';
 const CANCEL_HOTKEY_COMBO_KEY = 'cancel_hotkey_combo';
@@ -481,6 +483,11 @@ export async function setOverlaySensitivity(value: number): Promise<void> {
     );
 }
 
+/**
+ * The chip position saved by builds that stored a bare global x/y. Read-only:
+ * current builds save an {@link OverlayPlacement} instead and only consult
+ * this until the user next drags the chip.
+ */
 export async function getOverlayPosition(): Promise<OverlayPosition | null> {
     const conn = await db();
     const rows = (await conn.select('SELECT key, value FROM app_state WHERE key IN (?, ?)', [
@@ -496,12 +503,46 @@ export async function getOverlayPosition(): Promise<OverlayPosition | null> {
     return { x: xn, y: yn };
 }
 
-export async function setOverlayPosition(pos: OverlayPosition): Promise<void> {
+function parseOverlayPlacement(raw: string): OverlayPlacement | null {
+    let v: unknown;
+    try {
+        v = JSON.parse(raw);
+    } catch {
+        return null;
+    }
+    if (typeof v !== 'object' || v === null) return null;
+    const o = v as Record<string, unknown>;
+    const numbers = [o.monitorX, o.monitorY, o.monitorWidth, o.monitorHeight, o.offsetX, o.offsetY];
+    if (!numbers.every((n) => typeof n === 'number' && Number.isFinite(n))) return null;
+    if (o.monitorName !== null && typeof o.monitorName !== 'string') return null;
+    return v as OverlayPlacement;
+}
+
+/** Where the user last dropped the recording chip: a monitor and an offset in it. */
+export async function getOverlayPlacement(): Promise<OverlayPlacement | null> {
     const conn = await db();
-    const upsert =
-        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value';
-    await conn.execute(upsert, [OVERLAY_X_KEY, String(Math.round(pos.x))]);
-    await conn.execute(upsert, [OVERLAY_Y_KEY, String(Math.round(pos.y))]);
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        OVERLAY_PLACEMENT_KEY,
+    ])) as { value: string }[];
+    return rows[0] ? parseOverlayPlacement(rows[0].value) : null;
+}
+
+export async function setOverlayPlacement(placement: OverlayPlacement): Promise<void> {
+    const conn = await db();
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [OVERLAY_PLACEMENT_KEY, JSON.stringify(placement)],
+    );
+}
+
+/** Forget the saved chip position, including one left by an older build. */
+export async function clearOverlayPlacement(): Promise<void> {
+    const conn = await db();
+    await conn.execute('DELETE FROM app_state WHERE key IN (?, ?, ?)', [
+        OVERLAY_PLACEMENT_KEY,
+        OVERLAY_X_KEY,
+        OVERLAY_Y_KEY,
+    ]);
 }
 
 export async function getModelConfigWithApiKey(id: string): Promise<ModelConfigWithApiKey | null> {

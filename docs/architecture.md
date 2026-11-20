@@ -57,8 +57,13 @@ Migration SQL lives in `packages/desktop/src-tauri/migrations/` (`0001_init.sql`
 | `lib/transcribe.ts` | End-to-end transcription orchestration. Resolves the active model config, fetches the API key via `vox.getSecret`, builds the `TranscriptionModel` via `provider.makeModel`, calls `experimental_transcribe` from `ai`. |
 | `lib/recording-controller.ts` | Pure state machine (`idle` / `recording` / `transcribing` / `error`) used by both window contexts. Gates microphone permission, calls `vox.startRecording` / `vox.stopRecording`, runs transcribe, attempts paste, saves to history. |
 | `lib/overlay-bridge.ts` | Listens for `EVT_SHORTCUT_TOGGLE` / `EVT_SHORTCUT_CANCEL` from Rust and drives the recording controller from either window. |
+<<<<<<< HEAD
 | `lib/db.ts` | All SQL access (api_keys, model_configs, transcriptions, app_state). Settings (hotkey, cancel hotkey, retention days, selected mic device, overlay enabled/position/sensitivity, theme) live in `app_state` as key/value rows. |
 | `lib/overlay-sensitivity.ts` | Visual meter gain bounds/default and the cross-window sensitivity-change event name. |
+=======
+| `lib/overlay-placement.ts` | Pure geometry for the recording chip. A saved placement is a monitor plus an offset inside it, never a global x/y; `overlay-bridge.ts` re-resolves it against the connected monitors before every show (bottom-center of the primary monitor when nothing is saved or the saved monitor is away), and `OverlayApp` saves a new one only after a drag on the handle. |
+| `lib/db.ts` | All SQL access (api_keys, model_configs, transcriptions, app_state). Settings (hotkey, cancel hotkey, retention days, selected mic device, overlay enabled/position, theme) live in `app_state` as key/value rows. |
+>>>>>>> 2222fff (fix(desktop): remember the chip's monitor and place it on the main display)
 | `lib/onboarding.ts`, `lib/use-onboarding-gate.ts`, `lib/use-onboarding-status.ts` | First-launch onboarding flag in `tauri-plugin-store` + polling hooks that surface the per-platform permission set. |
 | `lib/platform.ts`, `lib/use-platform.ts` | Maps `PlatformInfo` to the set of `PermissionKey`s the onboarding screen must render. |
 | `lib/export.ts` | TXT / Markdown export helpers for the History tab. |

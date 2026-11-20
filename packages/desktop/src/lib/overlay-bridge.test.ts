@@ -1,34 +1,94 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { emitMock, getByLabelMock, fakeOverlay, getOverlayEnabledMock, presentOverlayMock } =
-    vi.hoisted(() => {
-        const fakeOverlay = {
-            show: vi.fn(async () => undefined),
-            hide: vi.fn(async () => undefined),
-        };
-        return {
-            emitMock: vi.fn(async () => undefined),
-            getByLabelMock: vi.fn(async (_label: string) => fakeOverlay as unknown),
-            fakeOverlay,
-            getOverlayEnabledMock: vi.fn(async () => true),
-            // Show now routes through the Rust `present_overlay` command
-            // (vox.presentOverlay) so the pill lands on the active Space.
-            presentOverlayMock: vi.fn(async () => undefined),
-        };
-    });
+const {
+    emitMock,
+    getByLabelMock,
+    fakeOverlay,
+    getOverlayEnabledMock,
+    getOverlayPlacementMock,
+    getOverlayPositionMock,
+    clearOverlayPlacementMock,
+    presentOverlayMock,
+    availableMonitorsMock,
+    primaryMonitorMock,
+    getPlatformMock,
+    ULTRAWIDE,
+    QHD,
+} = vi.hoisted(() => {
+    type Positioned = { kind: 'logical' | 'physical'; x: number; y: number };
+    const fakeOverlay = {
+        show: vi.fn(async () => undefined),
+        hide: vi.fn(async () => undefined),
+        isVisible: vi.fn(async () => false),
+        setPosition: vi.fn(async (_p: Positioned) => undefined),
+    };
+    // Main ultrawide plus a DisplayLink-driven panel to its right.
+    const ULTRAWIDE = {
+        name: 'Monitor #45574',
+        position: { x: 0, y: 0 },
+        size: { width: 3440, height: 1440 },
+        scaleFactor: 1,
+    };
+    const QHD = {
+        name: 'Monitor #23698',
+        position: { x: 3440, y: -217 },
+        size: { width: 2560, height: 1440 },
+        scaleFactor: 1,
+    };
+    return {
+        emitMock: vi.fn(async () => undefined),
+        getByLabelMock: vi.fn(async (_label: string) => fakeOverlay as unknown),
+        fakeOverlay,
+        getOverlayEnabledMock: vi.fn(async () => true),
+        getOverlayPlacementMock: vi.fn(async (): Promise<unknown> => null),
+        getOverlayPositionMock: vi.fn(async (): Promise<unknown> => null),
+        clearOverlayPlacementMock: vi.fn(async () => undefined),
+        // Show now routes through the Rust `present_overlay` command
+        // (vox.presentOverlay) so the pill lands on the active Space.
+        presentOverlayMock: vi.fn(async () => undefined),
+        availableMonitorsMock: vi.fn(async (): Promise<unknown[]> => [ULTRAWIDE, QHD]),
+        primaryMonitorMock: vi.fn(async (): Promise<unknown> => ULTRAWIDE),
+        getPlatformMock: vi.fn(async () => ({ os: 'macos', isWayland: false })),
+        ULTRAWIDE,
+        QHD,
+    };
+});
 
 vi.mock('@tauri-apps/api/event', () => ({ emit: emitMock }));
 vi.mock('@tauri-apps/api/webviewWindow', () => ({
     WebviewWindow: { getByLabel: getByLabelMock },
 }));
-vi.mock('./db', () => ({ getOverlayEnabled: getOverlayEnabledMock }));
+vi.mock('@tauri-apps/api/window', () => ({
+    availableMonitors: availableMonitorsMock,
+    primaryMonitor: primaryMonitorMock,
+    LogicalPosition: class {
+        kind = 'logical';
+        constructor(
+            public x: number,
+            public y: number,
+        ) {}
+    },
+    PhysicalPosition: class {
+        kind = 'physical';
+        constructor(
+            public x: number,
+            public y: number,
+        ) {}
+    },
+}));
+vi.mock('./db', () => ({
+    getOverlayEnabled: getOverlayEnabledMock,
+    getOverlayPlacement: getOverlayPlacementMock,
+    getOverlayPosition: getOverlayPositionMock,
+    clearOverlayPlacement: clearOverlayPlacementMock,
+}));
 vi.mock('./invoke', () => ({ vox: { presentOverlay: presentOverlayMock } }));
+vi.mock('./use-platform', () => ({ getPlatform: getPlatformMock }));
 
 import { EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_TOGGLE } from './markers';
 import {
     OVERLAY_POSITION_SETUP_OFF_EVENT,
     OVERLAY_POSITION_SETUP_ON_EVENT,
-    OVERLAY_RESET_POSITION_EVENT,
     RECORDING_STATE_EVENT,
     __resetPublishSeqForTests,
     enterOverlayPositionSetup,
@@ -45,6 +105,14 @@ beforeEach(() => {
     getByLabelMock.mockReset().mockResolvedValue(fakeOverlay);
     fakeOverlay.show.mockClear();
     fakeOverlay.hide.mockClear();
+    fakeOverlay.isVisible.mockReset().mockResolvedValue(false);
+    fakeOverlay.setPosition.mockReset().mockResolvedValue(undefined);
+    getOverlayPlacementMock.mockReset().mockResolvedValue(null);
+    getOverlayPositionMock.mockReset().mockResolvedValue(null);
+    clearOverlayPlacementMock.mockReset().mockResolvedValue(undefined);
+    availableMonitorsMock.mockReset().mockResolvedValue([ULTRAWIDE, QHD]);
+    primaryMonitorMock.mockReset().mockResolvedValue(ULTRAWIDE);
+    getPlatformMock.mockReset().mockResolvedValue({ os: 'macos', isWayland: false });
     presentOverlayMock.mockReset().mockResolvedValue(undefined);
     getOverlayEnabledMock.mockReset().mockResolvedValue(true);
     __resetPublishSeqForTests();
@@ -160,6 +228,112 @@ describe('publishRecordingState (concurrent transitions)', () => {
     });
 });
 
+describe('publishRecordingState (chip placement)', () => {
+    const savedOnQhd = {
+        monitorName: QHD.name,
+        monitorX: 3440,
+        monitorY: -217,
+        monitorWidth: 2560,
+        monitorHeight: 1440,
+        offsetX: 1700,
+        offsetY: 90,
+    };
+
+    function lastPosition() {
+        return fakeOverlay.setPosition.mock.calls.at(-1)?.[0];
+    }
+
+    it('centers the chip at the bottom of the primary monitor when nothing is saved', async () => {
+        await publishRecordingState({ kind: 'recording', sessionId: 's1', startedAt: 0 });
+        expect(lastPosition()).toMatchObject({ kind: 'logical', x: 1580, y: 1296 });
+    });
+
+    it('puts the chip back on the monitor and offset the user chose', async () => {
+        getOverlayPlacementMock.mockResolvedValue(savedOnQhd);
+        await publishRecordingState({ kind: 'recording', sessionId: 's1', startedAt: 0 });
+        expect(lastPosition()).toMatchObject({ kind: 'logical', x: 3440 + 1700, y: -217 + 90 });
+    });
+
+    it('positions the chip before showing it', async () => {
+        await publishRecordingState({ kind: 'recording', sessionId: 's1', startedAt: 0 });
+        expect(fakeOverlay.setPosition.mock.invocationCallOrder[0]).toBeLessThan(
+            presentOverlayMock.mock.invocationCallOrder[0] ?? 0,
+        );
+    });
+
+    it('re-resolves against the monitors connected at each show', async () => {
+        getOverlayPlacementMock.mockResolvedValue(savedOnQhd);
+        // At login the DisplayLink monitor has not attached yet.
+        availableMonitorsMock.mockResolvedValueOnce([ULTRAWIDE]);
+        await publishRecordingState({ kind: 'recording', sessionId: 's1', startedAt: 0 });
+        expect(lastPosition()).toMatchObject({ x: 1580, y: 1296 });
+
+        await publishRecordingState({ kind: 'idle' });
+        await publishRecordingState({ kind: 'recording', sessionId: 's2', startedAt: 0 });
+        expect(lastPosition()).toMatchObject({ x: 3440 + 1700, y: -217 + 90 });
+    });
+
+    it('never forgets the saved placement while its monitor is away', async () => {
+        getOverlayPlacementMock.mockResolvedValue(savedOnQhd);
+        availableMonitorsMock.mockResolvedValue([ULTRAWIDE]);
+        await publishRecordingState({ kind: 'recording', sessionId: 's1', startedAt: 0 });
+        expect(clearOverlayPlacementMock).not.toHaveBeenCalled();
+    });
+
+    it('honours a position saved by an older build', async () => {
+        getOverlayPositionMock.mockResolvedValue({ x: 1696, y: 1332 });
+        await publishRecordingState({ kind: 'recording', sessionId: 's1', startedAt: 0 });
+        expect(lastPosition()).toMatchObject({ kind: 'logical', x: 1696, y: 1332 });
+    });
+
+    it('addresses the window in physical pixels off macOS', async () => {
+        getPlatformMock.mockResolvedValue({ os: 'windows', isWayland: false });
+        const scaled = {
+            name: '\\\\.\\DISPLAY1',
+            position: { x: 0, y: 0 },
+            size: { width: 2880, height: 1620 },
+            scaleFactor: 1.5,
+        };
+        availableMonitorsMock.mockResolvedValue([scaled]);
+        primaryMonitorMock.mockResolvedValue(scaled);
+        await publishRecordingState({ kind: 'recording', sessionId: 's1', startedAt: 0 });
+        expect(lastPosition()).toMatchObject({ kind: 'physical', x: 1230, y: 1404 });
+    });
+
+    it('leaves a chip that is already on screen where it is', async () => {
+        fakeOverlay.isVisible.mockResolvedValue(true);
+        await publishRecordingState({ kind: 'transcribing' });
+        expect(fakeOverlay.setPosition).not.toHaveBeenCalled();
+        expect(presentOverlayMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('still shows the chip when placement fails', async () => {
+        availableMonitorsMock.mockRejectedValue(new Error('no display server'));
+        await publishRecordingState({ kind: 'recording', sessionId: 's1', startedAt: 0 });
+        expect(presentOverlayMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not show the chip if an idle transition arrived while placing it', async () => {
+        let releaseMonitors: (v: unknown[]) => void = () => {};
+        availableMonitorsMock.mockImplementationOnce(
+            () =>
+                new Promise<unknown[]>((resolve) => {
+                    releaseMonitors = resolve;
+                }),
+        );
+        const recording = publishRecordingState({
+            kind: 'recording',
+            sessionId: 's1',
+            startedAt: 0,
+        });
+        await vi.waitFor(() => expect(availableMonitorsMock).toHaveBeenCalled());
+        await publishRecordingState({ kind: 'idle' });
+        releaseMonitors([ULTRAWIDE, QHD]);
+        await recording;
+        expect(presentOverlayMock).not.toHaveBeenCalled();
+    });
+});
+
 describe('hideOverlayWindow', () => {
     it('calls overlay.hide()', async () => {
         await hideOverlayWindow();
@@ -187,6 +361,14 @@ describe('enterOverlayPositionSetup', () => {
     it('does not throw if presenting fails', async () => {
         presentOverlayMock.mockRejectedValueOnce(new Error('boom'));
         await expect(enterOverlayPositionSetup()).resolves.not.toThrow();
+    });
+
+    it('places the chip before presenting it', async () => {
+        await enterOverlayPositionSetup();
+        expect(fakeOverlay.setPosition.mock.calls[0]?.[0]).toMatchObject({ x: 1580, y: 1296 });
+        expect(fakeOverlay.setPosition.mock.invocationCallOrder[0]).toBeLessThan(
+            presentOverlayMock.mock.invocationCallOrder[0] ?? 0,
+        );
     });
 });
 
@@ -221,13 +403,28 @@ describe('exitOverlayPositionSetup', () => {
 });
 
 describe('resetOverlayPosition', () => {
-    it('emits the reset event', async () => {
+    it('forgets the saved placement', async () => {
         await resetOverlayPosition();
-        expect(emitMock).toHaveBeenCalledWith(OVERLAY_RESET_POSITION_EVENT, null);
+        expect(clearOverlayPlacementMock).toHaveBeenCalledTimes(1);
     });
 
-    it('does not throw if emit fails', async () => {
-        emitMock.mockRejectedValueOnce(new Error('boom'));
+    it('moves a visible chip back to the default spot', async () => {
+        fakeOverlay.isVisible.mockResolvedValue(true);
+        await resetOverlayPosition();
+        expect(fakeOverlay.setPosition.mock.calls.at(-1)?.[0]).toMatchObject({
+            kind: 'logical',
+            x: 1580,
+            y: 1296,
+        });
+    });
+
+    it('leaves a hidden chip alone; the next show places it', async () => {
+        await resetOverlayPosition();
+        expect(fakeOverlay.setPosition).not.toHaveBeenCalled();
+    });
+
+    it('does not throw if clearing fails', async () => {
+        clearOverlayPlacementMock.mockRejectedValueOnce(new Error('boom'));
         await expect(resetOverlayPosition()).resolves.not.toThrow();
     });
 });

@@ -19,6 +19,7 @@ import {
     addModelConfig,
     clearAllTranscriptions,
     clearOriginalFnUsageType,
+    clearOverlayPlacement,
     deleteApiKey,
     deleteModelConfig,
     getActiveLocalModelId,
@@ -33,6 +34,7 @@ import {
     getModelConfigWithApiKey,
     getOriginalFnUsageType,
     getOverlayEnabled,
+    getOverlayPlacement,
     getOverlayPosition,
     getOverlaySensitivity,
     getRetentionDays,
@@ -58,7 +60,7 @@ import {
     setHotkeyCombo,
     setOriginalFnUsageType,
     setOverlayEnabled,
-    setOverlayPosition,
+    setOverlayPlacement,
     setOverlaySensitivity,
     setRetentionDays,
     setSelectedMicDeviceId,
@@ -653,7 +655,13 @@ describe('db.overlaySensitivity', () => {
     );
 });
 
-describe('db.overlayPosition', () => {
+describe('db.overlayPosition (legacy global x/y)', () => {
+    async function insertLegacy(x: string, y: string) {
+        const h = getSharedHarness();
+        await h.execute('INSERT INTO app_state (key, value) VALUES (?, ?)', ['overlay_x', x]);
+        await h.execute('INSERT INTO app_state (key, value) VALUES (?, ?)', ['overlay_y', y]);
+    }
+
     it('returns null when no rows exist', async () => {
         await expect(getOverlayPosition()).resolves.toBeNull();
     });
@@ -666,30 +674,70 @@ describe('db.overlayPosition', () => {
     });
 
     it('returns {x, y} when both rows exist', async () => {
-        await setOverlayPosition({ x: 100, y: 200 });
+        await insertLegacy('100', '200');
         await expect(getOverlayPosition()).resolves.toEqual({ x: 100, y: 200 });
     });
 
     it('returns null when stored values are non-numeric', async () => {
-        const h = getSharedHarness();
-        await h.execute("INSERT INTO app_state (key, value) VALUES ('overlay_x', 'oops')");
-        await h.execute("INSERT INTO app_state (key, value) VALUES ('overlay_y', 'nope')");
+        await insertLegacy('oops', 'nope');
         await expect(getOverlayPosition()).resolves.toBeNull();
     });
+});
 
-    it('rounds float coordinates before persisting', async () => {
-        await setOverlayPosition({ x: 100.7, y: 200.3 });
-        await expect(getOverlayPosition()).resolves.toEqual({ x: 101, y: 200 });
+describe('db.overlayPlacement', () => {
+    const placement = {
+        monitorName: 'Monitor #23698',
+        monitorX: 3440,
+        monitorY: -217,
+        monitorWidth: 2560,
+        monitorHeight: 1440,
+        offsetX: 1700,
+        offsetY: 90,
+    };
+
+    it('returns null when nothing was saved', async () => {
+        await expect(getOverlayPlacement()).resolves.toBeNull();
     });
 
-    it('upserting twice keeps only one row per key', async () => {
-        await setOverlayPosition({ x: 1, y: 2 });
-        await setOverlayPosition({ x: 3, y: 4 });
+    it('round-trips a placement', async () => {
+        await setOverlayPlacement(placement);
+        await expect(getOverlayPlacement()).resolves.toEqual(placement);
+    });
+
+    it('round-trips a monitor without a name', async () => {
+        await setOverlayPlacement({ ...placement, monitorName: null });
+        await expect(getOverlayPlacement()).resolves.toEqual({ ...placement, monitorName: null });
+    });
+
+    it('keeps a single row when saved twice', async () => {
+        await setOverlayPlacement(placement);
+        await setOverlayPlacement({ ...placement, offsetX: 5 });
         const rows = await getSharedHarness().select<{ count: number }>(
-            "SELECT COUNT(*) AS count FROM app_state WHERE key IN ('overlay_x','overlay_y')",
+            "SELECT COUNT(*) AS count FROM app_state WHERE key = 'overlay_placement'",
         );
-        expect(rows[0]?.count).toBe(2);
-        await expect(getOverlayPosition()).resolves.toEqual({ x: 3, y: 4 });
+        expect(rows[0]?.count).toBe(1);
+        await expect(getOverlayPlacement()).resolves.toEqual({ ...placement, offsetX: 5 });
+    });
+
+    it('returns null for a value that is not a placement', async () => {
+        const h = getSharedHarness();
+        for (const bad of ['not json', '{"offsetX":1}', '{"monitorName":3,"offsetX":"a"}']) {
+            await h.execute(
+                'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+                ['overlay_placement', bad],
+            );
+            await expect(getOverlayPlacement()).resolves.toBeNull();
+        }
+    });
+
+    it('clearOverlayPlacement forgets the placement and any legacy position', async () => {
+        const h = getSharedHarness();
+        await setOverlayPlacement(placement);
+        await h.execute("INSERT INTO app_state (key, value) VALUES ('overlay_x', '100')");
+        await h.execute("INSERT INTO app_state (key, value) VALUES ('overlay_y', '200')");
+        await clearOverlayPlacement();
+        await expect(getOverlayPlacement()).resolves.toBeNull();
+        await expect(getOverlayPosition()).resolves.toBeNull();
     });
 });
 
