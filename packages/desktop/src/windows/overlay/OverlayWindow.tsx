@@ -27,6 +27,12 @@ export interface OverlayWindowProps {
     level?: number;
     /** Visual gain applied to the meter only, with 1 preserving the default response. */
     sensitivity?: number;
+    /**
+     * Fires when the user presses the primary button on the drag handle,
+     * i.e. just before the OS starts moving the window. Lets the caller
+     * tell a move the user made from one the OS made on its own.
+     */
+    onDragStart?: () => void;
 }
 
 const PILL = cn(
@@ -45,14 +51,14 @@ const HANDLE = cn(
     'px-1',
 );
 
-function startDrag(e: React.MouseEvent<HTMLSpanElement>) {
-    if (e.button !== 0) return;
-    void getCurrentWindow()
-        .startDragging()
-        .catch((err) => console.warn('OverlayWindow: startDragging failed', err));
-}
-
-function DragHandle() {
+function DragHandle({ onDragStart }: { onDragStart?: () => void }) {
+    function startDrag(e: React.MouseEvent<HTMLSpanElement>) {
+        if (e.button !== 0) return;
+        onDragStart?.();
+        void getCurrentWindow()
+            .startDragging()
+            .catch((err) => console.warn('OverlayWindow: startDragging failed', err));
+    }
     return (
         <span
             className={HANDLE}
@@ -214,6 +220,7 @@ export function OverlayWindow({
     onCancel,
     level = 0,
     sensitivity = DEFAULT_OVERLAY_SENSITIVITY,
+    onDragStart,
 }: OverlayWindowProps) {
     if (state.kind === 'hidden') return null;
 
@@ -224,7 +231,7 @@ export function OverlayWindow({
         const displayLevel = clampLevel(level) * gain;
         return (
             <div className={PILL} data-testid="overlay-pill" data-state="recording">
-                <DragHandle />
+                <DragHandle onDragStart={onDragStart} />
                 <RecordingDot level={displayLevel} />
                 <Waveform level={displayLevel} />
                 <span className="pointer-events-none text-[11px] font-semibold tracking-wide">
@@ -239,7 +246,7 @@ export function OverlayWindow({
     if (state.kind === 'transcribing') {
         return (
             <div className={PILL} data-testid="overlay-pill" data-state="transcribing">
-                <DragHandle />
+                <DragHandle onDragStart={onDragStart} />
                 <TranscribingDots />
                 <span className="pointer-events-none text-[11px] font-semibold tracking-wide">
                     Transcribing
@@ -250,7 +257,7 @@ export function OverlayWindow({
 
     return (
         <div className={PILL} data-testid="overlay-pill" data-state="positioning">
-            <DragHandle />
+            <DragHandle onDragStart={onDragStart} />
             <span className="pointer-events-none text-[11px] font-medium tracking-wide">
                 Drag to position
             </span>

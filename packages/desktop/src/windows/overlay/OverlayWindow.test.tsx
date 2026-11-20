@@ -1,6 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+vi.mock('@tauri-apps/api/window', () => ({
+    getCurrentWindow: () => ({ startDragging: vi.fn(async () => undefined) }),
+}));
+
 import { OverlayWindow } from './OverlayWindow';
 
 describe('<OverlayWindow />', () => {
@@ -53,6 +57,20 @@ describe('<OverlayWindow />', () => {
         const pill = screen.getByTestId('overlay-pill');
         expect(pill).not.toHaveAttribute('data-tauri-drag-region');
         expect(screen.getByTestId('overlay-drag-handle')).toHaveAttribute('data-tauri-drag-region');
+    });
+
+    it('reports the start of a drag on the handle', () => {
+        const onDragStart = vi.fn();
+        render(<OverlayWindow state={{ kind: 'positioning' }} onDragStart={onDragStart} />);
+        fireEvent.mouseDown(screen.getByTestId('overlay-drag-handle'), { button: 0 });
+        expect(onDragStart).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not report a drag for a secondary-button press on the handle', () => {
+        const onDragStart = vi.fn();
+        render(<OverlayWindow state={{ kind: 'positioning' }} onDragStart={onDragStart} />);
+        fireEvent.mouseDown(screen.getByTestId('overlay-drag-handle'), { button: 2 });
+        expect(onDragStart).not.toHaveBeenCalled();
     });
 
     it('renders a Stop button while recording', () => {

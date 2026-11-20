@@ -1,15 +1,17 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent as domEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
     listenMock,
     fireEvent,
-    currentMonitorMock,
+    availableMonitorsMock,
+    scaleFactorMock,
     setPositionMock,
     onMovedMock,
     fireMoved,
-    getOverlayPositionMock,
-    setOverlayPositionMock,
+    setOverlayPlacementMock,
+    getPlatformMock,
+    QHD,
     exitOverlayPositionSetupMock,
     getRecordingLevelMock,
     getOverlaySensitivityMock,
@@ -17,6 +19,19 @@ const {
     type Handler = (event: { payload: unknown }) => void;
     const handlers = new Map<string, Handler>();
     let movedHandler: ((e: { payload: { x: number; y: number } }) => void) | null = null;
+    // Main ultrawide plus a DisplayLink-driven panel to its right.
+    const ULTRAWIDE = {
+        name: 'Monitor #45574',
+        position: { x: 0, y: 0 },
+        size: { width: 3440, height: 1440 },
+        scaleFactor: 1,
+    };
+    const QHD = {
+        name: 'Monitor #23698',
+        position: { x: 3440, y: -217 },
+        size: { width: 2560, height: 1440 },
+        scaleFactor: 1,
+    };
     return {
         listenMock: vi.fn(async (name: string, h: Handler) => {
             handlers.set(name, h);
@@ -25,9 +40,8 @@ const {
             };
         }),
         fireEvent: (name: string, payload: unknown) => handlers.get(name)?.({ payload }),
-        currentMonitorMock: vi.fn<
-            () => Promise<{ size: { width: number; height: number } } | null>
-        >(async () => ({ size: { width: 1920, height: 1080 } })),
+        availableMonitorsMock: vi.fn(async (): Promise<unknown[]> => [ULTRAWIDE, QHD]),
+        scaleFactorMock: vi.fn(async () => 1),
         setPositionMock: vi.fn<(p: { x: number; y: number }) => Promise<void>>(
             async () => undefined,
         ),
@@ -38,12 +52,9 @@ const {
             };
         }),
         fireMoved: (x: number, y: number) => movedHandler?.({ payload: { x, y } }),
-        getOverlayPositionMock: vi.fn<() => Promise<{ x: number; y: number } | null>>(
-            async () => null,
-        ),
-        setOverlayPositionMock: vi.fn<(p: { x: number; y: number }) => Promise<void>>(
-            async () => undefined,
-        ),
+        setOverlayPlacementMock: vi.fn(async (_p: unknown) => undefined),
+        getPlatformMock: vi.fn(async () => ({ os: 'macos', isWayland: false })),
+        QHD,
         exitOverlayPositionSetupMock: vi.fn<(opts?: { hide: boolean }) => Promise<void>>(
             async () => undefined,
         ),
@@ -55,28 +66,23 @@ const {
 vi.mock('@tauri-apps/api/event', () => ({ listen: listenMock }));
 vi.mock('@tauri-apps/api/window', () => ({
     listen: listenMock,
-    currentMonitor: currentMonitorMock,
+    availableMonitors: availableMonitorsMock,
     getCurrentWindow: () => ({
         setPosition: setPositionMock,
         onMoved: onMovedMock,
+        scaleFactor: scaleFactorMock,
+        startDragging: vi.fn(async () => undefined),
     }),
-    PhysicalPosition: class {
-        constructor(
-            public x: number,
-            public y: number,
-        ) {}
-    },
 }));
 vi.mock('@/lib/db', () => ({
-    getOverlayPosition: getOverlayPositionMock,
-    setOverlayPosition: setOverlayPositionMock,
+    setOverlayPlacement: setOverlayPlacementMock,
     getOverlaySensitivity: getOverlaySensitivityMock,
 }));
+vi.mock('@/lib/use-platform', () => ({ getPlatform: getPlatformMock }));
 vi.mock('@/lib/overlay-bridge', () => ({
     RECORDING_STATE_EVENT: 'bluemacaw://recording-state',
     OVERLAY_POSITION_SETUP_ON_EVENT: 'bluemacaw://overlay-position-setup-on',
     OVERLAY_POSITION_SETUP_OFF_EVENT: 'bluemacaw://overlay-position-setup-off',
-    OVERLAY_RESET_POSITION_EVENT: 'bluemacaw://overlay-reset-position',
     exitOverlayPositionSetup: exitOverlayPositionSetupMock,
 }));
 vi.mock('@/lib/invoke', () => ({
@@ -88,15 +94,36 @@ import { OverlayApp } from './OverlayApp';
 const RECORDING_EVENT = 'bluemacaw://recording-state';
 const SETUP_ON_EVENT = 'bluemacaw://overlay-position-setup-on';
 const SETUP_OFF_EVENT = 'bluemacaw://overlay-position-setup-off';
-const RESET_EVENT = 'bluemacaw://overlay-reset-position';
+
+/** Show the recording chip and wait until its move listener is attached. */
+async function showRecordingChip() {
+    await waitFor(() =>
+        expect(listenMock).toHaveBeenCalledWith(RECORDING_EVENT, expect.any(Function)),
+    );
+    await waitFor(() => expect(onMovedMock).toHaveBeenCalled());
+    await act(async () => {
+        fireEvent(RECORDING_EVENT, { kind: 'recording', sessionId: 'session-1' });
+    });
+    await screen.findByTestId('overlay-pill');
+}
+
+function grabHandle() {
+    domEvent.mouseDown(screen.getByTestId('overlay-drag-handle'), { button: 0 });
+}
+
+/** Let the debounced save fire and its async lookups settle. */
+async function settleSave() {
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(401);
+    });
+}
 
 beforeEach(() => {
     listenMock.mockClear();
-    currentMonitorMock.mockReset().mockResolvedValue({ size: { width: 1920, height: 1080 } });
+    scaleFactorMock.mockReset().mockResolvedValue(1);
+    setOverlayPlacementMock.mockReset().mockResolvedValue(undefined);
     setPositionMock.mockClear();
     onMovedMock.mockClear();
-    getOverlayPositionMock.mockReset().mockResolvedValue(null);
-    setOverlayPositionMock.mockReset().mockResolvedValue(undefined);
     exitOverlayPositionSetupMock.mockReset().mockResolvedValue(undefined);
     getRecordingLevelMock.mockReset().mockResolvedValue(0);
     getOverlaySensitivityMock.mockReset().mockResolvedValue(1);
@@ -109,26 +136,11 @@ describe('<OverlayApp />', () => {
         expect(container).toBeEmptyDOMElement();
     });
 
-    it('positions the window at bottom-center on mount when no saved position', async () => {
+    it('never positions the window itself; the bridge places it before each show', async () => {
         render(<OverlayApp />);
-        await waitFor(() => {
-            expect(setPositionMock).toHaveBeenCalledTimes(1);
-        });
-        const arg = setPositionMock.mock.calls[0]?.[0];
-        expect(arg?.x).toBe(820);
-        expect(arg?.y).toBe(936);
-    });
-
-    it('restores the saved position on mount', async () => {
-        getOverlayPositionMock.mockResolvedValueOnce({ x: 50, y: 60 });
-        render(<OverlayApp />);
-        await waitFor(() => {
-            expect(setPositionMock).toHaveBeenCalledTimes(1);
-        });
-        const arg = setPositionMock.mock.calls[0]?.[0];
-        expect(arg?.x).toBe(50);
-        expect(arg?.y).toBe(60);
-        expect(currentMonitorMock).not.toHaveBeenCalled();
+        await waitFor(() => expect(onMovedMock).toHaveBeenCalled());
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(setPositionMock).not.toHaveBeenCalled();
     });
 
     it('renders the recording pill on a recording event', async () => {
@@ -189,32 +201,99 @@ describe('<OverlayApp />', () => {
         });
     });
 
-    it('skips positioning if currentMonitor returns null and no saved position', async () => {
-        currentMonitorMock.mockResolvedValueOnce(null);
+    it('saves where the user dropped the chip: the monitor and the offset inside it', async () => {
         render(<OverlayApp />);
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        expect(setPositionMock).not.toHaveBeenCalled();
+        await showRecordingChip();
+        vi.useFakeTimers();
+        grabHandle();
+        act(() => {
+            fireMoved(3440 + 1700, -217 + 90);
+        });
+        expect(setOverlayPlacementMock).not.toHaveBeenCalled();
+        await settleSave();
+        expect(setOverlayPlacementMock).toHaveBeenCalledTimes(1);
+        expect(setOverlayPlacementMock).toHaveBeenCalledWith({
+            monitorName: QHD.name,
+            monitorX: 3440,
+            monitorY: -217,
+            monitorWidth: 2560,
+            monitorHeight: 1440,
+            offsetX: 1700,
+            offsetY: 90,
+        });
     });
 
-    it('persists the position on move (after debounce)', async () => {
+    // Regression: macOS moves the window on its own whenever the display
+    // layout changes (a DisplayLink monitor attaching after login, waking
+    // from sleep, undocking). Those moves used to be saved as if the user
+    // had chosen them, overwriting the real position.
+    it('does not save a move the user did not make', async () => {
+        render(<OverlayApp />);
+        await showRecordingChip();
+        vi.useFakeTimers();
+        act(() => {
+            fireMoved(5136, 1115);
+        });
+        await settleSave();
+        expect(setOverlayPlacementMock).not.toHaveBeenCalled();
+    });
+
+    it('does not save a move while the chip is hidden', async () => {
         render(<OverlayApp />);
         await waitFor(() => expect(onMovedMock).toHaveBeenCalled());
         vi.useFakeTimers();
         act(() => {
-            fireMoved(200, 300);
+            fireMoved(5136, 1115);
         });
-        expect(setOverlayPositionMock).not.toHaveBeenCalled();
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(401);
-        });
-        expect(setOverlayPositionMock).toHaveBeenCalledTimes(1);
-        expect(setOverlayPositionMock).toHaveBeenCalledWith({ x: 200, y: 300 });
+        await settleSave();
+        expect(setOverlayPlacementMock).not.toHaveBeenCalled();
     });
 
-    it('debounces multiple rapid move events into one save with the last position', async () => {
+    it('stops treating moves as a drag once the chip hides', async () => {
         render(<OverlayApp />);
-        await waitFor(() => expect(onMovedMock).toHaveBeenCalled());
+        await showRecordingChip();
         vi.useFakeTimers();
+        grabHandle();
+        act(() => {
+            fireMoved(200, 300);
+        });
+        await settleSave();
+        expect(setOverlayPlacementMock).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            fireEvent(RECORDING_EVENT, { kind: 'idle' });
+        });
+        act(() => {
+            fireMoved(5136, 1115);
+        });
+        await settleSave();
+        expect(setOverlayPlacementMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('still saves a drop made just before the chip hides', async () => {
+        render(<OverlayApp />);
+        await showRecordingChip();
+        vi.useFakeTimers();
+        grabHandle();
+        act(() => {
+            fireMoved(200, 300);
+        });
+        await act(async () => {
+            fireEvent(RECORDING_EVENT, { kind: 'idle' });
+        });
+        await settleSave();
+        expect(setOverlayPlacementMock).toHaveBeenCalledTimes(1);
+        expect(setOverlayPlacementMock.mock.calls[0]?.[0]).toMatchObject({
+            offsetX: 200,
+            offsetY: 300,
+        });
+    });
+
+    it('debounces a drag into one save with the last position', async () => {
+        render(<OverlayApp />);
+        await showRecordingChip();
+        vi.useFakeTimers();
+        grabHandle();
         act(() => {
             fireMoved(100, 100);
             fireMoved(150, 150);
@@ -222,17 +301,19 @@ describe('<OverlayApp />', () => {
             fireMoved(250, 250);
             fireMoved(300, 300);
         });
-        await act(async () => {
-            await vi.advanceTimersByTimeAsync(401);
+        await settleSave();
+        expect(setOverlayPlacementMock).toHaveBeenCalledTimes(1);
+        expect(setOverlayPlacementMock.mock.calls[0]?.[0]).toMatchObject({
+            offsetX: 300,
+            offsetY: 300,
         });
-        expect(setOverlayPositionMock).toHaveBeenCalledTimes(1);
-        expect(setOverlayPositionMock).toHaveBeenCalledWith({ x: 300, y: 300 });
     });
 
     it('cancels the pending save when unmounted before the debounce fires', async () => {
         const { unmount } = render(<OverlayApp />);
-        await waitFor(() => expect(onMovedMock).toHaveBeenCalled());
+        await showRecordingChip();
         vi.useFakeTimers();
+        grabHandle();
         act(() => {
             fireMoved(200, 300);
         });
@@ -240,7 +321,7 @@ describe('<OverlayApp />', () => {
         await act(async () => {
             await vi.advanceTimersByTimeAsync(500);
         });
-        expect(setOverlayPositionMock).not.toHaveBeenCalled();
+        expect(setOverlayPlacementMock).not.toHaveBeenCalled();
     });
 });
 
@@ -458,24 +539,5 @@ describe('<OverlayApp /> level polling', () => {
         );
         // No unhandled-promise crash brought the pill down.
         expect(screen.getByTestId('overlay-pill')).toBeInTheDocument();
-    });
-});
-
-describe('<OverlayApp /> reset handler', () => {
-    it('applies the default position when reset event arrives', async () => {
-        render(<OverlayApp />);
-        await waitFor(() =>
-            expect(listenMock).toHaveBeenCalledWith(RESET_EVENT, expect.any(Function)),
-        );
-        const callsBefore = setPositionMock.mock.calls.length;
-        await act(async () => {
-            fireEvent(RESET_EVENT, null);
-        });
-        await waitFor(() => {
-            expect(setPositionMock.mock.calls.length).toBeGreaterThan(callsBefore);
-        });
-        const arg = setPositionMock.mock.calls.at(-1)?.[0];
-        expect(arg?.x).toBe(820);
-        expect(arg?.y).toBe(936);
     });
 });
