@@ -1,7 +1,7 @@
 {
   "name": "@bluemacaw/landing",
   "private": true,
-  "version": "1.2.2",
+  "version": "1.2.3",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
