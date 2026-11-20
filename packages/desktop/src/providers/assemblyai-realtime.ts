@@ -13,12 +13,18 @@
  *   `encoding=pcm_s16le`, `format_turns=true`, and `token`.
  * - On connect the server sends a `Begin` message; we gate the session on
  *   that (analogous to ElevenLabs' `session_started`).
- * - Audio: raw PCM16 LE mono sent as binary WS frames — exactly the
- *   `Int16Array` the `RealtimeSession.sendAudio` contract produces.
- * - Transcripts arrive as `Turn` messages. With `format_turns=true` the
- *   final, punctuated text for a turn is the `Turn` where `end_of_turn`
- *   and `turn_is_formatted` are both true; we accumulate those across the
- *   session and join them.
+ * - Audio: raw PCM16 LE mono sent as binary WS frames. A frame must hold
+ *   20-1000 ms of audio (50-100 ms recommended); a shorter one is answered
+ *   with error 3007 and the session is closed. The capture pipeline hands
+ *   us one chunk per microphone callback (~10 ms), so chunks are batched
+ *   into frames of at least 50 ms before they go out.
+ * - Transcripts arrive as `Turn` messages, each carrying the whole text of
+ *   its turn so far (`turn_order` identifies the turn). The latest message
+ *   of a turn replaces the earlier ones; the session transcript is the
+ *   turns joined in order.
+ * - Errors arrive as an `Error` message followed by a close whose code is
+ *   the error code. A session that ends that way with nothing transcribed
+ *   fails `finish()` with the server's message rather than returning ''.
  * - End of stream: send `{ "type": "ForceEndpoint" }` to flush the current
  *   turn, then `{ "type": "Terminate" }`; the server replies with
  *   `Termination` and closes.
@@ -30,6 +36,8 @@ import type { RealtimeModel, RealtimeSession } from './types';
 
 const BASE_URL = 'wss://streaming.assemblyai.com/v3/ws';
 const TOKEN_URL = 'https://streaming.assemblyai.com/v3/token';
+/** Shortest audio frame we send. The API minimum is 20 ms; it recommends 50-100. */
+const MIN_FRAME_MS = 50;
 
 export interface ConnectU3RealtimeOpts {
     modelId: string;
@@ -43,10 +51,11 @@ export interface ConnectU3RealtimeOpts {
 
 interface U3Message {
     type?: string;
+    turn_order?: number;
     transcript?: string;
     end_of_turn?: boolean;
-    turn_is_formatted?: boolean;
     error?: string;
+    error_code?: number;
 }
 
 function parseMessage(raw: string): U3Message | null {
@@ -116,11 +125,43 @@ export async function connectU3Realtime(opts: ConnectU3RealtimeOpts): Promise<Re
     const ws = factory(url.toString());
     ws.binaryType = 'arraybuffer';
 
-    const segments: string[] = [];
-    let finishResolve: ((text: string) => void) | null = null;
-    let finishExpected = false;
+    /** Latest text of each turn, keyed by `turn_order`. */
+    const turns = new Map<number, { text: string; final: boolean }>();
+    /** Why the session ended, when it ended on anything but our own finish/abort. */
+    let sessionError: Error | null = null;
+    let finishSettle: { resolve: (text: string) => void; reject: (err: Error) => void } | null =
+        null;
     let closed = false;
     let handshakeDone = false;
+    /** The server acknowledged our `Terminate`; the close that follows is expected. */
+    let terminated = false;
+
+    const transcript = () =>
+        [...turns.entries()]
+            .sort(([a], [b]) => a - b)
+            .map(([, turn]) => turn.text)
+            .join(' ')
+            .trim();
+
+    /**
+     * What `finish()` reports: the transcript, or — when the session failed
+     * before producing one — the failure. Text that did arrive is never
+     * thrown away for an error that came after it.
+     */
+    const outcome = (): { text: string } | { error: Error } => {
+        const text = transcript();
+        if (text.length === 0 && sessionError) return { error: sessionError };
+        return { text };
+    };
+
+    const settleFinish = () => {
+        if (!finishSettle) return;
+        const settle = finishSettle;
+        finishSettle = null;
+        const result = outcome();
+        if ('error' in result) settle.reject(result.error);
+        else settle.resolve(result.text);
+    };
 
     const handshakeP = new Promise<void>((resolve, reject) => {
         const completeHandshake = () => {
@@ -141,44 +182,52 @@ export async function connectU3Realtime(opts: ConnectU3RealtimeOpts): Promise<Re
                 case 'Begin':
                     completeHandshake();
                     break;
-                case 'Turn':
-                    // Only the formatted, finalized turn text feeds the paste.
-                    if (
-                        msg.end_of_turn === true &&
-                        msg.turn_is_formatted === true &&
-                        typeof msg.transcript === 'string' &&
-                        msg.transcript.length > 0
-                    ) {
-                        segments.push(msg.transcript);
-                    }
+                case 'Turn': {
+                    if (typeof msg.transcript !== 'string' || msg.transcript.length === 0) break;
+                    const order = typeof msg.turn_order === 'number' ? msg.turn_order : 0;
+                    const final = msg.end_of_turn === true;
+                    // A straggling partial must not undo a finalized turn.
+                    if (turns.get(order)?.final && !final) break;
+                    turns.set(order, { text: msg.transcript, final });
                     break;
+                }
                 case 'Termination':
-                    if (finishExpected && finishResolve) {
-                        finishResolve(segments.join(' ').trim());
-                        finishResolve = null;
-                    }
+                    terminated = true;
+                    settleFinish();
                     break;
                 case 'Error': {
-                    const err = new Error(`assemblyai streaming: ${msg.error ?? 'unknown error'}`);
-                    if (!handshakeDone) failHandshake(err);
-                    else console.warn('assemblyai streaming: post-handshake error', err.message);
+                    const code = typeof msg.error_code === 'number' ? ` (${msg.error_code})` : '';
+                    const err = new Error(
+                        `assemblyai streaming: ${msg.error ?? 'unknown error'}${code}`,
+                    );
+                    if (!handshakeDone) {
+                        failHandshake(err);
+                        break;
+                    }
+                    sessionError = err;
+                    console.warn('assemblyai streaming: session error', err.message);
+                    settleFinish();
                     break;
                 }
             }
         };
         const onClose = (ev: { code?: number; reason?: string }) => {
+            if (closed) return;
             closed = true;
+            const reason = ev.reason || `code ${ev.code ?? 'unknown'}`;
             if (!handshakeDone) {
-                const reason = ev.reason || `code ${ev.code ?? 'unknown'}`;
                 failHandshake(
                     new Error(`assemblyai streaming: websocket closed before Begin (${reason})`),
                 );
                 return;
             }
-            if (finishExpected && finishResolve) {
-                finishResolve(segments.join(' ').trim());
-                finishResolve = null;
-            }
+            if (terminated) return;
+            // The server only closes on its own after an error or a timeout;
+            // a normal end is the `Termination` we wait for in finish().
+            sessionError ??= new Error(
+                `assemblyai streaming: session closed by the server before it finished (${reason})`,
+            );
+            settleFinish();
         };
         const onError = (ev: { message?: string } | Event) => {
             const m = (ev as { message?: string }).message ?? 'websocket error before Begin';
@@ -195,28 +244,54 @@ export async function connectU3Realtime(opts: ConnectU3RealtimeOpts): Promise<Re
 
     await handshakeP;
 
+    const minFrameSamples = Math.ceil((sampleRate * MIN_FRAME_MS) / 1000);
+    let buffered: Int16Array[] = [];
+    let bufferedSamples = 0;
+
+    /** Send everything buffered as one frame, zero-padded up to `padTo` samples. */
+    const flushAudio = (padTo = 0) => {
+        if (bufferedSamples === 0) return;
+        const frame = new Int16Array(Math.max(bufferedSamples, padTo));
+        let offset = 0;
+        for (const chunk of buffered) {
+            frame.set(chunk, offset);
+            offset += chunk.length;
+        }
+        buffered = [];
+        bufferedSamples = 0;
+        ws.send(new Uint8Array(frame.buffer));
+    };
+
     return {
         sendAudio(pcm: Int16Array) {
             if (closed) return;
-            ws.send(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength));
+            buffered.push(pcm);
+            bufferedSamples += pcm.length;
+            if (bufferedSamples >= minFrameSamples) flushAudio();
         },
         async finish() {
-            if (closed) {
-                return segments.join(' ').trim();
-            }
-            finishExpected = true;
-            const p = new Promise<string>((resolve) => {
-                finishResolve = resolve;
-            });
-            // Flush the in-flight turn, then ask the server to terminate.
-            ws.send(JSON.stringify({ type: 'ForceEndpoint' }));
-            ws.send(JSON.stringify({ type: 'Terminate' }));
-            const text = await p;
             if (!closed) {
-                ws.close(1000, 'finish');
-                closed = true;
+                const settled = new Promise<string>((resolve, reject) => {
+                    finishSettle = { resolve, reject };
+                });
+                // The tail is shorter than a valid frame; pad it with silence
+                // instead of dropping the user's last few milliseconds.
+                flushAudio(minFrameSamples);
+                // Flush the in-flight turn, then ask the server to terminate.
+                ws.send(JSON.stringify({ type: 'ForceEndpoint' }));
+                ws.send(JSON.stringify({ type: 'Terminate' }));
+                try {
+                    return await settled;
+                } finally {
+                    if (!closed) {
+                        closed = true;
+                        ws.close(1000, 'finish');
+                    }
+                }
             }
-            return text;
+            const result = outcome();
+            if ('error' in result) throw result.error;
+            return result.text;
         },
         abort() {
             if (closed) return;
