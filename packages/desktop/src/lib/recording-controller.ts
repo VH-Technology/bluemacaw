@@ -1,8 +1,12 @@
 import type { cleanupTranscript as cleanupTranscriptFn } from './cleanup-transcript';
 import {
+    DEFAULT_INSERTION_METHOD,
+    type InsertionMethod,
     getActiveModelConfigId,
+    getInsertionMethod,
     getModelConfigWithApiKey,
     getSelectedMicDeviceId,
+    listTranscriptions,
     saveTranscription,
 } from './db';
 import type { vox as voxApi } from './invoke';
@@ -37,14 +41,14 @@ export interface RecordingDeps {
         | 'startRecording'
         | 'stopRecording'
         | 'cancelRecording'
-        | 'pasteText'
+        | 'insertText'
         | 'checkMicrophonePermission'
         | 'requestMicrophonePermission'
         | 'duckSystemVolume'
         | 'restoreSystemVolume'
     >;
     transcribe: typeof transcribeFn;
-    /** Optionally post-process a finished transcript before paste and history. */
+    /** Optionally post-process a finished transcript before insertion and history. */
     cleanupTranscript?: typeof cleanupTranscriptFn;
     /** Persist a finished transcription. Defaults to db.saveTranscription. */
     saveTranscription?: typeof saveTranscription;
@@ -61,12 +65,69 @@ export interface RecordingDeps {
     getSelectedMicDeviceId?: () => Promise<string | null>;
     /** Inject for tests — defaults to the production realtime orchestrator. */
     startRealtimeCapture?: (deviceId?: string) => Promise<RealtimeCapture>;
+    /** Read the insertion method from Settings. Defaults to DB lookup. */
+    getInsertionMethod?: () => Promise<InsertionMethod>;
+    /**
+     * The newest transcript in history, for "paste last transcription" after
+     * a restart. Defaults to DB lookup.
+     */
+    getLastTranscript?: () => Promise<string | null>;
 }
 
 export type SetState = (next: RecordingState) => void;
 
 function errMessage(e: unknown): string {
     return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * The transcript most recently handed to the focused app, kept so "paste
+ * last transcription" works even when the recording was not saved to history
+ * (no active model config). Lives for the app session only.
+ */
+let lastTranscript: string | null = null;
+
+/** Test-only: forget the transcript remembered from an earlier test. */
+export function __resetLastTranscriptForTests(): void {
+    lastTranscript = null;
+}
+
+async function defaultGetLastTranscript(): Promise<string | null> {
+    const rows = await listTranscriptions({ limit: 1 });
+    return rows[0]?.text ?? null;
+}
+
+/**
+ * Deliver `text` to the focused app by the method chosen in Settings.
+ * Returns `null` on success, or a message for the user on failure. Rust
+ * leaves the text on the clipboard whenever insertion fails, so every
+ * message can point at a manual paste.
+ */
+async function insertTranscript(text: string, deps: RecordingDeps): Promise<string | null> {
+    let method: InsertionMethod = DEFAULT_INSERTION_METHOD;
+    try {
+        method = await (deps.getInsertionMethod ?? getInsertionMethod)();
+    } catch (e) {
+        console.warn('reading the insertion method failed; pasting', e);
+    }
+    try {
+        await deps.vox.insertText(text, method);
+        return null;
+    } catch (insertErr) {
+        console.error('insertText failed', insertErr);
+        const failure = errMessage(insertErr);
+        // Translate well-known error markers into helpful UI messages.
+        // Marker prefixes are defined in `@/lib/markers` (mirrored from
+        // `src-tauri/src/markers.rs`) so a Rust rename can't silently
+        // degrade UX — the contract test enforces agreement.
+        if (failure.includes(ERR_ACCESSIBILITY_REQUIRED)) {
+            return "Couldn't insert the text — bluemacaw needs Accessibility permission. Text is on your clipboard; press Cmd+V to paste manually. Grant bluemacaw in System Settings → Privacy & Security → Accessibility, then try again.";
+        }
+        if (failure.includes(ERR_WAYLAND_PASTE_UNSUPPORTED)) {
+            return "Couldn't insert the text — Wayland blocks synthetic keystrokes. Text is on your clipboard; press Ctrl+V to paste it.";
+        }
+        return `Couldn't insert the text: ${failure}. The text is on your clipboard; press Cmd+V to paste it.`;
+    }
 }
 
 // Fire-and-forget volume ducking. Never awaited — a slow/failed OS volume
@@ -196,20 +257,15 @@ async function stopAndTranscribe(
             }
         }
 
-        let pasteFailed: string | null = null;
-        try {
-            await deps.vox.pasteText(text);
-        } catch (pasteErr) {
-            // Don't lose the transcription — the text is on the clipboard
-            // either way. We just couldn't synthesise Cmd+V. Surface the
-            // error to the UI but still save to history.
-            pasteFailed = errMessage(pasteErr);
-            console.error('pasteText failed', pasteErr);
-        }
+        // Don't lose the transcription when insertion fails — surface the
+        // error to the UI but still save to history.
+        lastTranscript = text;
+        const insertFailure = await insertTranscript(text, deps);
 
-        // Persist after paste attempt (success or failure — the transcription
-        // still happened and the user paid for it). A history-write failure
-        // must not un-paste the text, so swallow + log instead of bubbling up.
+        // Persist after the insertion attempt (success or failure — the
+        // transcription still happened and the user paid for it). A
+        // history-write failure must not undo the insertion, so swallow + log
+        // instead of bubbling up.
         const save = deps.saveTranscription ?? saveTranscription;
         const resolveConfig = deps.resolveActiveConfig ?? defaultResolveActiveConfig;
         try {
@@ -226,22 +282,8 @@ async function stopAndTranscribe(
             console.error('saveTranscription failed', saveErr);
         }
 
-        if (pasteFailed) {
-            // Translate well-known error markers into helpful UI messages.
-            // Marker prefixes are defined in `@/lib/markers` (mirrored from
-            // `src-tauri/src/markers.rs`) so a Rust rename can't silently
-            // degrade UX — the contract test enforces agreement.
-            let friendly: string;
-            if (pasteFailed.includes(ERR_ACCESSIBILITY_REQUIRED)) {
-                friendly =
-                    "Couldn't paste — bluemacaw needs Accessibility permission. Text is on your clipboard; press Cmd+V to paste manually. Grant bluemacaw in System Settings → Privacy & Security → Accessibility, then try again.";
-            } else if (pasteFailed.includes(ERR_WAYLAND_PASTE_UNSUPPORTED)) {
-                friendly =
-                    "Couldn't paste — Wayland blocks synthetic keystrokes. Text is on your clipboard; press Ctrl+V to paste it.";
-            } else {
-                friendly = `Couldn't paste: ${pasteFailed}. The text is on your clipboard; press Cmd+V to paste it.`;
-            }
-            setState({ kind: 'error', message: friendly });
+        if (insertFailure) {
+            setState({ kind: 'error', message: insertFailure });
             return;
         }
 
@@ -269,6 +311,38 @@ export async function toggle(
         case 'error':
             await startFromIdle(deps, setState);
             return;
+    }
+}
+
+/**
+ * Insert the most recent transcription again, for the optional "paste last
+ * transcription" shortcut. Uses the transcript from this app session, or the
+ * newest history entry after a restart. Ignored while a recording or
+ * transcription is in flight, so it can never interleave with one.
+ */
+export async function pasteLast(
+    state: RecordingState,
+    deps: RecordingDeps,
+    setState: SetState,
+): Promise<void> {
+    if (state.kind === 'recording' || state.kind === 'transcribing') return;
+    let text = lastTranscript;
+    if (text === null) {
+        try {
+            text = await (deps.getLastTranscript ?? defaultGetLastTranscript)();
+        } catch (e) {
+            console.error('reading the last transcription failed', e);
+        }
+    }
+    if (!text) {
+        setState({ kind: 'error', message: 'No transcription to paste yet.' });
+        return;
+    }
+    const failure = await insertTranscript(text, deps);
+    if (failure) {
+        setState({ kind: 'error', message: failure });
+    } else if (state.kind === 'error') {
+        setState({ kind: 'idle' });
     }
 }
 

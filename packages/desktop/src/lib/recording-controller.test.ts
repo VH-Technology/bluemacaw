@@ -8,7 +8,9 @@ import {
     type RecordingDeps,
     type RecordingState,
     type SetState,
+    __resetLastTranscriptForTests,
     cancel,
+    pasteLast,
     toggle,
 } from './recording-controller';
 
@@ -18,7 +20,7 @@ function makeDeps(): RecordingDeps {
             startRecording: vi.fn(async () => 'session-1'),
             stopRecording: vi.fn(async () => [82, 73, 70, 70]),
             cancelRecording: vi.fn(async () => undefined),
-            pasteText: vi.fn(async () => undefined),
+            insertText: vi.fn(async () => undefined),
             checkMicrophonePermission: vi.fn(async () => 'Granted' as const),
             requestMicrophonePermission: vi.fn(async () => 'Granted' as const),
             duckSystemVolume: vi.fn(async () => undefined),
@@ -27,6 +29,8 @@ function makeDeps(): RecordingDeps {
         transcribe: vi.fn(async () => 'hello world'),
         cleanupTranscript: vi.fn(async (text: string) => text),
         getSelectedMicDeviceId: vi.fn(async () => null),
+        getInsertionMethod: vi.fn(async () => 'paste' as const),
+        getLastTranscript: vi.fn(async () => null),
     };
 }
 
@@ -139,7 +143,7 @@ describe('recording-controller toggle', () => {
             const blob = vi.mocked(deps.transcribe).mock.calls[0]?.[0];
             expect(blob).toBeInstanceOf(Blob);
             expect(blob?.type).toBe('audio/wav');
-            expect(deps.vox.pasteText).toHaveBeenCalledWith('hello world');
+            expect(deps.vox.insertText).toHaveBeenCalledWith('hello world', 'paste');
             expect(states.map((s) => s.kind)).toEqual(['transcribing', 'idle']);
         });
 
@@ -157,12 +161,12 @@ describe('recording-controller toggle', () => {
             await toggle(recState, deps, setState);
 
             expect(deps.cleanupTranscript).toHaveBeenCalledWith('um hello world');
-            expect(deps.vox.pasteText).toHaveBeenCalledWith('hello world');
+            expect(deps.vox.insertText).toHaveBeenCalledWith('hello world', 'paste');
             expect(deps.saveTranscription).toHaveBeenCalledWith(
                 expect.objectContaining({ text: 'hello world' }),
             );
             const cleanupOrder = vi.mocked(deps.cleanupTranscript).mock.invocationCallOrder[0];
-            const pasteOrder = vi.mocked(deps.vox.pasteText).mock.invocationCallOrder[0];
+            const pasteOrder = vi.mocked(deps.vox.insertText).mock.invocationCallOrder[0];
             expect(cleanupOrder).toBeLessThan(pasteOrder ?? 0);
         });
 
@@ -176,7 +180,7 @@ describe('recording-controller toggle', () => {
 
             await toggle(recState, deps, setState);
 
-            expect(deps.vox.pasteText).toHaveBeenCalledWith('hello world');
+            expect(deps.vox.insertText).toHaveBeenCalledWith('hello world', 'paste');
             expect(states.map((s) => s.kind)).toEqual(['transcribing', 'idle']);
             expect(warn).toHaveBeenCalledWith('transcript cleanup failed; using raw transcript');
             warn.mockRestore();
@@ -197,18 +201,35 @@ describe('recording-controller toggle', () => {
             expect(states.map((s) => s.kind)).toEqual(['transcribing', 'error']);
             const last = states.at(-1);
             if (last?.kind === 'error') expect(last.message).toMatch(/No model selected/);
-            expect(deps.vox.pasteText).not.toHaveBeenCalled();
+            expect(deps.vox.insertText).not.toHaveBeenCalled();
+        });
+
+        it('inserts with the method chosen in Settings', async () => {
+            if (!deps.getInsertionMethod) throw new Error('missing dep');
+            vi.mocked(deps.getInsertionMethod).mockResolvedValueOnce('type');
+            const { setState } = makeSetState();
+            await toggle(recState, deps, setState);
+            expect(deps.vox.insertText).toHaveBeenCalledWith('hello world', 'type');
+        });
+
+        it('pastes when the insertion setting cannot be read', async () => {
+            if (!deps.getInsertionMethod) throw new Error('missing dep');
+            vi.mocked(deps.getInsertionMethod).mockRejectedValueOnce(new Error('db locked'));
+            const { setState, states } = makeSetState();
+            await toggle(recState, deps, setState);
+            expect(deps.vox.insertText).toHaveBeenCalledWith('hello world', 'paste');
+            expect(states.at(-1)?.kind).toBe('idle');
         });
 
         it('publishes error when paste fails', async () => {
-            vi.mocked(deps.vox.pasteText).mockRejectedValueOnce(new Error('clipboard locked'));
+            vi.mocked(deps.vox.insertText).mockRejectedValueOnce(new Error('clipboard locked'));
             const { setState, states } = makeSetState();
             await toggle(recState, deps, setState);
             expect(states.map((s) => s.kind)).toEqual(['transcribing', 'error']);
         });
 
         it('surfaces a Wayland-specific friendly message when paste returns wayland-paste-unsupported', async () => {
-            vi.mocked(deps.vox.pasteText).mockRejectedValueOnce(
+            vi.mocked(deps.vox.insertText).mockRejectedValueOnce(
                 new Error(
                     `${ERR_WAYLAND_PASTE_UNSUPPORTED} Wayland blocks synthetic keystrokes from third-party apps. bluemacaw copied the text to your clipboard — press Ctrl+V to paste it.`,
                 ),
@@ -227,7 +248,7 @@ describe('recording-controller toggle', () => {
         });
 
         it('surfaces an Accessibility-specific friendly message when paste returns accessibility-required', async () => {
-            vi.mocked(deps.vox.pasteText).mockRejectedValueOnce(
+            vi.mocked(deps.vox.insertText).mockRejectedValueOnce(
                 new Error(
                     `${ERR_ACCESSIBILITY_REQUIRED} synthetic paste needs Accessibility. Grant bluemacaw in System Settings → Privacy & Security → Accessibility, then try again.`,
                 ),
@@ -283,7 +304,7 @@ describe('recording-controller cancel', () => {
         await cancel(recState, deps, setState);
         expect(deps.vox.cancelRecording).toHaveBeenCalledWith('session-1');
         expect(deps.transcribe).not.toHaveBeenCalled();
-        expect(deps.vox.pasteText).not.toHaveBeenCalled();
+        expect(deps.vox.insertText).not.toHaveBeenCalled();
         expect(deps.vox.stopRecording).not.toHaveBeenCalled();
         expect(states.map((s) => s.kind)).toEqual(['idle']);
     });
@@ -397,7 +418,7 @@ describe('recording-controller realtime path', () => {
         expect(deps.session.finish).toHaveBeenCalled();
         // Batch transcribe path must not be touched on realtime.
         expect(deps.transcribe).not.toHaveBeenCalled();
-        expect(deps.vox.pasteText).toHaveBeenCalledWith('hello realtime');
+        expect(deps.vox.insertText).toHaveBeenCalledWith('hello realtime', 'paste');
         expect(states.map((s) => s.kind)).toEqual(['transcribing', 'idle']);
     });
 
@@ -420,7 +441,7 @@ describe('recording-controller realtime path', () => {
         await toggle(recState, deps, setState);
 
         expect(deps.cleanupTranscript).toHaveBeenCalledWith('hello realtime');
-        expect(deps.vox.pasteText).toHaveBeenCalledWith('clean realtime');
+        expect(deps.vox.insertText).toHaveBeenCalledWith('clean realtime', 'paste');
     });
 
     it('cancel calls session.abort and unlisten before tearing down cpal', async () => {
@@ -464,5 +485,113 @@ describe('recording-controller realtime path', () => {
         expect(last?.kind).toBe('error');
         if (last?.kind === 'error') expect(last.message).toMatch(/auth_error/);
         expect(deps.vox.startRecording).not.toHaveBeenCalled();
+    });
+});
+
+describe('recording-controller pasteLast', () => {
+    let deps: RecordingDeps;
+
+    beforeEach(() => {
+        deps = makeDeps();
+        __resetLastTranscriptForTests();
+    });
+
+    const recState: RecordingState = {
+        kind: 'recording',
+        sessionId: 'session-1',
+        startedAt: 0,
+    };
+
+    it('inserts the transcript from the recording that just finished', async () => {
+        const first = makeSetState();
+        await toggle(recState, deps, first.setState);
+        vi.mocked(deps.vox.insertText).mockClear();
+
+        const { setState, states } = makeSetState();
+        await pasteLast({ kind: 'idle' }, deps, setState);
+
+        expect(deps.vox.insertText).toHaveBeenCalledWith('hello world', 'paste');
+        expect(deps.getLastTranscript).not.toHaveBeenCalled();
+        expect(states).toEqual([]);
+    });
+
+    it('uses the cleaned-up text, the same text that was inserted the first time', async () => {
+        if (!deps.cleanupTranscript) throw new Error('missing dep');
+        vi.mocked(deps.cleanupTranscript).mockResolvedValueOnce('Hello, world.');
+        await toggle(recState, deps, makeSetState().setState);
+        vi.mocked(deps.vox.insertText).mockClear();
+
+        await pasteLast({ kind: 'idle' }, deps, makeSetState().setState);
+
+        expect(deps.vox.insertText).toHaveBeenCalledWith('Hello, world.', 'paste');
+    });
+
+    it('falls back to the newest history entry after a restart', async () => {
+        if (!deps.getLastTranscript) throw new Error('missing dep');
+        vi.mocked(deps.getLastTranscript).mockResolvedValueOnce('from history');
+        const { setState, states } = makeSetState();
+
+        await pasteLast({ kind: 'idle' }, deps, setState);
+
+        expect(deps.vox.insertText).toHaveBeenCalledWith('from history', 'paste');
+        expect(states).toEqual([]);
+    });
+
+    it('uses the insertion method from Settings', async () => {
+        if (!deps.getLastTranscript || !deps.getInsertionMethod) throw new Error('missing dep');
+        vi.mocked(deps.getLastTranscript).mockResolvedValueOnce('from history');
+        vi.mocked(deps.getInsertionMethod).mockResolvedValueOnce('type');
+
+        await pasteLast({ kind: 'idle' }, deps, makeSetState().setState);
+
+        expect(deps.vox.insertText).toHaveBeenCalledWith('from history', 'type');
+    });
+
+    it('reports when there is nothing to paste yet', async () => {
+        const { setState, states } = makeSetState();
+
+        await pasteLast({ kind: 'idle' }, deps, setState);
+
+        expect(deps.vox.insertText).not.toHaveBeenCalled();
+        const last = states.at(-1);
+        if (last?.kind !== 'error') throw new Error(`expected error state, got ${last?.kind}`);
+        expect(last.message).toMatch(/No transcription/);
+    });
+
+    it('surfaces an insertion failure as an error', async () => {
+        if (!deps.getLastTranscript) throw new Error('missing dep');
+        vi.mocked(deps.getLastTranscript).mockResolvedValueOnce('from history');
+        vi.mocked(deps.vox.insertText).mockRejectedValueOnce(
+            new Error(`${ERR_ACCESSIBILITY_REQUIRED} inserting text needs Accessibility.`),
+        );
+        const { setState, states } = makeSetState();
+
+        await pasteLast({ kind: 'idle' }, deps, setState);
+
+        const last = states.at(-1);
+        if (last?.kind !== 'error') throw new Error(`expected error state, got ${last?.kind}`);
+        expect(last.message).toMatch(/Accessibility/);
+    });
+
+    it('clears a previous error once the paste succeeds', async () => {
+        if (!deps.getLastTranscript) throw new Error('missing dep');
+        vi.mocked(deps.getLastTranscript).mockResolvedValueOnce('from history');
+        const { setState, states } = makeSetState();
+
+        await pasteLast({ kind: 'error', message: 'earlier failure' }, deps, setState);
+
+        expect(states).toEqual([{ kind: 'idle' }]);
+    });
+
+    it('does nothing while a recording or transcription is in flight', async () => {
+        if (!deps.getLastTranscript) throw new Error('missing dep');
+        vi.mocked(deps.getLastTranscript).mockResolvedValue('from history');
+        const { setState, states } = makeSetState();
+
+        await pasteLast(recState, deps, setState);
+        await pasteLast({ kind: 'transcribing' }, deps, setState);
+
+        expect(deps.vox.insertText).not.toHaveBeenCalled();
+        expect(states).toEqual([]);
     });
 });

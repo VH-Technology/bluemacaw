@@ -1,12 +1,13 @@
 import { cleanupTranscript } from '@/lib/cleanup-transcript';
 import { getCancelHotkeyCombo } from '@/lib/db';
 import { vox } from '@/lib/invoke';
-import { EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_TOGGLE } from '@/lib/markers';
+import { EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_PASTE_LAST, EVT_SHORTCUT_TOGGLE } from '@/lib/markers';
 import { publishRecordingState } from '@/lib/overlay-bridge';
 import {
     type RecordingDeps,
     type RecordingState,
     cancel,
+    pasteLast,
     toggle,
 } from '@/lib/recording-controller';
 import { transcribe } from '@/lib/transcribe';
@@ -95,10 +96,16 @@ export function useHotkeyRecording(options: UseHotkeyRecordingOptions = {}): {
                 console.error('hotkey cancel failed', e);
             });
         });
+        const pasteLastPromise = listen(EVT_SHORTCUT_PASTE_LAST, () => {
+            pasteLast(stateRef.current, depsRef.current, applyNext).catch((e) => {
+                console.error('paste-last hotkey failed', e);
+            });
+        });
         return () => {
             cancelled = true;
             void togglePromise.then((fn) => fn());
             void cancelPromise.then((fn) => fn());
+            void pasteLastPromise.then((fn) => fn());
             // Best-effort: drop any cancel-hotkey registration we still
             // own when the hook tears down (e.g. main window close).
             void unregisterCancelHotkey();

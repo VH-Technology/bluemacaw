@@ -131,6 +131,14 @@ export const vox = {
      * outside the recording window.
      */
     validateCancelHotkey: (combo: string) => invoke<string>('validate_cancel_hotkey', { combo }),
+    /**
+     * Register the optional global shortcut that inserts the most recent
+     * transcription again (via `EVT_SHORTCUT_PASTE_LAST`). Held for as long
+     * as the app runs, so the combo needs a modifier.
+     */
+    registerPasteLastHotkey: (combo: string) =>
+        invoke<string>('register_paste_last_hotkey', { combo }),
+    unregisterPasteLastHotkey: () => invoke<void>('unregister_paste_last_hotkey'),
 
     /** macOS only: read the AppleFnUsageType setting (0..3) or null if unset. */
     getFnUsageType: () => invoke<number | null>('get_fn_usage_type'),
@@ -141,7 +149,15 @@ export const vox = {
     setSecret: (secretId: string, key: string) => invoke<void>('set_secret', { secretId, key }),
     deleteSecret: (secretId: string) => invoke<void>('delete_secret', { secretId }),
 
-    pasteText: (text: string) => invoke<void>('paste_text', { text }),
+    /**
+     * Deliver a transcript to the focused app. `method` is the user's
+     * choice from Settings: `'type'` sends keystrokes and leaves the
+     * clipboard alone; `'paste'` borrows the clipboard for a paste and puts
+     * its contents back. Rust pastes text that typing cannot deliver
+     * faithfully (a line break, tab or emoji) whatever the method.
+     */
+    insertText: (text: string, method: 'type' | 'paste') =>
+        invoke<void>('insert_text', { text, method }),
 
     /**
      * Returns the current host OS and (on Linux) whether the session is

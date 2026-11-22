@@ -24,6 +24,7 @@ import { RecordingStatusPill } from './RecordingStatusPill';
 import { SettingsApiKeys } from './SettingsApiKeys';
 import { SettingsCleanup } from './SettingsCleanup';
 import { SettingsHistory } from './SettingsHistory';
+import { SettingsInsertion } from './SettingsInsertion';
 import { SettingsModels } from './SettingsModels';
 import { SettingsOverlay } from './SettingsOverlay';
 import { SettingsRecording } from './SettingsRecording';
@@ -50,6 +51,7 @@ const SETTINGS_SECTIONS = [
     { id: 'settings-models', label: 'Models' },
     { id: 'settings-cleanup', label: 'Cleanup' },
     { id: 'settings-recording', label: 'Recording' },
+    { id: 'settings-insertion', label: 'Insertion' },
     { id: 'settings-overlay', label: 'Overlay' },
     { id: 'settings-history', label: 'History' },
     { id: 'settings-updates', label: 'Updates' },
@@ -395,6 +397,9 @@ export function MainWindowInner() {
                         </section>
                         <section id="settings-recording" className="scroll-mt-6">
                             <SettingsRecording />
+                        </section>
+                        <section id="settings-insertion" className="scroll-mt-6">
+                            <SettingsInsertion />
                         </section>
                         <section id="settings-overlay" className="scroll-mt-6">
                             <SettingsOverlay />

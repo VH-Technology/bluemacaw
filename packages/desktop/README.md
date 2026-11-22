@@ -115,6 +115,7 @@ Capability grants for each are listed in `src-tauri/capabilities/default.json`.
 - `tauri.conf.json` — bundle id (`com.vhtechnology.bluemacaw`), windows config (main + overlay), CSP allowlist (provider hostnames), bundle metadata, updater endpoint placeholder.
 - `Cargo.toml` — Rust dependencies: `tauri`, `cpal`, `keyring`, `sqlx`, `enigo`, `objc2-av-foundation` on macOS, `windows` on Windows.
 - Paste uses target-specific Enigo versions: 0.6.1 on macOS for isolated modifier state, and 0.2.1 on Windows. The macOS-only [native paste probe](../../docs/testing.md#macos-native-paste-probe) verifies emitted shortcut flags independently of STT.
+- Transcripts are inserted by a paste that restores the clipboard afterwards (default) or by typing without the clipboard; the choice is in Settings → Insertion. The macOS-only [native typing probe](../../docs/testing.md#macos-native-typing-probe) checks whether a given app accepts typed text.
 - `package.json` — `@ai-sdk/*` for each provider, `@tauri-apps/plugin-*` for each tracked plugin.
 
 For secret storage, see [`docs/secrets.md`](../../docs/secrets.md). For permissions, see [`docs/permissions.md`](../../docs/permissions.md).
