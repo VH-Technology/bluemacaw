@@ -1,3 +1,4 @@
+import { summarizeError } from '@/lib/error-summary';
 import { DEFAULT_OVERLAY_SENSITIVITY, isValidOverlaySensitivity } from '@/lib/overlay-sensitivity';
 import { cn } from '@/lib/utils';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -6,7 +7,8 @@ export type OverlayState =
     | { kind: 'hidden' }
     | { kind: 'recording' }
     | { kind: 'transcribing' }
-    | { kind: 'positioning' };
+    | { kind: 'positioning' }
+    | { kind: 'error'; message: string };
 
 export interface OverlayWindowProps {
     state: OverlayState;
@@ -27,6 +29,13 @@ export interface OverlayWindowProps {
     level?: number;
     /** Visual gain applied to the meter only, with 1 preserving the default response. */
     sensitivity?: number;
+    /** Fires when the user closes the error pill. */
+    onDismiss?: () => void;
+    /**
+     * Fires when the user clicks the error message, to open the main
+     * window where the full message is shown.
+     */
+    onOpenMain?: () => void;
     /**
      * Fires when the user presses the primary button on the drag handle,
      * i.e. just before the OS starts moving the window. Lets the caller
@@ -40,6 +49,16 @@ const PILL = cn(
     'flex items-center gap-2',
     'rounded-full bg-brand-navy/85 backdrop-blur-md',
     'pl-2 pr-4 py-2.5',
+    'select-none text-white',
+);
+
+// The error pill spans the window instead of hugging its content: it holds
+// up to three lines of text, which a centred rounded-full pill cannot.
+const ERROR_PILL = cn(
+    'fixed bottom-3 left-2 right-2',
+    'flex items-center gap-2',
+    'rounded-2xl bg-brand-coral/95 backdrop-blur-md',
+    'pl-3 pr-2 py-1',
     'select-none text-white',
 );
 
@@ -200,6 +219,35 @@ function CancelButton({ onClick }: { onClick?: () => void }) {
     );
 }
 
+function DismissButton({ onClick }: { onClick?: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            aria-label="Dismiss error"
+            title="Dismiss"
+            className={cn(
+                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
+                'bg-white/20 text-white/90',
+                'hover:bg-white/35 hover:text-white active:bg-white/45',
+                'transition-colors',
+            )}
+        >
+            <svg
+                aria-hidden="true"
+                viewBox="0 0 10 10"
+                className="block h-2.5 w-2.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+            >
+                <path d="M2 2 L8 8 M8 2 L2 8" />
+            </svg>
+        </button>
+    );
+}
+
 function TranscribingDots() {
     return (
         <span className="pointer-events-none flex items-center gap-1" aria-hidden="true">
@@ -221,8 +269,29 @@ export function OverlayWindow({
     level = 0,
     sensitivity = DEFAULT_OVERLAY_SENSITIVITY,
     onDragStart,
+    onDismiss,
+    onOpenMain,
 }: OverlayWindowProps) {
     if (state.kind === 'hidden') return null;
+
+    if (state.kind === 'error') {
+        return (
+            <div className={ERROR_PILL} data-testid="overlay-pill" data-state="error" role="alert">
+                <button
+                    type="button"
+                    onClick={onOpenMain}
+                    aria-label="Open bluemacaw to see the full error"
+                    title={state.message}
+                    className="min-w-0 flex-1 cursor-pointer text-left"
+                >
+                    <span className="line-clamp-3 text-[11px] font-semibold leading-[14px]">
+                        {summarizeError(state.message)}
+                    </span>
+                </button>
+                <DismissButton onClick={onDismiss} />
+            </div>
+        );
+    }
 
     if (state.kind === 'recording') {
         const gain = isValidOverlaySensitivity(sensitivity)

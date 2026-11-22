@@ -76,7 +76,8 @@ Migration SQL lives in `packages/desktop/src-tauri/migrations/` (`0001_init.sql`
 | `windows/main/{Dashboard,History,SettingsApiKeys,SettingsModelConfigs,SettingsRecording,SettingsOverlay,SettingsHistory,SettingsTheme,SettingsUpdates,RecordingStatusPill}.tsx` | Individual settings panels and dashboard widgets. |
 | `windows/main/{SettingsDock,SettingsOverlaySensitivity}.tsx` | macOS close-to-Dock preference in General, and visual meter sensitivity slider in Overlay. |
 | `windows/main/{AddApiKeyDialog,AddModelConfigDialog,DeleteApiKeyDialog}.tsx` | Dialogs for managing keychain-stored API keys and the model configs that pin a `{api_key, model_id}` pair. |
-| `windows/overlay/{OverlayApp,OverlayWindow}.tsx` | Transparent recording overlay with level meter and cancel button. |
+| `windows/overlay/{OverlayApp,OverlayWindow}.tsx` | Transparent recording overlay with level meter and cancel button. Also shows an error for eight seconds when a recording, transcription or insertion fails; clicking it opens the main window. |
+| `lib/error-summary.ts` | Shortens an error message to what fits on the overlay pill: the provider and the readable part of its JSON error body, or the first sentence of one of our own messages. |
 | `components/HotkeyInput.tsx`, `hooks/useHotkeyRecording.ts` | Capture-a-hotkey input used by Settings → Recording. |
 | `components/ui/*` | shadcn-neobrutalism primitives (Button, Card, Input, Tabs, Dialog, Switch, Label, Toast, etc.). |
 
@@ -109,6 +110,7 @@ Every webview-callable Rust function lives in `commands.rs` and is mirrored on `
 | `unregister_cancel_hotkey` | — | `()` | |
 | `get_fn_usage_type` | — | `number \| null` | macOS only. Reads `AppleFnUsageType`. |
 | `set_fn_usage_type` | `value: number` | `()` | macOS only. Writes `AppleFnUsageType` and restarts cfprefsd. |
+| `show_main_window` | — | `()` | Brings the main window to the front (and restores the Dock icon on macOS). The overlay calls it when the user clicks an error on the pill. |
 | `get_platform_info` | — | `PlatformInfo` | `{ os: "macos"\|"windows", isWayland }`. Drives onboarding's per-platform permission rows. |
 | `get_keep_in_dock` | — | `boolean` | Reads the native-owned Dock preference; defaults to `true`. UI is macOS-only. |
 | `set_keep_in_dock` | `enabled: boolean` | `()` | Saves the Dock preference synchronously. Used on the next window close or hidden login launch; failed writes restore the previous in-memory value. No activation-policy changes on Windows/Linux. |
@@ -128,6 +130,8 @@ Both names are defined in `markers.rs` / `markers.ts` and pinned by a contract t
 ## Window and meter preferences
 
 Closing the main window hides it; the process, tray menu, and recording hotkeys remain active. On macOS, **Settings → General → Keep in Dock when the window is closed** defaults to on (`Regular` activation policy). Turning it off switches the hidden app to `Accessory`, leaving it in the menu bar only. Hidden login launches honor the same preference. Reopening from the tray, Dock, or Finder restores `Regular` before showing/focusing the main window; onboarding also restores it when the main window gains focus. Showing the recording overlay does not change Dock presence. Tray Quit / Cmd+Q still quits the application.
+
+An error is shown on the overlay pill even when **Settings → Overlay** has the pill turned off, because the main window is usually closed and a failed dictation would otherwise look like nothing happened. The pill shows a one-sentence summary (`lib/error-summary.ts`); the main window keeps the full message. The error leaves the pill after eight seconds, when dismissed, or when the next recording starts.
 
 **Settings → Overlay → Volume indicator sensitivity** ranges from 10% to 200%, in 10% steps; 100% preserves the original calibration. `overlay_sensitivity` in SQLite `app_state` stores the multiplier (0.1–2). Missing/invalid values fall back to 1. Only `OverlayWindow` applies this multiplier, to the bars and recording dot; audio samples, microphone gain, and transcription input are unchanged. Saves are serialized, then `bluemacaw://overlay-sensitivity-changed` notifies the overlay to reload. The overlay also reloads at recording-state transitions, so a missed notification does not leave the next recording using a stale value.
 

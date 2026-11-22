@@ -29,6 +29,10 @@ export const OVERLAY_POSITION_SETUP_OFF_EVENT = 'bluemacaw://overlay-position-se
 const OVERLAY_LABEL = 'overlay';
 
 async function shouldShowOverlay(state: RecordingState): Promise<boolean> {
+    // An error is shown even when the user turned the pill off. They rarely
+    // have the main window open, so without this a failed dictation looks
+    // like nothing happened.
+    if (state.kind === 'error') return true;
     if (state.kind !== 'recording' && state.kind !== 'transcribing') return false;
     try {
         return await getOverlayEnabled();

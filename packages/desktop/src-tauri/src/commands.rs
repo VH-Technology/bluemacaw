@@ -210,6 +210,13 @@ pub fn present_overlay(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Bring the main window to the front. Called from the overlay when the
+/// user clicks an error on the pill, to see the full message.
+#[tauri::command]
+pub fn show_main_window(app: AppHandle) {
+    crate::dock::show_main_window(&app);
+}
+
 #[tauri::command]
 pub fn check_microphone_permission(state: State<'_, AppState>) -> PermissionState {
     state.audio.check_permission()

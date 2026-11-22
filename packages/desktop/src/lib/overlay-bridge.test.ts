@@ -142,10 +142,10 @@ describe('publishRecordingState (overlay enabled)', () => {
         expect(presentOverlayMock).not.toHaveBeenCalled();
     });
 
-    it('hides the overlay window on error', async () => {
+    it('presents the overlay on error, so the user sees what went wrong', async () => {
         await publishRecordingState({ kind: 'error', message: 'boom' });
-        expect(fakeOverlay.hide).toHaveBeenCalled();
-        expect(presentOverlayMock).not.toHaveBeenCalled();
+        expect(presentOverlayMock).toHaveBeenCalledTimes(1);
+        expect(fakeOverlay.hide).not.toHaveBeenCalled();
     });
 
     it('does not throw if presenting fails', async () => {
@@ -176,6 +176,12 @@ describe('publishRecordingState (overlay disabled)', () => {
         await publishRecordingState({ kind: 'transcribing' });
         expect(presentOverlayMock).not.toHaveBeenCalled();
         expect(fakeOverlay.hide).toHaveBeenCalled();
+    });
+
+    it('still presents an error: with the pill off there is no other sign of a failure', async () => {
+        await publishRecordingState({ kind: 'error', message: 'boom' });
+        expect(presentOverlayMock).toHaveBeenCalledTimes(1);
+        expect(fakeOverlay.hide).not.toHaveBeenCalled();
     });
 
     it('still emits the recording-state event for the main window pill', async () => {

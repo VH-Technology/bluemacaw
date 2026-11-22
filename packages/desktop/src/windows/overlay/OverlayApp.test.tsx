@@ -15,6 +15,8 @@ const {
     exitOverlayPositionSetupMock,
     getRecordingLevelMock,
     getOverlaySensitivityMock,
+    hideMock,
+    showMainWindowMock,
 } = vi.hoisted(() => {
     type Handler = (event: { payload: unknown }) => void;
     const handlers = new Map<string, Handler>();
@@ -60,6 +62,8 @@ const {
         ),
         getRecordingLevelMock: vi.fn<(sessionId: string) => Promise<number>>(async () => 0),
         getOverlaySensitivityMock: vi.fn(async () => 1),
+        hideMock: vi.fn(async () => undefined),
+        showMainWindowMock: vi.fn(async () => undefined),
     };
 });
 
@@ -72,6 +76,7 @@ vi.mock('@tauri-apps/api/window', () => ({
         onMoved: onMovedMock,
         scaleFactor: scaleFactorMock,
         startDragging: vi.fn(async () => undefined),
+        hide: hideMock,
     }),
 }));
 vi.mock('@/lib/db', () => ({
@@ -86,7 +91,7 @@ vi.mock('@/lib/overlay-bridge', () => ({
     exitOverlayPositionSetup: exitOverlayPositionSetupMock,
 }));
 vi.mock('@/lib/invoke', () => ({
-    vox: { getRecordingLevel: getRecordingLevelMock },
+    vox: { getRecordingLevel: getRecordingLevelMock, showMainWindow: showMainWindowMock },
 }));
 
 import { OverlayApp } from './OverlayApp';
@@ -127,6 +132,8 @@ beforeEach(() => {
     exitOverlayPositionSetupMock.mockReset().mockResolvedValue(undefined);
     getRecordingLevelMock.mockReset().mockResolvedValue(0);
     getOverlaySensitivityMock.mockReset().mockResolvedValue(1);
+    hideMock.mockReset().mockResolvedValue(undefined);
+    showMainWindowMock.mockReset().mockResolvedValue(undefined);
     vi.useRealTimers();
 });
 
@@ -184,21 +191,98 @@ describe('<OverlayApp />', () => {
         });
     });
 
-    it('hides on error event', async () => {
-        const { container } = render(<OverlayApp />);
+    /** Mount, wait for the listener, and deliver an error state. */
+    async function showError(message = 'boom') {
         await waitFor(() =>
             expect(listenMock).toHaveBeenCalledWith(RECORDING_EVENT, expect.any(Function)),
         );
         await act(async () => {
+            fireEvent(RECORDING_EVENT, { kind: 'error', message });
+        });
+    }
+
+    it('shows an error on the pill instead of hiding', async () => {
+        render(<OverlayApp />);
+        await act(async () => {
             fireEvent(RECORDING_EVENT, { kind: 'recording', sessionId: 'session-1' });
         });
+        await showError('No model selected');
+
+        const pill = await screen.findByTestId('overlay-pill');
+        expect(pill).toHaveAttribute('data-state', 'error');
+        expect(pill).toHaveTextContent('No model selected');
+        expect(hideMock).not.toHaveBeenCalled();
+    });
+
+    it('takes the error down, and hides the window, after eight seconds', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const { container } = render(<OverlayApp />);
+        await showError();
         await screen.findByTestId('overlay-pill');
+
         await act(async () => {
-            fireEvent(RECORDING_EVENT, { kind: 'error', message: 'boom' });
+            await vi.advanceTimersByTimeAsync(7_900);
         });
+        expect(screen.getByTestId('overlay-pill')).toBeInTheDocument();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(200);
+        });
+        expect(container.querySelector('[data-testid="overlay-pill"]')).toBeNull();
+        expect(hideMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('dismisses the error when the user closes it', async () => {
+        const { container } = render(<OverlayApp />);
+        await showError();
+        domEvent.click(await screen.findByRole('button', { name: /dismiss/i }));
+
         await waitFor(() => {
             expect(container.querySelector('[data-testid="overlay-pill"]')).toBeNull();
         });
+        expect(hideMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens the main window when the error is clicked, and takes the pill down', async () => {
+        const { container } = render(<OverlayApp />);
+        await showError();
+        domEvent.click(await screen.findByRole('button', { name: /open bluemacaw/i }));
+
+        await waitFor(() => expect(showMainWindowMock).toHaveBeenCalledTimes(1));
+        expect(container.querySelector('[data-testid="overlay-pill"]')).toBeNull();
+        expect(hideMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets a new recording replace the error without hiding the window', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        render(<OverlayApp />);
+        await showError();
+        await screen.findByTestId('overlay-pill');
+
+        await act(async () => {
+            fireEvent(RECORDING_EVENT, { kind: 'recording', sessionId: 'session-2' });
+        });
+        expect(screen.getByTestId('overlay-pill')).toHaveAttribute('data-state', 'recording');
+
+        // The error's timer must not hide the pill that now shows a recording.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(9_000);
+        });
+        expect(screen.getByTestId('overlay-pill')).toHaveAttribute('data-state', 'recording');
+        expect(hideMock).not.toHaveBeenCalled();
+    });
+
+    it('shows the same error again when it happens a second time', async () => {
+        const { container } = render(<OverlayApp />);
+        await showError('No model selected');
+        domEvent.click(await screen.findByRole('button', { name: /dismiss/i }));
+        await waitFor(() => {
+            expect(container.querySelector('[data-testid="overlay-pill"]')).toBeNull();
+        });
+
+        await showError('No model selected');
+
+        expect(await screen.findByTestId('overlay-pill')).toHaveAttribute('data-state', 'error');
     });
 
     it('saves where the user dropped the chip: the monitor and the offset inside it', async () => {

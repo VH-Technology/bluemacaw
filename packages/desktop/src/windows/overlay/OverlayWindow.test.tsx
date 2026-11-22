@@ -36,6 +36,43 @@ describe('<OverlayWindow />', () => {
         expect(screen.queryByRole('button')).toBeNull();
     });
 
+    it('renders an error as a short summary, with the full message on hover', () => {
+        const message =
+            'xAI STT request failed: 403 {"code":"denied","error":"Your team has no credits yet. Buy some at https://console.x.ai."}';
+        render(<OverlayWindow state={{ kind: 'error', message }} />);
+        const pill = screen.getByTestId('overlay-pill');
+        expect(pill).toHaveAttribute('data-state', 'error');
+        expect(pill).toHaveAttribute('role', 'alert');
+        expect(pill).toHaveTextContent('xAI: Your team has no credits yet.');
+        expect(pill).not.toHaveTextContent('403');
+        expect(screen.getByRole('button', { name: /open bluemacaw/i })).toHaveAttribute(
+            'title',
+            message,
+        );
+        // Nothing to drag: the error pill is gone in a few seconds.
+        expect(screen.queryByTestId('overlay-drag-handle')).toBeNull();
+    });
+
+    it('lets the user dismiss an error or open the main window from it', async () => {
+        const onDismiss = vi.fn();
+        const onOpenMain = vi.fn();
+        const user = userEvent.setup();
+        render(
+            <OverlayWindow
+                state={{ kind: 'error', message: 'No model selected' }}
+                onDismiss={onDismiss}
+                onOpenMain={onOpenMain}
+            />,
+        );
+
+        await user.click(screen.getByRole('button', { name: /open bluemacaw/i }));
+        expect(onOpenMain).toHaveBeenCalledTimes(1);
+        expect(onDismiss).not.toHaveBeenCalled();
+
+        await user.click(screen.getByRole('button', { name: /dismiss/i }));
+        expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
     it('confines the drag region to the handle, not the whole pill (recording)', () => {
         render(<OverlayWindow state={{ kind: 'recording' }} />);
         const pill = screen.getByTestId('overlay-pill');

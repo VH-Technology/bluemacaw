@@ -102,6 +102,7 @@ pub fn run() {
             commands::get_apple_intelligence_status,
             commands::generate_with_apple_intelligence,
             commands::present_overlay,
+            commands::show_main_window,
             commands::duck_system_volume,
             commands::restore_system_volume,
         ])
