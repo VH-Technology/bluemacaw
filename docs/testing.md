@@ -154,6 +154,7 @@ From `packages/desktop/src-tauri`:
 cargo run --example type_probe -- plain
 cargo run --example type_probe -- long
 cargo run --example type_probe -- --text "anything you like"
+cargo run --example type_probe -- --paste --text "anything you like"
 ```
 
 The probe's host process needs Accessibility. Focus a disposable text field
@@ -173,6 +174,13 @@ does for a person typing. Two things failed, and the sender avoids both:
   xterm.js. The sender posts one character per event.
 - xterm.js drops an event for a character outside the Basic Multilingual
   Plane (most emoji). Such text is pasted instead.
+
+`--paste` runs the production paste path instead: it captures the general
+pasteboard, pastes the text with `Cmd+V`, and restores the pasteboard a
+second later. Copy something first, then check after the probe exits that
+the clipboard still holds it. Run this way into a native text view, a
+two-line string with an emoji arrived exactly and the pasteboard came back
+byte for byte.
 
 Not checked: Slack, Warp, VS Code and Cursor themselves, and anything on
 Windows.

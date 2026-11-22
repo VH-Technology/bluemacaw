@@ -1,7 +1,8 @@
-//! Opt-in native check of clipboard-free typing. Types a known string into
-//! the focused field with the production sender, so you can see whether a
-//! given app accepts text delivered as Unicode key events. See
-//! docs/testing.md.
+//! Opt-in native check of text insertion. Types a known string into the
+//! focused field with the production clipboard-free sender, so you can see
+//! whether a given app accepts text delivered as Unicode key events. With
+//! `--paste` it runs the production paste path instead, which borrows the
+//! clipboard and restores it. See docs/testing.md.
 
 #[cfg(not(target_os = "macos"))]
 fn main() {
@@ -18,8 +19,10 @@ fn main() -> Result<(), String> {
 mod macos {
     use bluemacaw_lib::audio::permissions::check_accessibility_permission;
     use bluemacaw_lib::audio::PermissionState;
-    use bluemacaw_lib::paste::{type_text_paced, TYPE_KEY_DELAY};
+    use bluemacaw_lib::clipboard::SystemPasteboard;
+    use bluemacaw_lib::paste::{type_text_paced, EnigoPaster, Paster, TYPE_KEY_DELAY};
     use std::process::Command;
+    use std::sync::Arc;
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -28,6 +31,7 @@ mod macos {
 
     const USAGE: &str = "Usage: cargo run --example type_probe -- [OPTIONS] [plain|long]
   --text TEXT                  type TEXT instead of a built-in case
+  --paste                      paste instead of typing: borrows the clipboard, then restores it
   --countdown SECS             seconds to focus the target field (default 5)
   --delay-ms N                 pause after each character (default: production value)
   --only-if-frontmost BUNDLE   type only if this app is frontmost when the countdown ends";
@@ -54,6 +58,7 @@ mod macos {
         let mut countdown = Duration::from_secs(5);
         let mut delay = TYPE_KEY_DELAY;
         let mut required_frontmost: Option<String> = None;
+        let mut paste = false;
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
             let mut value = |name: &str| args.next().ok_or(format!("{name} needs a value"));
@@ -63,6 +68,7 @@ mod macos {
                     return Ok(());
                 }
                 "--text" => text = Some(value("--text")?),
+                "--paste" => paste = true,
                 "--countdown" => {
                     let secs: f64 = value("--countdown")?
                         .parse()
@@ -89,26 +95,41 @@ mod macos {
                     .into(),
             );
         }
-        println!(
-            "Typing {} characters with {delay:?} between keys. Focus a disposable text field within {countdown:?}.",
-            text.chars().count()
-        );
+        if paste {
+            println!("Pasting {} characters.", text.chars().count());
+        } else {
+            println!(
+                "Typing {} characters with {delay:?} between keys.",
+                text.chars().count()
+            );
+        }
+        println!("Focus a disposable text field within {countdown:?}.");
         thread::sleep(countdown);
         if let Some(required) = &required_frontmost {
             let front = frontmost_bundle_id();
             if front.as_deref() != Some(required.as_str()) {
                 return Err(format!(
-                    "Not typing: frontmost app is {front:?}, expected {required}"
+                    "Not inserting: frontmost app is {front:?}, expected {required}"
                 ));
             }
         }
         let started = Instant::now();
-        type_text_paced(&text, delay)?;
-        let elapsed = started.elapsed();
-        // Events are delivered after this call returns; exiting now would
-        // drop the tail of the text.
-        thread::sleep(Duration::from_millis(500));
-        println!("Posted in {elapsed:?}. The field should now hold exactly:");
+        if paste {
+            EnigoPaster::new(Arc::new(SystemPasteboard)).paste_text(&text)?;
+            let elapsed = started.elapsed();
+            // The clipboard is restored a second after the keystroke, on a
+            // thread that dies with this process.
+            thread::sleep(Duration::from_millis(1500));
+            println!("Pasted in {elapsed:?}; the clipboard should hold what it held before.");
+        } else {
+            type_text_paced(&text, delay)?;
+            let elapsed = started.elapsed();
+            // Events are delivered after this call returns; exiting now would
+            // drop the tail of the text.
+            thread::sleep(Duration::from_millis(500));
+            println!("Posted in {elapsed:?}.");
+        }
+        println!("The field should now hold exactly:");
         println!("{text}");
         Ok(())
     }

@@ -27,6 +27,24 @@ pub fn general() -> Retained<NSPasteboard> {
     NSPasteboard::generalPasteboard()
 }
 
+/// Replace the pasteboard with ordinary text.
+pub fn write_text(pasteboard: &NSPasteboard, text: &str) -> Result<(), String> {
+    pasteboard.clearContents();
+    if pasteboard.setString_forType(&NSString::from_str(text), &NSString::from_str(PLAIN_TEXT)) {
+        Ok(())
+    } else {
+        Err("could not write to the clipboard".to_string())
+    }
+}
+
+/// The plain text on the pasteboard, if it holds any.
+pub fn read_text(pasteboard: &NSPasteboard) -> Result<String, String> {
+    pasteboard
+        .stringForType(&NSString::from_str(PLAIN_TEXT))
+        .map(|text| text.to_string())
+        .ok_or_else(|| "the clipboard holds no text".to_string())
+}
+
 /// `NSPasteboardAccessBehavior` values under which reading the pasteboard
 /// shows a permission alert (ask) or is refused (always deny).
 const ACCESS_ASK: isize = 1;
@@ -68,10 +86,7 @@ pub fn snapshot(pasteboard: &NSPasteboard) -> Option<Items> {
 /// Replace the pasteboard with `text`, flagged so clipboard managers do not
 /// record it.
 pub fn write_transient_text(pasteboard: &NSPasteboard, text: &str) -> Result<(), String> {
-    pasteboard.clearContents();
-    if !pasteboard.setString_forType(&NSString::from_str(text), &NSString::from_str(PLAIN_TEXT)) {
-        return Err("could not write the transcript to the clipboard".to_string());
-    }
+    write_text(pasteboard, text)?;
     let empty = NSData::with_bytes(&[]);
     for marker in SKIP_HISTORY_MARKERS {
         pasteboard.setData_forType(Some(&empty), &NSString::from_str(marker));

@@ -112,6 +112,37 @@ impl<R: Runtime> Clipboard for TauriClipboard<R> {
     }
 }
 
+/// The macOS general pasteboard, without a Tauri app behind it. The native
+/// probes use it to run the production paste path from a plain binary.
+#[cfg(target_os = "macos")]
+pub struct SystemPasteboard;
+
+#[cfg(target_os = "macos")]
+impl Clipboard for SystemPasteboard {
+    fn write_text(&self, text: &str) -> Result<(), String> {
+        macos::write_text(&macos::general(), text)
+    }
+
+    fn read_text(&self) -> Result<String, String> {
+        macos::read_text(&macos::general())
+    }
+
+    fn snapshot(&self) -> Option<ClipboardSnapshot> {
+        macos::snapshot(&macos::general()).map(|items| ClipboardSnapshot(SnapshotKind::Items(items)))
+    }
+
+    fn write_transient_text(&self, text: &str) -> Result<(), String> {
+        macos::write_transient_text(&macos::general(), text)
+    }
+
+    fn restore(&self, snapshot: ClipboardSnapshot) -> Result<(), String> {
+        match snapshot.0 {
+            SnapshotKind::Items(items) => macos::restore(&macos::general(), &items),
+            SnapshotKind::Text(text) => self.write_text(&text),
+        }
+    }
+}
+
 /// In-memory `Clipboard` for tests.
 pub struct InMemoryClipboard {
     inner: Mutex<String>,
