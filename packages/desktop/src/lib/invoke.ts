@@ -168,6 +168,12 @@ export const vox = {
     presentOverlay: () => invoke<void>('present_overlay'),
 
     /**
+     * Bring the main window to the front, restoring the Dock icon on macOS
+     * when it was hidden. Used by the overlay's error pill.
+     */
+    showMainWindow: () => invoke<void>('show_main_window'),
+
+    /**
      * Lower the system output volume while recording (saving the current
      * level), so background audio doesn't bleed into the mic. Best-effort
      * on the Rust side — no-ops if the OS volume can't be read.

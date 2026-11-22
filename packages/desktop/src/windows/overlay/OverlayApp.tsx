@@ -25,10 +25,18 @@ const SETUP_IDLE_EXIT_MS = 3000;
 // 12 Hz — smooth enough that the human eye reads it as continuous motion,
 // light enough that the Tauri invoke overhead is negligible.
 const LEVEL_POLL_INTERVAL_MS = 80;
+// Long enough to read three short lines, short enough that the pill does
+// not linger over the user's work.
+const ERROR_VISIBLE_MS = 8000;
 
-function determineOverlayState(rec: RecordingState, setupActive: boolean): OverlayState {
+function determineOverlayState(
+    rec: RecordingState,
+    setupActive: boolean,
+    errorDismissed: boolean,
+): OverlayState {
     if (rec.kind === 'recording') return { kind: 'recording' };
     if (rec.kind === 'transcribing') return { kind: 'transcribing' };
+    if (rec.kind === 'error' && !errorDismissed) return { kind: 'error', message: rec.message };
     if (setupActive) return { kind: 'positioning' };
     return { kind: 'hidden' };
 }
@@ -46,6 +54,43 @@ function useOverlayRecordingState(): RecordingState {
         };
     }, []);
     return state;
+}
+
+/**
+ * How long an error stays on the pill. The error state itself lasts until
+ * the next recording, but the pill only shows it for a few seconds, or
+ * until the user closes it. Each error event is a new state object, so the
+ * same failure happening again shows again.
+ *
+ * Taking the error down also hides the OS window, unless position setup is
+ * keeping the pill on screen: nothing else will, because the bridge only
+ * shows or hides the window on a state change.
+ */
+function useErrorDismissal(
+    recordingState: RecordingState,
+    setupActive: boolean,
+): { errorDismissed: boolean; dismissError: () => void } {
+    const [dismissed, setDismissed] = useState<RecordingState | null>(null);
+    const setupActiveRef = useRef(setupActive);
+    setupActiveRef.current = setupActive;
+
+    const dismiss = useCallback((state: RecordingState) => {
+        setDismissed(state);
+        if (setupActiveRef.current) return;
+        void getCurrentWindow()
+            .hide()
+            .catch((e) => console.warn('OverlayApp: hiding the error pill failed', e));
+    }, []);
+
+    const showing = recordingState.kind === 'error' && dismissed !== recordingState;
+    useEffect(() => {
+        if (!showing) return;
+        const timer = setTimeout(() => dismiss(recordingState), ERROR_VISIBLE_MS);
+        return () => clearTimeout(timer);
+    }, [showing, recordingState, dismiss]);
+
+    const dismissError = useCallback(() => dismiss(recordingState), [dismiss, recordingState]);
+    return { errorDismissed: !showing, dismissError };
 }
 
 /** Save the window position the user dragged the chip to as a placement. */
@@ -256,7 +301,8 @@ export function OverlayApp() {
     const { setupActive } = useOverlayPositionSetup(recordingState);
     const level = useOverlayRecordingLevel(recordingState);
     const sensitivity = useOverlaySensitivity(recordingState.kind);
-    const overlayState = determineOverlayState(recordingState, setupActive);
+    const { errorDismissed, dismissError } = useErrorDismissal(recordingState, setupActive);
+    const overlayState = determineOverlayState(recordingState, setupActive, errorDismissed);
     const { onDragStart } = useOverlayPositionPersistence(overlayState.kind !== 'hidden');
     return (
         <OverlayWindow
@@ -266,6 +312,13 @@ export function OverlayApp() {
             level={level}
             sensitivity={sensitivity}
             onDragStart={onDragStart}
+            onDismiss={dismissError}
+            onOpenMain={() => {
+                dismissError();
+                void vox
+                    .showMainWindow()
+                    .catch((e) => console.warn('OverlayApp: opening the main window failed', e));
+            }}
         />
     );
 }
