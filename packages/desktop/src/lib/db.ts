@@ -48,6 +48,8 @@ const APPLE_INTELLIGENCE_CLEANUP_ENABLED_KEY = 'transcript_cleanup_apple_intelli
 const APPLE_INTELLIGENCE_CLEANUP_PROMPT_KEY = 'transcript_cleanup_apple_intelligence_prompt';
 const APPLE_INTELLIGENCE_SPLIT_LONG_KEY = 'transcript_cleanup_apple_intelligence_split_long';
 const DEEPGRAM_SMART_FORMAT_KEY = 'deepgram_smart_format';
+const INSERTION_METHOD_KEY = 'insertion_method';
+const PASTE_LAST_HOTKEY_COMBO_KEY = 'paste_last_hotkey_combo';
 const SOFT_DELETE_GRACE_DAYS = 30;
 
 export interface ApiKeyRow {
@@ -613,6 +615,56 @@ export async function setCancelHotkeyCombo(combo: string): Promise<void> {
     await conn.execute(
         'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
         [CANCEL_HOTKEY_COMBO_KEY, combo],
+    );
+}
+
+/**
+ * How a finished transcript reaches the focused app.
+ *
+ * - `paste` puts it on the clipboard, presses the paste shortcut, then puts
+ *   the previous clipboard contents back.
+ * - `type` sends it as keystrokes and never touches the clipboard. Text with
+ *   a line break, tab or emoji is still pasted (see `paste/typing.rs`).
+ */
+export type InsertionMethod = 'type' | 'paste';
+
+export const DEFAULT_INSERTION_METHOD: InsertionMethod = 'paste';
+
+export async function getInsertionMethod(): Promise<InsertionMethod> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        INSERTION_METHOD_KEY,
+    ])) as { value: string }[];
+    const value = rows[0]?.value;
+    return value === 'type' || value === 'paste' ? value : DEFAULT_INSERTION_METHOD;
+}
+
+export async function setInsertionMethod(method: InsertionMethod): Promise<void> {
+    const conn = await db();
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [INSERTION_METHOD_KEY, method],
+    );
+}
+
+/** The optional "paste last transcription" shortcut, or null when unset. */
+export async function getPasteLastHotkeyCombo(): Promise<string | null> {
+    const conn = await db();
+    const rows = (await conn.select('SELECT value FROM app_state WHERE key = ?', [
+        PASTE_LAST_HOTKEY_COMBO_KEY,
+    ])) as { value: string }[];
+    return rows[0]?.value || null;
+}
+
+export async function setPasteLastHotkeyCombo(combo: string | null): Promise<void> {
+    const conn = await db();
+    if (combo === null) {
+        await conn.execute('DELETE FROM app_state WHERE key = ?', [PASTE_LAST_HOTKEY_COMBO_KEY]);
+        return;
+    }
+    await conn.execute(
+        'INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        [PASTE_LAST_HOTKEY_COMBO_KEY, combo],
     );
 }
 

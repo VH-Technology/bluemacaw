@@ -3,7 +3,7 @@
 bluemacaw needs up to three privacy grants on platforms that gate them:
 
 - **Microphone** — to record audio. Gated on macOS (TCC) and Windows.
-- **Accessibility** — to inject the synthetic `Cmd+V` / `Ctrl+V` paste keystroke. Gated on macOS only; Windows allows `SendInput` without a per-app grant.
+- **Accessibility** — to inject the synthetic keystrokes that insert the transcript (`Cmd+V` / `Ctrl+V`, or the typed characters). Gated on macOS only; Windows allows `SendInput` without a per-app grant.
 - **Input Monitoring** — only when the user picks the macOS Fn key as their hotkey. Gates `CGEventTap`, which is a distinct TCC bucket from Accessibility (`kTCCServiceListenEvent` vs `kTCCServiceAccessibility`).
 
 Per-platform implementations live under `packages/desktop/src-tauri/src/audio/permissions/`. The webview never speaks to the OS directly — it calls the Tauri commands `check_*_permission`, `request_*_permission`, and `open_settings_panel`.
@@ -20,12 +20,12 @@ Required pieces:
 2. **Usage description** — `NSMicrophoneUsageDescription` in `packages/desktop/src-tauri/Info.plist`, wired via `tauri.conf.json` → `bundle.macOS.infoPlist`. Without this string macOS rejects the request without showing a prompt.
 3. **Runtime trigger** — the webview calls `vox.requestMicrophonePermission()`. The recording controller deliberately gates on permission *before* cpal opens an input stream (see `recording-controller.ts`), because cpal's implicit prompt path is unreliable on production-signed bundles.
 
-### Accessibility (paste keystroke)
+### Accessibility (inserting the transcript)
 
 **Granted via:** TCC, prompted on first attempt to post a synthetic keyboard event via `CGEventPost`.
 
 - **Runtime trigger** — `audio::permissions::macos::request_accessibility_permission` calls `AXIsProcessTrustedWithOptions` with `kAXTrustedCheckOptionPrompt: true`. macOS opens System Settings → Privacy & Security → Accessibility; the user must flip the toggle.
-- **Why:** the paste step uses `enigo` which lowers to `CGEventPost`. macOS gates synthetic event injection on Accessibility.
+- **Why:** both insertion methods post synthetic keyboard events through `CGEventPost` — the paste shortcut via `enigo`, typed characters directly. macOS gates synthetic event injection on Accessibility.
 - **Bundle scope:** per `tauri.conf.json` `identifier`, i.e. `com.vhtechnology.bluemacaw`.
 - **Polling vs. prompting:** `check_accessibility_permission` (non-prompting) is what the onboarding poll uses every second; `check_accessibility_permission_prompting` (rate-limited prompt) is what the explicit "Grant Accessibility" button calls.
 

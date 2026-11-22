@@ -359,6 +359,7 @@ name = "bluemacaw"
 version = "1.2.3"
 dependencies = [
  "alsa",
+ "arboard",
  "block2 0.6.2",
  "chrono",
  "core-foundation 0.10.1",

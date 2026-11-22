@@ -82,12 +82,14 @@ pub fn run() {
             commands::set_secret,
             commands::delete_secret,
             commands::list_audio_input_devices,
-            commands::paste_text,
+            commands::insert_text,
             commands::register_hotkey,
             commands::unregister_hotkey,
             commands::register_cancel_hotkey,
             commands::unregister_cancel_hotkey,
             commands::validate_cancel_hotkey,
+            commands::register_paste_last_hotkey,
+            commands::unregister_paste_last_hotkey,
             commands::get_fn_usage_type,
             commands::set_fn_usage_type,
             commands::get_platform_info,
@@ -112,11 +114,12 @@ pub fn run() {
             let app_state = AppState {
                 audio: Box::new(MicrophoneSource::new()),
                 vault: Box::new(KeyringVault::new()),
-                // `Arc` so the async `paste_text` command can clone the paster
-                // into a `spawn_blocking` task without an extra trait surface.
+                // `Arc` so the paster can be shared with other contexts
+                // without an extra trait surface.
                 paster: Arc::new(EnigoPaster::new(clipboard)),
                 current_hotkey: Mutex::new(None),
                 current_cancel_hotkey: Mutex::new(None),
+                current_paste_last_hotkey: Mutex::new(None),
                 saved_volume: Mutex::new(None),
                 #[cfg(target_os = "macos")]
                 fn_tap: Mutex::new(None),

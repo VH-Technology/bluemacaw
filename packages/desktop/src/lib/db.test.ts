@@ -31,12 +31,14 @@ import {
     getHistoryLastSweep,
     getHistoryStats,
     getHotkeyCombo,
+    getInsertionMethod,
     getModelConfigWithApiKey,
     getOriginalFnUsageType,
     getOverlayEnabled,
     getOverlayPlacement,
     getOverlayPosition,
     getOverlaySensitivity,
+    getPasteLastHotkeyCombo,
     getRetentionDays,
     getSelectedMicDeviceId,
     getTheme,
@@ -58,10 +60,12 @@ import {
     setDeepgramSmartFormatEnabled,
     setHistoryLastSweep,
     setHotkeyCombo,
+    setInsertionMethod,
     setOriginalFnUsageType,
     setOverlayEnabled,
     setOverlayPlacement,
     setOverlaySensitivity,
+    setPasteLastHotkeyCombo,
     setRetentionDays,
     setSelectedMicDeviceId,
     setTheme,
@@ -557,6 +561,39 @@ describe('db.deepgramSmartFormat', () => {
         await setDeepgramSmartFormatEnabled(false);
 
         await expect(getAppleIntelligenceSplitLongEnabled()).resolves.toBe(true);
+    });
+});
+
+describe('db.insertionMethod', () => {
+    it('pastes and restores the clipboard until the user chooses otherwise', async () => {
+        await expect(getInsertionMethod()).resolves.toBe('paste');
+    });
+
+    it('round-trips the chosen method', async () => {
+        await setInsertionMethod('type');
+        await expect(getInsertionMethod()).resolves.toBe('type');
+
+        await setInsertionMethod('paste');
+        await expect(getInsertionMethod()).resolves.toBe('paste');
+    });
+
+    it('falls back to the default when the stored value is not a known method', async () => {
+        await setInsertionMethod('teleport' as never);
+        await expect(getInsertionMethod()).resolves.toBe('paste');
+    });
+});
+
+describe('db.pasteLastHotkeyCombo', () => {
+    it('is unset by default', async () => {
+        await expect(getPasteLastHotkeyCombo()).resolves.toBeNull();
+    });
+
+    it('round-trips a combo and clears it again', async () => {
+        await setPasteLastHotkeyCombo('Ctrl+Shift+V');
+        await expect(getPasteLastHotkeyCombo()).resolves.toBe('Ctrl+Shift+V');
+
+        await setPasteLastHotkeyCombo(null);
+        await expect(getPasteLastHotkeyCombo()).resolves.toBeNull();
     });
 });
 

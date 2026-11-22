@@ -25,6 +25,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 vi.mock('@/lib/db', () => ({
+    DEFAULT_INSERTION_METHOD: 'paste',
     getCancelHotkeyCombo: vi.fn(async () => 'Escape'),
 }));
 
@@ -37,8 +38,12 @@ vi.mock('@/lib/invoke', () => ({
 
 import { getCancelHotkeyCombo } from '@/lib/db';
 import { vox } from '@/lib/invoke';
-import { EVT_SHORTCUT_CANCEL } from '@/lib/markers';
-import type { RecordingDeps, RecordingState } from '@/lib/recording-controller';
+import { EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_PASTE_LAST } from '@/lib/markers';
+import {
+    type RecordingDeps,
+    type RecordingState,
+    __resetLastTranscriptForTests,
+} from '@/lib/recording-controller';
 import { SHORTCUT_EVENT, useHotkeyRecording } from './useHotkeyRecording';
 
 function makeDeps(): RecordingDeps {
@@ -47,7 +52,7 @@ function makeDeps(): RecordingDeps {
             startRecording: vi.fn(async () => 'session-1'),
             stopRecording: vi.fn(async () => [82, 73, 70, 70]),
             cancelRecording: vi.fn(async () => undefined),
-            pasteText: vi.fn(async () => undefined),
+            insertText: vi.fn(async () => undefined),
             checkMicrophonePermission: vi.fn(async () => 'Granted' as const),
             requestMicrophonePermission: vi.fn(async () => 'Granted' as const),
             duckSystemVolume: vi.fn(async () => undefined),
@@ -61,6 +66,8 @@ function makeDeps(): RecordingDeps {
         saveTranscription: vi.fn(async () => undefined),
         resolveActiveConfig: vi.fn(async () => null),
         getSelectedMicDeviceId: vi.fn(async () => null),
+        getInsertionMethod: vi.fn(async () => 'paste' as const),
+        getLastTranscript: vi.fn(async () => null),
     };
 }
 
@@ -69,6 +76,7 @@ function makePublish() {
 }
 
 beforeEach(() => {
+    __resetLastTranscriptForTests();
     listenMock.mockClear();
     vi.mocked(getCancelHotkeyCombo).mockClear();
     vi.mocked(getCancelHotkeyCombo).mockResolvedValue('Escape');
@@ -111,7 +119,7 @@ describe('useHotkeyRecording', () => {
             fireEvent();
         });
         await waitFor(() => expect(result.current.state.kind).toBe('idle'));
-        expect(deps.vox.pasteText).toHaveBeenCalledWith('hi');
+        expect(deps.vox.insertText).toHaveBeenCalledWith('hi', 'paste');
     });
 
     it('surfaces errors as error state', async () => {
@@ -144,6 +152,35 @@ describe('useHotkeyRecording', () => {
         });
     });
 
+    it('paste-last event inserts the newest transcription again', async () => {
+        const deps = makeDeps();
+        if (!deps.getLastTranscript) throw new Error('missing dep');
+        vi.mocked(deps.getLastTranscript).mockResolvedValue('said earlier');
+        renderHook(() => useHotkeyRecording({ deps, publish: makePublish() }));
+        expect(listenMock.mock.calls.map((c) => c[0])).toContain(EVT_SHORTCUT_PASTE_LAST);
+
+        await act(async () => {
+            fireEvent(EVT_SHORTCUT_PASTE_LAST);
+        });
+
+        await waitFor(() =>
+            expect(deps.vox.insertText).toHaveBeenCalledWith('said earlier', 'paste'),
+        );
+    });
+
+    it('paste-last event with nothing to paste publishes an error', async () => {
+        const deps = makeDeps();
+        const publish = makePublish();
+        const { result } = renderHook(() => useHotkeyRecording({ deps, publish }));
+
+        await act(async () => {
+            fireEvent(EVT_SHORTCUT_PASTE_LAST);
+        });
+
+        await waitFor(() => expect(result.current.state.kind).toBe('error'));
+        expect(publish.mock.calls.at(-1)?.[0].kind).toBe('error');
+    });
+
     it('subscribes to the cancel event in addition to the toggle event', () => {
         renderHook(() => useHotkeyRecording({ deps: makeDeps(), publish: makePublish() }));
         const subscribedEvents = listenMock.mock.calls.map((c) => c[0]);
@@ -165,7 +202,7 @@ describe('useHotkeyRecording', () => {
         await waitFor(() => expect(result.current.state.kind).toBe('idle'));
         expect(deps.vox.cancelRecording).toHaveBeenCalledWith('session-1');
         expect(deps.transcribe).not.toHaveBeenCalled();
-        expect(deps.vox.pasteText).not.toHaveBeenCalled();
+        expect(deps.vox.insertText).not.toHaveBeenCalled();
         expect(deps.vox.stopRecording).not.toHaveBeenCalled();
     });
 

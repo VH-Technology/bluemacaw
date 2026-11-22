@@ -50,6 +50,11 @@ pub const EVT_SHORTCUT_TOGGLE: &str = "bluemacaw://shortcut-toggle";
 /// the same code path as the hotkey.
 pub const EVT_SHORTCUT_CANCEL: &str = "bluemacaw://shortcut-cancel";
 
+/// Event Rust emits when the optional "paste last transcription" global
+/// shortcut is released. The main-window hook listens and inserts the most
+/// recent transcript again, using the insertion method from Settings.
+pub const EVT_SHORTCUT_PASTE_LAST: &str = "bluemacaw://shortcut-paste-last";
+
 /// Event Rust emits during a realtime capture session with each chunk of
 /// 16 kHz mono i16 PCM produced. Payload shape is `{ sessionId, samples,
 /// sampleRate }` (see `commands::AudioChunkEvent`). The JS-side streaming

@@ -1,6 +1,6 @@
 # Architecture
 
-bluemacaw is a cross-platform desktop app built on **Tauri 2** (Rust + WebView). A global keyboard shortcut toggles recording; the captured audio is sent to one of ten pluggable STT providers via the Vercel AI SDK; the transcribed text is copied to the clipboard and pasted into the focused application via a synthetic `Cmd+V` (or `Ctrl+V`) keystroke.
+bluemacaw is a cross-platform desktop app built on **Tauri 2** (Rust + WebView). A global keyboard shortcut toggles recording; the captured audio is sent to one of ten pluggable STT providers via the Vercel AI SDK; the transcribed text is inserted into the focused application, either by a paste that borrows the clipboard and then restores it, or by typing it as keystrokes with no clipboard involved (the user chooses in Settings).
 
 This document describes the *as-built* architecture. The original plan is `docs/superpowers/plans/2026-05-03-plan-b-desktop-app.md`, extended mid-flight by `docs/superpowers/plans/2026-05-10-recording-settings-and-history.md`. Where the as-built diverges from those plans, this doc is the source of truth.
 
@@ -40,9 +40,12 @@ There is no Node runtime in the renderer. There is no preload script. Tauri's ca
 | `shortcut/macos_fn.rs` | macOS `CGEventTap`-based Fn-key listener. |
 | `tray/mod.rs` | Tray icon + menu (built programmatically; no PNG asset). Emits `TrayEvent::Open` / `Quit`. |
 | `overlay_panel.rs` | macOS-only. Converts the overlay `NSWindow` into a non-activating `NSPanel` so clicks on the recording pill don't steal focus from the app being dictated into. The class swap calls `object_setClass` directly: objc2's `set_class` debug-asserts equal instance sizes, which aborted debug builds on macOS 27, where tao's window class is larger than `NSPanel`. |
-| `clipboard/mod.rs` | `Clipboard` trait + `TauriClipboard` (production, via `tauri-plugin-clipboard-manager`) + `InMemoryClipboard` (test). |
-| `paste/mod.rs` | `Paster` trait + `EnigoPaster` (writes clipboard, posts `Cmd/Ctrl+V` via `enigo`). |
-| `paste/macos.rs` | macOS-only Enigo 0.6.1 sender: private CoreGraphics source, explicit Command flags, tagged events, and Command-release cleanup on failure. Windows uses Enigo 0.2.1. |
+| `clipboard/mod.rs` | `Clipboard` trait + `TauriClipboard` (production, via `tauri-plugin-clipboard-manager`) + `InMemoryClipboard` (test). Beyond read/write, the trait can capture the clipboard (`snapshot`), write text flagged to stay out of clipboard history (`write_transient_text`), and put a snapshot back (`restore`). |
+| `clipboard/macos.rs` | Lossless capture and restore of every item and representation on `NSPasteboard`; the transient write adds the nspasteboard.org markers clipboard managers skip. |
+| `clipboard/portable.rs` | Windows capture and restore through `arboard`: files, text with its HTML form, or an image. The transient write sets the Windows formats that keep content out of clipboard history and cloud sync. |
+| `paste/mod.rs` | `Paster` trait + `EnigoPaster`, and `insert_text`, which picks typing or pasting. A paste captures the clipboard, writes the transcript, posts `Cmd/Ctrl+V` via `enigo`, and restores the clipboard a second later. |
+| `paste/typing.rs` | Decides when text must be pasted instead of typed (a line break, tab or emoji). |
+| `paste/macos.rs` | macOS-only senders. Paste: Enigo 0.6.1 with a private CoreGraphics source, explicit Command flags, tagged events, and Command-release cleanup on failure. Typing: one CoreGraphics key event per character, carrying the character as its Unicode string. Windows uses Enigo 0.2.1 for both. |
 
 Migration SQL lives in `packages/desktop/src-tauri/migrations/` (`0001_init.sql`, `0002_provider_configs.sql`).
 
@@ -103,11 +106,13 @@ Every webview-callable Rust function lives in `commands.rs` and is mirrored on `
 | `get_secret` | `secretId: string` | `string \| null` | `secretId` is an opaque stable string (an `api_keys.id` UUID, not the provider id). |
 | `set_secret` | `secretId: string, key: string` | `()` | |
 | `delete_secret` | `secretId: string` | `()` | |
-| `paste_text` | `text: string` | `()` | Writes the clipboard and posts `Cmd/Ctrl+V` via `enigo`. |
+| `insert_text` | `text: string, method: "type" \| "paste"` | `()` | Delivers a transcript to the focused app by the chosen method. Text with a line break, tab or emoji is pasted whatever the method. |
 | `register_hotkey` | `combo: string` | `string` | Combo accepts `"Fn"` (macOS only) or `"Mod+Mod+Key"` notation. Returns the normalized combo string. |
 | `unregister_hotkey` | — | `()` | |
 | `register_cancel_hotkey` | `combo: string` | `string` | Independent of the toggle hotkey. |
 | `unregister_cancel_hotkey` | — | `()` | |
+| `register_paste_last_hotkey` | `combo: string` | `string` | Optional shortcut that inserts the most recent transcription again. Emits `bluemacaw://shortcut-paste-last` on release. |
+| `unregister_paste_last_hotkey` | — | `()` | |
 | `get_fn_usage_type` | — | `number \| null` | macOS only. Reads `AppleFnUsageType`. |
 | `set_fn_usage_type` | `value: number` | `()` | macOS only. Writes `AppleFnUsageType` and restarts cfprefsd. |
 | `show_main_window` | — | `()` | Brings the main window to the front (and restores the Dock icon on macOS). The overlay calls it when the user clicks an error on the pill. |
@@ -174,13 +179,13 @@ sequenceDiagram
             Cleanup-->>Overlay: cleaned text
         end
     end
-    Overlay->>Cmd: invoke("paste_text", { text })
-    Cmd->>Paster: paste_text(&text)
-    Paster->>Focused: synthetic Cmd+V / Ctrl+V
+    Overlay->>Cmd: invoke("insert_text", { text, method })
+    Cmd->>Paster: insert_text(&text, method)
+    Paster->>Focused: typed characters, or synthetic Cmd+V / Ctrl+V
     Overlay->>Overlay: db.saveTranscription(...)
 ```
 
-Text cleanup is disabled by default. When enabled in Settings, `cleanup-transcript.ts` resolves the selected OpenAI key just in time, removes speech fillers, and strips a matching pair of quotes only when they wrap the entire result. Cleanup errors and timeouts fail open to the raw transcript. Both paste and history use the resulting final text. The nullable OpenAI key id is stored in the generic `app_state` table under `transcript_cleanup_openai_api_key_id`; the configurable model and prompt are stored together under `transcript_cleanup_options`, with `gpt-4o-mini` and the built-in safe cleanup prompt used when that row is absent or malformed. No API key material is stored in SQLite.
+Text cleanup is disabled by default. When enabled in Settings, `cleanup-transcript.ts` resolves the selected OpenAI key just in time, removes speech fillers, and strips a matching pair of quotes only when they wrap the entire result. Cleanup errors and timeouts fail open to the raw transcript. Both insertion and history use the resulting final text. The nullable OpenAI key id is stored in the generic `app_state` table under `transcript_cleanup_openai_api_key_id`; the configurable model and prompt are stored together under `transcript_cleanup_options`, with `gpt-4o-mini` and the built-in safe cleanup prompt used when that row is absent or malformed. No API key material is stored in SQLite.
 
 On macOS 27 and later, Settings → Cleanup also offers an **On-device** engine that runs Apple's on-device foundation model (the model behind Apple Intelligence). At most one engine is on at a time: `transcript_cleanup_apple_intelligence_enabled` in `app_state` turns it on, and enabling either engine turns the other off in `db.ts`. Its prompt lives under `transcript_cleanup_apple_intelligence_prompt`. The default prompt, tuned for the small on-device model, fixes grammar and removes fillers, and ends with worked examples. `cleanup-transcript.ts` sends that prompt as session instructions and wraps the transcript in `<transcript>` tags, so the model edits dictated questions and requests instead of answering them. The prompt field is editable only while cleanup is on.
 
@@ -190,9 +195,18 @@ The on-device model is weak on transcripts that arrive without punctuation. The 
 
 `FoundationModels` is Swift-only, and linking Swift into the main binary (deployment target 10.15) would require back-deploying the Swift concurrency runtime. So `build.rs` compiles a small sidecar executable against the macOS SDK instead, targeting macOS 26 and arm64 (macOS 27 is Apple silicon only). Tauri bundles it next to the main binary. `apple_intelligence/mod.rs` never launches it below macOS 27. The transcript goes over stdin, never argv, so it doesn't appear in `ps`. When built with an SDK that lacks `FoundationModels` (Xcode < 26), the sidecar compiles to a stub that reports `unsupported-build`, and Settings hides the engine.
 
-If paste fails (e.g. macOS Accessibility revoked, or Windows synthetic keystrokes fail), the history row is still saved. Text already written to the clipboard remains available for manual paste; the macOS Accessibility preflight can fail before the clipboard write. The error marker is translated into a UI-friendly message in `recording-controller.ts`.
+### Inserting the transcript
 
-On macOS, paste uses a private CoreGraphics event source and explicit Command flags on V-down/V-up, so physical mouse/key input cannot clear the shortcut's synthetic modifier. `PASTE_EVENT_MARKER` tags these events; the Fn/chord/double-tap listeners ignore them before updating their state. The sender attempts Command release even when V fails and does not retry a potentially completed paste. The Tauri command remains synchronous for HIToolbox keyboard-layout lookup, and the 80 ms clipboard-settle delay is independent of modifier handling. See the native paste probe in [`testing.md`](./testing.md) for OS-level validation.
+Settings → Insertion chooses between two methods, stored in `app_state` under `insertion_method` (default `paste`):
+
+- **Paste** captures what is on the clipboard, writes the transcript flagged to stay out of clipboard history, posts `Cmd/Ctrl+V`, and restores the captured contents one second later. The restore is skipped if the clipboard no longer holds the transcript, because the user copied something else in the meantime. A second paste that arrives before the first restore keeps owing the user's contents, not the earlier transcript. On macOS the capture is lossless (every item, every representation). On Windows it covers files, text with its HTML form, or an image; anything else is not captured and the transcript stays on the clipboard. Linux does not capture at all.
+- **Type** sends the transcript as keyboard events and never touches the clipboard. It is available on macOS and Windows. Each event carries one character: longer strings per event work in ordinary text fields, but Chromium treats them as input-method text and xterm.js (the terminal in VS Code, Cursor and other Electron apps) then emits them several times over. Text containing a line break, tab or emoji is pasted instead, because a typed Return sends the message in chat apps, a typed Tab moves focus, and xterm.js drops key events for characters outside the Basic Multilingual Plane. Typed text passes through the receiving app's own typing behaviour, such as smart quotes.
+
+The optional "paste last transcription" shortcut (`paste_last_hotkey_combo` in `app_state`, unset by default) inserts the most recent transcript again by the same method. The transcript comes from the current app session, or from the newest history row after a restart. The shortcut fires on release so held keys do not combine with the synthetic events.
+
+If insertion fails (e.g. macOS Accessibility revoked, or Windows synthetic keystrokes fail), the history row is still saved and the transcript is left on the clipboard for a manual paste. The error marker is translated into a UI-friendly message in `recording-controller.ts`.
+
+On macOS, paste uses a private CoreGraphics event source and explicit Command flags on V-down/V-up, so physical mouse/key input cannot clear the shortcut's synthetic modifier. `PASTE_EVENT_MARKER` tags these events; the Fn/chord/double-tap listeners ignore them before updating their state. The sender attempts Command release even when V fails and does not retry a potentially completed paste. The Tauri command remains synchronous for HIToolbox keyboard-layout lookup, and the 80 ms clipboard-settle delay is independent of modifier handling. Typed characters use the same private source, explicit empty flags and marker. See the native paste and typing probes in [`testing.md`](./testing.md) for OS-level validation.
 
 For *why* each privileged step is gated, see [`permissions.md`](./permissions.md). For how the key reaches `experimental_transcribe`, see [`secrets.md`](./secrets.md). For adding a tenth provider, see [`providers.md`](./providers.md).
 

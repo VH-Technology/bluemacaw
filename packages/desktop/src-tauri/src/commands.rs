@@ -1,11 +1,14 @@
 use crate::apple_intelligence::AppleIntelligenceStatus;
 use crate::audio::{AudioDeviceInfo, AudioSource, CaptureSession, PermissionState, microphone::MicrophoneSource, resampler::Resampler};
-use crate::markers::{ERR_ACCESSIBILITY_REQUIRED, EVT_AUDIO_CHUNK, EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_TOGGLE};
+use crate::markers::{
+    ERR_ACCESSIBILITY_REQUIRED, EVT_AUDIO_CHUNK, EVT_SHORTCUT_CANCEL, EVT_SHORTCUT_PASTE_LAST,
+    EVT_SHORTCUT_TOGGLE,
+};
 #[cfg(target_os = "macos")]
 use crate::markers::ERR_INPUT_MONITORING_REQUIRED;
 #[cfg(target_os = "linux")]
 use crate::markers::ERR_WAYLAND_PASTE_UNSUPPORTED;
-use crate::paste::Paster;
+use crate::paste::{InsertMethod, Paster};
 use crate::platform::is_wayland_session;
 use tokio_util::sync::CancellationToken;
 use crate::secrets::Vault;
@@ -26,7 +29,7 @@ use crate::shortcut::{ShortcutManager, macos_chord::MacOsChordTap, macos_fn::Mac
 ///
 /// Each field is a trait object so production wiring (real impls) can be
 /// swapped for in-memory mocks in tests. The clipboard is owned by the
-/// `Paster` (per spec §6.10 — `paste_text` combines clipboard write +
+/// `Paster` (per spec §6.10 — a paste combines clipboard write +
 /// keystroke), so it does not appear here as a separate field.
 ///
 /// `current_hotkey` tracks the currently registered global shortcut so
@@ -36,8 +39,8 @@ pub struct AppState {
     pub audio: Box<dyn AudioSource>,
     pub vault: Box<dyn Vault>,
     /// `Arc` (not `Box`) so the paster can be cloned into other contexts
-    /// if needed. The paste command itself is sync — see the comment on
-    /// [`paste_text`] for why we don't dispatch the keystroke off the
+    /// if needed. The insert command itself is sync — see the comment on
+    /// [`insert_text`] for why we don't dispatch the keystroke off the
     /// Tauri command thread on macOS.
     pub paster: Arc<dyn Paster>,
     pub current_hotkey: Mutex<Option<Shortcut>>,
@@ -46,6 +49,9 @@ pub struct AppState {
     /// the Tauri global-shortcut plugin tracks each `Shortcut` handle
     /// separately, so two registrations coexist without conflict.
     pub current_cancel_hotkey: Mutex<Option<Shortcut>>,
+    /// The optional "paste last transcription" global shortcut. `None` until
+    /// the user sets one in Settings.
+    pub current_paste_last_hotkey: Mutex<Option<Shortcut>>,
     /// System output volume captured by `duck_system_volume` when a recording
     /// starts, so `restore_system_volume` can put it back exactly. `None`
     /// when not currently ducked.
@@ -657,14 +663,18 @@ pub fn delete_secret(state: State<'_, AppState>, secret_id: String) -> Result<()
     state.vault.delete(&secret_id).map_err(|e| e.to_string())
 }
 
-/// Combined clipboard write + paste keystroke (Cmd+V on macOS, Ctrl+V
-/// elsewhere). The paster owns the clipboard internally per spec §6.10.
+/// Deliver a finished transcript to the focused app.
 ///
-/// On macOS, `enigo` synthesises the keystroke via `CGEventPost`, which silently
-/// no-ops when the bound process lacks Accessibility permission. We probe the
-/// permission up front and return a structured `accessibility-required:` error
-/// so the React side can surface a useful message instead of "text on
-/// clipboard but nothing happened".
+/// `method` is the user's choice from Settings: `"type"` sends the text as
+/// keyboard events and leaves the clipboard alone, `"paste"` borrows the
+/// clipboard for a Cmd/Ctrl+V and then puts its contents back. Text with a
+/// line break or tab is always pasted — see [`crate::paste::insert_text`].
+///
+/// On macOS both paths post events via `CGEventPost`, which silently no-ops
+/// when the process lacks Accessibility permission. We probe the permission
+/// up front and return a structured `accessibility-required:` error so the
+/// React side can surface a useful message. The transcript is copied to the
+/// clipboard first, so the user can still paste it by hand.
 ///
 /// The command MUST be sync. Tauri's sync command runner dispatches the
 /// call on a thread context that AppKit/HIToolbox accepts; if we made the
@@ -672,34 +682,39 @@ pub fn delete_secret(state: State<'_, AppState>, secret_id: String) -> Result<()
 /// enigo's `TSMGetInputSourceProperty` call inside `Enigo::key()` would hit
 /// `dispatch_assert_queue_fail` on macOS 14+ and abort the process. The
 /// ~80 ms `PBOARD_SETTLE_DELAY` sleep is short enough that holding a Tauri
-/// command thread for that duration is fine in practice. The JS-visible
-/// contract (command name, `text` arg, error shapes including the
-/// `accessibility-required:` and `wayland-paste-unsupported:` markers) is
-/// unchanged.
+/// command thread for that duration is fine in practice; the clipboard
+/// restore runs later on its own thread.
 #[tauri::command]
-pub fn paste_text(state: State<'_, AppState>, text: String) -> Result<(), String> {
+pub fn insert_text(
+    state: State<'_, AppState>,
+    text: String,
+    method: InsertMethod,
+) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let perm = crate::audio::permissions::check_accessibility_permission();
         if perm != crate::audio::PermissionState::Granted {
             log::warn!(
-                "paste_text: Accessibility permission not granted; keystroke will silently no-op"
+                "insert_text: Accessibility permission not granted; keystrokes would silently no-op"
             );
+            if let Err(e) = state.paster.copy_text(&text) {
+                log::error!("insert_text: could not copy the transcript: {e}");
+            }
             return Err(format!(
-                "{ERR_ACCESSIBILITY_REQUIRED} synthetic paste needs Accessibility. Grant bluemacaw in System Settings → Privacy & Security → Accessibility, then try again."
+                "{ERR_ACCESSIBILITY_REQUIRED} inserting text needs Accessibility. Grant bluemacaw in System Settings → Privacy & Security → Accessibility, then try again."
             ));
         }
     }
     log::info!(
-        "paste_text: dispatching {} chars to clipboard + paste keystroke",
+        "insert_text: delivering {} chars (method: {method:?})",
         text.chars().count(),
     );
-    let result = state.paster.paste_text(&text);
+    let result = crate::paste::insert_text(state.paster.as_ref(), &text, method);
     #[cfg(target_os = "linux")]
     if let Err(ref e) = result {
         if e.starts_with(ERR_WAYLAND_PASTE_UNSUPPORTED) {
             log::warn!(
-                "paste_text: Wayland fallback engaged; clipboard write succeeded but synthetic Ctrl+V was skipped"
+                "insert_text: Wayland fallback engaged; clipboard write succeeded but synthetic Ctrl+V was skipped"
             );
         }
     }
@@ -950,6 +965,58 @@ pub fn unregister_cancel_hotkey(
 ) -> Result<(), String> {
     let mut current = state
         .current_cancel_hotkey
+        .lock()
+        .map_err(|e| e.to_string())?;
+    if let Some(prev) = current.take() {
+        app.global_shortcut()
+            .unregister(prev)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Register the global shortcut that inserts the most recent transcription
+/// again. Emits `EVT_SHORTCUT_PASTE_LAST`; the frontend does the insertion.
+///
+/// The event fires when the shortcut is *released*, not pressed: the text
+/// is delivered as synthetic key events, and a key the user is still holding
+/// would combine with them.
+///
+/// The strict combo parser is used (a modifier is required), because this
+/// shortcut is held for as long as the app runs.
+#[tauri::command]
+pub fn register_paste_last_hotkey(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    combo: String,
+) -> Result<String, String> {
+    let shortcut = parse_combo(&combo).map_err(|e| e.to_string())?;
+    let mut current = state
+        .current_paste_last_hotkey
+        .lock()
+        .map_err(|e| e.to_string())?;
+    if let Some(prev) = current.take() {
+        let _ = app.global_shortcut().unregister(prev);
+    }
+    let app_clone = app.clone();
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |_, _, event| {
+            if event.state() == ShortcutState::Released {
+                let _ = app_clone.emit(EVT_SHORTCUT_PASTE_LAST, ());
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    *current = Some(shortcut);
+    Ok(format_combo(&shortcut))
+}
+
+#[tauri::command]
+pub fn unregister_paste_last_hotkey(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let mut current = state
+        .current_paste_last_hotkey
         .lock()
         .map_err(|e| e.to_string())?;
     if let Some(prev) = current.take() {

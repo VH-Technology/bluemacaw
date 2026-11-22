@@ -1,6 +1,7 @@
 import {
     getHistoryLastSweep,
     getHotkeyCombo,
+    getPasteLastHotkeyCombo,
     getRetentionDays,
     purgeOlderThan,
     setHistoryLastSweep,
@@ -23,6 +24,16 @@ export default function App() {
                 await vox.registerHotkey(combo);
             } catch (e) {
                 console.error('initial registerHotkey failed', e);
+            }
+        })();
+        // The optional "paste last transcription" shortcut, when the user
+        // has set one.
+        void (async () => {
+            try {
+                const combo = await getPasteLastHotkeyCombo();
+                if (combo) await vox.registerPasteLastHotkey(combo);
+            } catch (e) {
+                console.error('initial registerPasteLastHotkey failed', e);
             }
         })();
         // The cancel hotkey is intentionally NOT registered here. Its

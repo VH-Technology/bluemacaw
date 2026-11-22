@@ -141,6 +141,42 @@ selection replacement and non-US/Dvorak layouts. Test the actual app with Fn,
 modifier chords, and double-tap Command to confirm paste never toggles recording
 and physical modifiers continue working afterward.
 
+## macOS native typing probe
+
+`packages/desktop/src-tauri/examples/type_probe.rs` types a known string into
+the focused field with the production clipboard-free sender, so you can see
+whether a given app accepts text delivered as Unicode key events. It is an
+opt-in diagnostic, not part of the unattended test suite.
+
+From `packages/desktop/src-tauri`:
+
+```sh
+cargo run --example type_probe -- plain
+cargo run --example type_probe -- long
+cargo run --example type_probe -- --text "anything you like"
+```
+
+The probe's host process needs Accessibility. Focus a disposable text field
+before the five-second countdown ends, then compare the field with the text
+the probe prints. `--only-if-frontmost <bundle id>` makes it refuse to type
+unless that app is frontmost, which guards against typing into the wrong
+window.
+
+What was checked when the typing method was added (macOS 27.2, events posted
+straight to the target process): a native `NSTextView`, Chrome's `<textarea>`
+and `contenteditable`, the Monaco editor, xterm.js, and Terminal.app all
+received the text exactly, including accents and curly quotes. A
+`contenteditable` turns a trailing space into a non-breaking space, as it
+does for a person typing. Two things failed, and the sender avoids both:
+
+- More than one character per event is emitted several times over by
+  xterm.js. The sender posts one character per event.
+- xterm.js drops an event for a character outside the Basic Multilingual
+  Plane (most emoji). Such text is pasted instead.
+
+Not checked: Slack, Warp, VS Code and Cursor themselves, and anything on
+Windows.
+
 ## Spec cross-reference
 
 - §9 — 4-layer testability architecture, mocking boundaries, audio fixtures, coverage policy.

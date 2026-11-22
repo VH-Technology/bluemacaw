@@ -1,11 +1,56 @@
 //! macOS uses Enigo's private event source and explicit modifier flags so
 //! physical mouse/key events cannot turn the synthetic Cmd+V into a bare V.
+use std::thread::sleep;
+use std::time::Duration;
+
+use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation, EventField};
+use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 use enigo_macos::{Direction, Enigo, Key, Keyboard, NewConError, Settings};
 
+use super::typing::key_units;
 use crate::markers::ERR_ACCESSIBILITY_REQUIRED;
 
 /// Identifies our synthetic paste events to shortcut listeners and diagnostics.
 pub const PASTE_EVENT_MARKER: i64 = 0x424c_5545_5041_5354; // "BLUEPAST"
+
+/// Pause after each typed character. Real apps kept up with no pause at all
+/// in testing; a millisecond leaves room for a busy one and still types a
+/// few hundred characters in a fraction of a second.
+pub const TYPE_KEY_DELAY: Duration = Duration::from_millis(1);
+
+/// Type `text` into the focused field as keyboard events that carry the
+/// characters themselves, without touching the clipboard.
+///
+/// Each character is one key-down/key-up pair on virtual key 0 with the
+/// character attached; the receiving app inserts the character and ignores
+/// the key code. Flags are cleared explicitly and the source is private, so
+/// a modifier the user is still holding cannot turn the text into a
+/// shortcut. Events are tagged with [`PASTE_EVENT_MARKER`] so our own
+/// shortcut listeners ignore them.
+///
+/// Delivery is asynchronous: the process has to outlive the events it
+/// posted, or the tail of the text is lost. The app always does; a
+/// short-lived caller such as the probe must wait before exiting.
+pub fn type_text_paced(text: &str, key_delay: Duration) -> Result<(), String> {
+    let source = CGEventSource::new(CGEventSourceStateID::Private)
+        .map_err(|()| "could not create a keyboard event source".to_string())?;
+    for unit in key_units(text) {
+        for key_down in [true, false] {
+            let event = CGEvent::new_keyboard_event(source.clone(), 0, key_down)
+                .map_err(|()| "could not create a keyboard event".to_string())?;
+            event.set_string_from_utf16_unchecked(&[unit]);
+            event.set_integer_value_field(EventField::EVENT_SOURCE_USER_DATA, PASTE_EVENT_MARKER);
+            event.set_flags(CGEventFlags::CGEventFlagNull);
+            event.post(CGEventTapLocation::HID);
+        }
+        sleep(key_delay);
+    }
+    Ok(())
+}
+
+pub(super) fn type_text(text: &str) -> Result<(), String> {
+    type_text_paced(text, TYPE_KEY_DELAY)
+}
 
 pub(super) fn send_paste_keystroke() -> Result<(), String> {
     let settings = Settings {
